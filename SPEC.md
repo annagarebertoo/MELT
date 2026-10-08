@@ -1,6 +1,6 @@
 # MELT — Especificación funcional y reglas de negocio
 
-**Versión:** 0.1 — Primera versión para revisión del equipo.  
+**Versión:** 0.2 — Primera versión para revisión del equipo.  
 **Entrega:** 1 — Diseño y contrato con mock, 9 de octubre de 2026.  
 **Materia:** Arquitectura de Software — 2026.  
 **Estado:** Diseño inicial; las funcionalidades descritas son previstas, no se declara su implementación.  
@@ -9,7 +9,7 @@
 
 MELT es un sistema web de gestión para un centro de estética con una única sucursal. El dominio comprende tratamientos, profesionales, disponibilidad, reservas de turnos y un programa de beneficios basado en puntos. Busca centralizar la información y coordinar la agenda para evitar reservas incompatibles y mantener una relación trazable entre los tratamientos realizados y los beneficios de cada cliente.
 
-La operación de negocio central es la **reserva de un turno con validación de disponibilidad**. Su confirmación exige verificar que el profesional pueda realizar el tratamiento y que el intervalo solicitado esté disponible y no se superponga con otra reserva confirmada para ese profesional. La confirmación ocupa la agenda y da lugar a notificaciones. La realización efectiva del tratamiento habilita la acreditación de puntos.
+La operación de negocio central es la **reserva de un turno con validación de disponibilidad**. Su confirmación exige verificar que el profesional pueda realizar el tratamiento y que el intervalo solicitado esté disponible y no se superponga con otra reserva confirmada para ese profesional. La confirmación ocupa la agenda y da lugar a notificaciones. La realización efectiva del tratamiento habilita la acreditación de puntos. El pago se realiza presencialmente y es independiente de la confirmación del turno y del registro de realización.
 
 ### 1.1. Vocabulario
 
@@ -50,7 +50,7 @@ Facilitar la organización de la agenda de la sucursal, ofrecer a los clientes u
 
 El alcance funcional comprende:
 
-- Consulta y búsqueda de tratamientos con filtros, paginación y ordenamiento.
+- Exploración pública de las categorías Facial, Corporal, Depilación y Manos y uñas; consulta y búsqueda de tratamientos con filtros, paginación y ordenamiento.
 
 - Consulta de profesionales y disponibilidad de horarios.
 
@@ -58,15 +58,15 @@ El alcance funcional comprende:
 
 - Seguimiento de estados y registro de tratamientos completados.
 
-- Acreditación de puntos y canje de beneficios según reglas del centro.
+- Acreditación de puntos, canje por descuentos o tratamientos gratuitos, aplicación de beneficios durante la reserva y restitución automática ante cancelaciones válidas.
 
-- Notificaciones relacionadas con eventos relevantes de las reservas.
+- Correo electrónico de confirmación y notificaciones de eventos relevantes de las reservas.
 
 - Gestión administrativa del catálogo, profesionales, disponibilidad, turnos y programa de beneficios.
 
 Las funcionalidades se ofrecerán mediante una interfaz web según las responsabilidades de cada actor.
 
-MELT publicará una capacidad para otro grupo y consumirá una capacidad externa dentro de un flujo importante del sistema. La selección y sus efectos de negocio están pendientes (PD-12). La capacidad propia deberá quedar seleccionada y documentada para la primera entrega, con su contrato y mock.
+MELT publicará una capacidad para otro grupo y consumirá una capacidad externa dentro de un flujo importante del sistema. La capacidad propia será una API de consulta de tratamientos con filtros, información descriptiva y precios. Su contrato y mock están pendientes; la capacidad externa y su efecto en el flujo de negocio se definirán con el grupo proveedor (PD-12).
 
 ### 3.2. Funcionalidades fuera de alcance
 
@@ -74,35 +74,40 @@ Quedan fuera de esta versión la gestión de múltiples sucursales, pagos en lí
 
 Las decisiones técnicas de implementación se documentarán en `docs/ARCHITECTURE.md`.
 
+### 3.3. Lineamientos de experiencia visual
+
+La interfaz será completamente en español, con identidad editorial minimalista y una paleta inspirada en manteca, crema y chocolate. Se priorizará una página principal de navegación vertical, una fotografía principal protagonista, imágenes destacadas y composiciones originales, sin exceso de tarjetas ni bordes redondeados. El diseño detallado de pantallas, la distribución definitiva de categorías, las animaciones y los componentes visuales se definirán durante el desarrollo del frontend.
+
 ## 4. Actores
 
 | Actor | Responsabilidades |
 | :--- | :--- |
-| Cliente | Consultar tratamientos, profesionales y disponibilidad; solicitar y cancelar turnos; consultar puntos y beneficios y solicitar canjes. |
-| Profesional | Consultar su agenda y registrar la realización de los tratamientos que le corresponden. |
-| Administrador | Gestionar catálogo, profesionales, disponibilidad, turnos y reglas del programa de beneficios; registrar finalizaciones. |
+| Cliente | Consultar tratamientos, profesionales y disponibilidad; solicitar y cancelar turnos; consultar próximos turnos, historial, puntos y beneficios y aplicar beneficios durante la reserva. |
+| Profesional | Consultar su agenda y los detalles de sus turnos y registrar la realización de los tratamientos que le corresponden. |
+| Administrador | Gestionar catálogo, profesionales, disponibilidad, turnos y reglas del programa de beneficios; configurar los puntos por tratamiento y gestionar categorías, beneficios y recompensas. |
 
-El ingreso, la asignación de roles y los permisos detallados están pendientes (PD-01). La restricción del cliente a sus propios turnos y puntos y del profesional a los turnos asignados se propone en RN-13.
+El catálogo es público. Para reservar, el cliente debe iniciar sesión o registrarse. La asignación de roles y los permisos administrativos detallados están pendientes (PD-01). La restricción del cliente a sus propios turnos y puntos y del profesional a los turnos asignados se propone en RN-13.
 
 ## 5. Requisitos funcionales
 
 | ID | Comportamiento esperado | Aspectos pendientes |
 | :--- | :--- | :--- |
-| **RF-01** | Consultar el catálogo y la información de los tratamientos ofrecidos por el centro. | Datos: PD-02. |
+| **RF-01** | Explorar el catálogo sin iniciar sesión, organizado inicialmente en Facial, Corporal, Depilación y Manos y uñas. Mostrar nombre, imagen, precio y acceso al detalle de cada tratamiento; el detalle incluye descripción, duración, precio, imágenes, puntos otorgados y profesionales asociados. | Datos principales definidos; filtros: PD-02. |
 | **RF-02** | Buscar tratamientos con filtros relevantes para el dominio, paginación y al menos un criterio de ordenamiento. Los resultados deberán reflejar los cambios del catálogo dentro del retraso máximo que se acuerde. | Filtros y orden: PD-02; retraso: PD-11. |
 | **RF-03** | Consultar profesionales, los tratamientos que pueden atender y los horarios disponibles para realizar la selección previa a una reserva. | Disponibilidad: PD-03. |
-| **RF-04** | Solicitar un turno relacionando cliente, tratamiento, profesional y horario. Validar aptitud del profesional, disponibilidad y ausencia de superposición antes de confirmar; informar el motivo de un rechazo de negocio. | Intervalo: PD-03. |
-| **RF-05** | Consultar los turnos y su estado según las responsabilidades de cada actor; permitir al profesional consultar su agenda. | Permisos: PD-01, RN-13. |
-| **RF-06** | Solicitar y registrar la cancelación de un turno conforme a las condiciones acordadas, informando si se acepta o rechaza. | Política: PD-05, RN-07. |
-| **RF-07** | Permitir al profesional correspondiente o al administrador registrar que un tratamiento fue efectivamente realizado, vinculándolo con el turno y habilitando la acreditación correspondiente. | Transiciones: PD-06, RN-10. |
-| **RF-08** | Acreditar puntos por tratamientos realizados conforme a las reglas del programa, sin duplicar la acreditación al repetir el registro o su procesamiento. | Cálculo y elegibilidad: PD-07. |
-| **RF-09** | Permitir al cliente consultar su saldo de puntos y los beneficios disponibles. | Movimientos: RN-12, PD-13. |
-| **RF-10** | Permitir solicitar un canje y comunicar su resultado según las reglas del centro. | Condiciones: PD-08, RN-11. |
-| **RF-11** | Notificar eventos relevantes de las reservas conforme a los destinatarios y medios acordados. | Notificaciones: PD-10. |
-| **RF-12** | Permitir al administrador gestionar el catálogo, los profesionales y la relación entre profesionales y tratamientos. | Cambios: PD-04. |
+| **RF-04** | Reservar con sesión iniciada: seleccionar tratamiento y profesional, consultar un calendario, elegir fecha y horario disponible y, opcionalmente, aplicar un beneficio. Confirmar automáticamente al validar aptitud, disponibilidad, ausencia de superposición y el beneficio seleccionado. Mostrar el resumen del turno. | Intervalos: PD-03; beneficios: PD-08. |
+| **RF-05** | Permitir al cliente consultar próximos turnos y el historial de tratamientos realizados desde su perfil; permitir al profesional consultar su agenda y los detalles de sus turnos. | Permisos: PD-01, RN-13. |
+| **RF-06** | Permitir al cliente cancelar desde su perfil hasta 24 horas antes del inicio del turno. Registrar la cancelación válida y restituir automáticamente los puntos o el beneficio utilizado, sin duplicar restituciones. | Condiciones adicionales: PD-05; aplicación: PD-08. |
+| **RF-07** | Permitir al profesional correspondiente registrar un tratamiento como completado, vinculándolo con el turno e iniciando la acreditación de puntos. | Transiciones y facultades excepcionales: PD-06. |
+| **RF-08** | Acreditar la cantidad fija de puntos configurada para el tratamiento cuando el profesional registra su finalización, nunca al reservar y sin duplicar acreditaciones. | Vigencia de cambios: PD-09. |
+| **RF-09** | Mostrar en el perfil del cliente sus puntos disponibles, beneficios e historial. | Trazabilidad: RN-12, PD-13. |
+| **RF-10** | Permitir canjear puntos por descuentos o tratamientos gratuitos y aplicar un beneficio disponible durante la reserva. Informar el beneficio aplicado y el importe restante, que se paga presencialmente. | Costos y condiciones: PD-08. |
+| **RF-11** | Enviar por correo electrónico la confirmación de la reserva, con el resumen del turno; notificar otros eventos relevantes según se acuerde. | Otros eventos y recuperación: PD-10. |
+| **RF-12** | Permitir al administrador gestionar tratamientos, categorías, profesionales y su asociación con tratamientos. | Cambios con reservas existentes: PD-04. |
 | **RF-13** | Permitir al administrador gestionar disponibilidad y turnos, con las validaciones de negocio correspondientes. | Operaciones y cambios: PD-04, PD-06. |
-| **RF-14** | Permitir al administrador gestionar las reglas de acreditación y las condiciones de los beneficios y canjes. | Vigencia: PD-09. |
-| **RF-15** | Permitir determinar el resultado de una operación relevante tras una interrupción, sin crear una segunda reserva ni acreditar nuevamente puntos por la misma operación. | Recuperación: PD-13, RN-15. |
+| **RF-14** | Permitir al administrador configurar la cantidad fija de puntos de cada tratamiento y gestionar beneficios y recompensas. | Condiciones: PD-08; vigencia: PD-09. |
+| **RF-15** | Determinar el resultado de una operación tras una interrupción, conservando sus efectos y evitando duplicar reservas, acreditaciones, canjes y restituciones. | Recuperación: PD-13, RN-15. |
+| **RF-16** | Ofrecer a otros grupos una API de consulta de tratamientos con filtros, información descriptiva y precios. | Contrato y mock: PD-12. |
 
 ## 6. Reglas de negocio
 
@@ -118,21 +123,21 @@ El ingreso, la asignación de roles y los permisos detallados están pendientes 
 
 - **RN-05 — Concurrencia y repetición.** Ante solicitudes simultáneas incompatibles se preservará RN-04. Repetir la misma intención no deberá crear otra reserva ni perder su resultado confirmado. Identificación de la intención: PD-13.
 
-- **RN-06 — Puntos por realización efectiva.** La reserva por sí sola no acredita puntos. La acreditación depende de un tratamiento efectivamente realizado y registrado por el profesional correspondiente o el administrador, conforme a las reglas aplicables. Un turno cancelado sin realización no habilita puntos.
+- **RN-06 — Puntos por realización efectiva.** Cada tratamiento tiene una cantidad fija de puntos configurable por el administrador. Se acredita cuando el profesional registra el tratamiento como completado; reservar o cancelar sin realización no acredita puntos.
 
-- **RN-07 — Cancelación condicionada.** Las cancelaciones se resolverán según la política del centro, pendiente en PD-05. **Propuesta:** una cancelación aceptada deja de ocupar el intervalo para nuevas reservas, que deberán superar nuevamente las validaciones de disponibilidad.
+- **RN-07 — Cancelación y restitución.** El cliente puede cancelar desde su perfil hasta 24 horas antes del inicio del turno. Una cancelación válida libera el intervalo y restituye automáticamente los puntos o el beneficio utilizado. Repetirla no duplica la restitución.
 
 - **RN-08 — Acreditación sin duplicados.** El registro repetido o el procesamiento repetido de la finalización de un mismo tratamiento no podrá generar acreditaciones adicionales por ese mismo hecho.
 
-- **RN-09 — Reglas comerciales explícitas.** Los puntos y beneficios se determinarán según reglas administradas por el centro. Valores y condiciones comerciales: PD-07–PD-09.
+- **RN-09 — Beneficios y pago presencial.** Los puntos pueden canjearse por descuentos o tratamientos gratuitos. El cliente puede aplicar un beneficio disponible durante la reserva; cualquier importe restante se paga presencialmente. Confirmar, completar y pagar son hechos distintos; no se implementan pagos online.
 
-### 6.2. Precisiones propuestas para revisión
+### 6.2. Consistencia y precisiones para revisión
 
-RN-10 a RN-15 requieren aprobación, al igual que la liberación del intervalo de RN-07. Los estados, flujos y criterios asociados conservan ese carácter hasta su aprobación.
+RN-11 expresa las decisiones de canje y restitución acordadas. RN-10 y RN-12 a RN-15 son precisiones propuestas; sus estados, flujos y criterios asociados requieren aprobación.
 
 - **RN-10 — Finalización válida.** Solo un turno confirmado podrá pasar a completado cuando se registre la realización efectiva. Un turno cancelado no podrá completarse mediante el flujo ordinario. Completado y cancelado serán estados finales de ese flujo; las correcciones excepcionales quedan pendientes (PD-06).
 
-- **RN-11 — Canje consistente.** Confirmar un canje exige cumplir las condiciones del beneficio y disponer de puntos suficientes. La confirmación registra el beneficio y su débito como un único resultado. La concurrencia o repetición de solicitudes no podrá duplicar débitos, beneficios ni el uso de puntos; el saldo no podrá resultar negativo. Utilización del beneficio: PD-08.
+- **RN-11 — Canje consistente.** El canje debe validar saldo suficiente y condiciones del beneficio; la aplicación debe validar la disponibilidad y las condiciones del beneficio obtenido. Un mismo beneficio o saldo no puede consumirse dos veces por concurrencia o repetición. Una cancelación válida debe recuperar exactamente los puntos o el beneficio consumido, sin duplicados. Los costos y condiciones concretos permanecen pendientes (PD-08).
 
 - **RN-12 — Trazabilidad.** Cada acreditación deberá poder relacionarse con el cliente y el tratamiento realizado que la originó; cada débito, con su canje. El saldo deberá ser explicable a partir de los movimientos y de las reglas aplicables. El administrador podrá distinguir una acreditación pendiente de una ya aplicada.
 
@@ -151,14 +156,14 @@ Modelo propuesto, pendiente de aprobación en PD-06:
 | Estado | Significado | Efecto de negocio |
 | :--- | :--- | :--- |
 | Confirmado | La reserva superó las validaciones y quedó registrada. | Ocupa el intervalo del profesional; todavía no habilita puntos por realización. |
-| Cancelado | Se aceptó la cancelación conforme a la política del centro. | Deja de ocupar el intervalo, según RN-07 propuesta; no habilita puntos por un tratamiento no realizado. |
+| Cancelado | Se aceptó la cancelación conforme a la política del centro. | Libera el intervalo y habilita la restitución del beneficio o puntos aplicados; no acredita puntos por realización. |
 | Completado | Se registró la realización efectiva del tratamiento. | Habilita evaluar y procesar la acreditación; no significa que los puntos ya estén acreditados. |
 
 | Origen | Acción y actor | Condición | Destino |
 | :--- | :--- | :--- | :--- |
 | Sin turno confirmado | Solicitar reserva — cliente; alcance administrativo por precisar | Aptitud, disponibilidad y ausencia de conflicto validadas | Confirmado |
-| Confirmado | Cancelar — cliente; facultades administrativas por precisar | Cancelación permitida por la política acordada | Cancelado |
-| Confirmado | Registrar finalización — profesional correspondiente o administrador | Tratamiento efectivamente realizado | Completado |
+| Confirmado | Cancelar — cliente; facultades administrativas por precisar | Solicitud hasta 24 horas antes del inicio | Cancelado |
+| Confirmado | Registrar finalización — profesional correspondiente | Tratamiento efectivamente realizado | Completado |
 
 El rechazo no crea un turno confirmado. Los estados adicionales y las correcciones excepcionales quedan pendientes (PD-06).
 
@@ -172,77 +177,65 @@ La evaluación conduce a confirmación o rechazo cuando existe un resultado cono
 
 Se propone distinguir **pendiente**, **acreditada** y **requiere revisión**. El registro de realización habilita una acreditación pendiente de evaluación según las reglas; al aplicar el movimiento pasa a acreditada. Si no puede resolverse, queda identificada para revisión sin inventar un saldo. Recuperar el procesamiento puede resolverla como acreditada, con un único efecto.
 
-La posibilidad de tratamientos que no otorguen puntos y su representación deben definirse en PD-07.
+Cada acreditación utiliza los puntos fijos del tratamiento. La regla aplicable ante cambios de configuración se definirá en PD-09.
+
+### 7.4. Aplicación y restitución de beneficios
+
+Se propone distinguir **disponible**, **aplicado** y **restituido**. Una aplicación válida vincula el beneficio con un turno y evita su reutilización simultánea. Una cancelación válida lo restituye, o devuelve los puntos utilizados, según la modalidad acordada (PD-08). La restitución puede estar **pendiente**, **realizada** o **requiere revisión**, sin modificar el estado cancelado del turno. Su recuperación debe producir un único efecto.
 
 ## 8. Flujos principales y alternativos
 
 ### 8.1. Reserva de un turno
 
-**Actor principal:** cliente. **Precondiciones:** tratamiento y profesional identificados; disponibilidad publicada; actor reconocido conforme a sus permisos. Debe poder determinarse el intervalo de atención.
+**Actor principal:** cliente. **Precondiciones:** sesión iniciada y tratamiento, profesional e intervalo identificados.
 
-1. El cliente busca un tratamiento y consulta su información.
+1. El cliente explora el catálogo público y consulta un tratamiento.
+2. Inicia sesión o se registra para reservar.
+3. Elige un profesional, consulta el calendario, selecciona una fecha y un horario disponible.
+4. Opcionalmente, selecciona un beneficio disponible.
+5. MELT verifica aptitud del profesional, disponibilidad vigente, ausencia de conflictos y validez del beneficio.
+6. Confirma automáticamente el turno, vincula el beneficio aplicado y muestra el resumen y el importe restante a pagar presencialmente.
+7. Envía la confirmación por correo electrónico.
 
-2. Consulta los profesionales que pueden atenderlo y selecciona profesional y horario.
-
-3. Solicita la reserva.
-
-4. MELT valida los datos y permisos necesarios, la aptitud del profesional y la disponibilidad vigente para todo el intervalo, incluida la ausencia de superposición.
-
-5. Si las validaciones son correctas, registra y confirma un único turno e informa su resultado.
-
-6. La confirmación da lugar a la notificación correspondiente, según la definición pendiente de eventos y destinatarios.
-
-**Resultado:** turno confirmado y agenda ocupada para ese intervalo. La reserva no acredita puntos.
+**Resultado:** turno confirmado; el beneficio seleccionado queda aplicado. No se acredita ningún punto ni se registra un pago online.
 
 **Alternativas:**
 
-- Si el profesional no puede atender el tratamiento o el intervalo no está disponible, se informa el motivo y no se confirma el turno.
-
-- Si otra solicitud ocupa el intervalo entre la consulta y la confirmación, se rechaza la solicitud incompatible y el cliente puede elegir otra alternativa.
-
-- Si se repite la misma intención, se conserva un único resultado de negocio.
-
-- Si no puede verificarse la disponibilidad, no se presenta una confirmación sin validación. Si la respuesta se pierde y el resultado es incierto, se aplica la propuesta de consulta y recuperación de la sección 7.2.
-
-- Conforme a RN-14, una notificación fallida no revierte la reserva; su resolución queda pendiente sin crear otro turno.
+- Sin sesión iniciada, se solicita ingreso o registro antes de reservar.
+- Ante profesional no apto, horario no disponible o conflicto concurrente, se rechaza la reserva con motivo.
+- Si el beneficio no puede aplicarse, no se confirma su consumo; el cliente puede corregir la selección.
+- Si no puede determinarse el resultado, se verifica la misma operación antes de repetirla (RN-15, propuesta).
+- Si falla el correo, el turno permanece confirmado y el envío queda pendiente de resolución (RN-14, propuesta).
 
 ### 8.2. Cancelación
 
-1. El cliente consulta su turno y solicita cancelarlo.
+1. El cliente consulta sus próximos turnos desde su perfil y solicita cancelar uno.
+2. MELT verifica titularidad, estado y que resten al menos 24 horas para su inicio.
+3. Acepta la cancelación y libera el intervalo.
+4. Si había un beneficio aplicado, restituye automáticamente los puntos o el beneficio utilizado e informa el resultado.
 
-2. MELT verifica sus permisos, el estado del turno y las condiciones de cancelación acordadas.
-
-3. Si se admite, registra la cancelación e informa el resultado; conforme a RN-07, el intervalo deja de estar ocupado por ese turno.
-
-4. Se produce la notificación que corresponda según PD-10.
-
-Si la política o el estado no permiten cancelar, se informa el motivo y se conserva el estado anterior. Según el modelo propuesto, repetir una cancelación ya aceptada no genera otra transición.
+Fuera del plazo, se rechaza la cancelación del cliente y se conserva el turno. Repetir una cancelación válida no duplica la restitución. Si esta falla, queda pendiente de recuperación; el turno sigue cancelado. Las facultades administrativas y correcciones excepcionales permanecen pendientes (PD-05 y PD-06).
 
 ### 8.3. Finalización del tratamiento y acreditación
 
-1. El profesional consulta un turno de su agenda, o el administrador accede a él dentro de sus facultades.
+1. El profesional consulta su agenda y los detalles del turno.
+2. Registra la realización efectiva del tratamiento.
+3. Conforme al modelo propuesto, MELT valida responsable y estado confirmado y registra el turno como completado.
+4. Inicia la acreditación de los puntos fijos correspondientes al tratamiento.
+5. Registra una única acreditación y actualiza el saldo del cliente.
 
-2. Registra que el tratamiento se realizó efectivamente.
+**Alternativas:** un actor sin permiso o un estado incompatible impiden la finalización. Repetir el registro o su procesamiento no vuelve a acreditar puntos. Si falla la acreditación, el turno permanece completado y la obligación queda pendiente o requiere revisión. La vigencia de los puntos ante cambios y su relación con tratamientos gratuitos se resuelven en PD-07 y PD-09. El pago presencial no determina esta transición.
 
-3. Conforme a RN-10 y RN-13, MELT verifica el responsable y que el turno esté confirmado; registra la finalización como completado.
+### 8.4. Consulta, canje y aplicación de beneficios
 
-4. Se inicia la evaluación de los puntos aplicables conforme a las reglas acordadas, manteniendo la relación con el tratamiento realizado.
+1. El cliente consulta sus puntos, beneficios e historial desde su perfil.
+2. Solicita un canje por descuento o tratamiento gratuito según las condiciones disponibles.
+3. MELT verifica saldo y condiciones, registra un único canje y su débito y habilita el beneficio.
+4. Durante la reserva, el cliente selecciona un beneficio disponible.
+5. MELT valida y vincula su aplicación con el turno confirmado, informando el importe restante a pagar presencialmente.
+6. Si el turno se cancela válidamente, restituye automáticamente el beneficio o los puntos utilizados, sin duplicados.
 
-5. Si corresponde acreditar y el procesamiento concluye, se registra una única acreditación y se actualiza el saldo del cliente.
-
-**Alternativas:** un actor sin permiso o un estado incompatible impiden la finalización según el modelo propuesto. Un registro repetido no vuelve a acreditar puntos. Si falla la acreditación después de registrar la realización, el turno permanece completado; conforme a RN-14, el procesamiento queda pendiente o requiere revisión y se recupera sin duplicar el movimiento. La conducta ante reglas inexistentes o tratamientos no elegibles debe resolverse en PD-07.
-
-### 8.4. Consulta y canje de puntos
-
-1. El cliente consulta su saldo y los beneficios disponibles.
-
-2. Selecciona un beneficio y solicita el canje.
-
-3. Conforme a RN-11, MELT verifica condiciones vigentes del beneficio y saldo suficiente al confirmar, aunque la consulta anterior mostrara otro saldo.
-
-4. Registra un único canje confirmado, el beneficio obtenido y el débito de puntos correspondiente; informa el resultado y el nuevo saldo.
-
-**Alternativas propuestas:** si las condiciones no se cumplen o el saldo es insuficiente, se rechaza sin efectuar el débito ni otorgar el beneficio. Si llegan canjes concurrentes, se impide gastar dos veces los mismos puntos. Si se repite la misma intención, se conserva el resultado original. Una interrupción no debe dejar un canje informado como confirmado sin su débito correspondiente ni duplicar efectos durante la recuperación. La utilización posterior y las posibles anulaciones del beneficio permanecen pendientes (PD-08).
+Si el saldo o las condiciones no permiten el canje, se rechaza sin débito ni beneficio. La concurrencia no permite usar dos veces los mismos puntos o beneficios. Una interrupción exige resolver la operación original sin duplicar sus efectos. La modalidad de canje previo o integrado en la reserva y la forma exacta de restitución están pendientes (PD-08).
 
 ## 9. Criterios de aceptación
 
@@ -250,57 +243,59 @@ Los criterios se verificarán durante la implementación. Los marcados como **pr
 
 | ID | Requisitos / reglas | Condición verificable |
 | :--- | :--- | :--- |
-| **CA-01** | RF-01, RF-02 | Con un catálogo y filtros acordados, la búsqueda devuelve tratamientos que cumplen esos filtros, permite recorrer páginas y respeta el orden seleccionado. Una búsqueda sin coincidencias muestra un resultado vacío. Parámetros: PD-02. |
+| **CA-01** | RF-01, RF-02 | Sin iniciar sesión, se pueden explorar las cuatro categorías iniciales y consultar nombre, imagen y precio de los tratamientos. El detalle muestra descripción, duración, precio, imágenes, puntos y profesionales asociados. La búsqueda respeta filtros, páginas y orden y muestra resultados vacíos cuando no hay coincidencias. |
 | **CA-02** | RF-02 | Una modificación del catálogo aparece en los resultados antes de superar el retraso máximo acordado en PD-11. |
-| **CA-03** | RF-03, RF-04; RN-02–RN-04 | Dado un profesional apto y un intervalo disponible, solicitar la reserva confirma un turno asociado al cliente, tratamiento y profesional elegidos. Consultar la agenda permite identificarlo. |
+| **CA-03** | RF-03, RF-04; RN-02–RN-04 | Sin sesión no se confirma una reserva. Con sesión, profesional apto y horario disponible seleccionado mediante calendario, fecha y horario, se confirma automáticamente un turno y se muestra su resumen. El pago presencial no condiciona la confirmación. |
 | **CA-04** | RF-04; RN-02 | Seleccionar un profesional que no puede realizar el tratamiento provoca un rechazo con motivo y no crea un turno confirmado. |
 | **CA-05** | RF-04; RN-03, RN-04 | Un intervalo fuera de la disponibilidad o superpuesto con un turno confirmado del mismo profesional no puede confirmarse. Debe comprobarse una superposición parcial además de la coincidencia total. Duración y casos de intervalos contiguos dependen de PD-03. |
 | **CA-06** | RF-04, RF-15; RN-04, RN-05 | Ante dos solicitudes simultáneas válidas salvo por competir por intervalos incompatibles del mismo profesional, se confirma una sola. Repetir la misma intención no incrementa el número de reservas. |
-| **CA-07** | RF-06; RN-07 | Con una política de cancelación acordada, el sistema acepta los casos permitidos y rechaza los no permitidos informando el motivo. **Propuesto:** una cancelación aceptada deja el turno cancelado y permite volver a evaluar el intervalo para otra reserva; repetirla conserva el mismo estado. |
-| **CA-08** | RF-07, RF-08; RN-06, RN-08 | Registrar una realización efectiva por un actor habilitado inicia la acreditación según las reglas acordadas. Repetir la finalización o su procesamiento produce como máximo una acreditación por el mismo hecho. Reservar o cancelar sin realización no acredita puntos. |
+| **CA-07** | RF-06; RN-07 | Una solicitud del titular con al menos 24 horas de anticipación cancela el turno y libera el intervalo; con menos de 24 horas se rechaza. Si se aplicó un beneficio, se restituye automáticamente el beneficio o los puntos utilizados. Repetir la operación no duplica la restitución. |
+| **CA-08** | RF-07, RF-08; RN-06, RN-08 | El registro de finalización por el profesional inicia la acreditación de los puntos fijos del tratamiento. Repetirlo o reprocesarlo produce una única acreditación. Reservar o cancelar sin realización no acredita puntos. |
 | **CA-09** | RF-05, RF-07; RN-10, RN-13 | **Propuesto:** un cliente no consulta turnos ajenos ni registra finalizaciones; un profesional no completa turnos de otro profesional; un turno cancelado no puede completarse por el flujo ordinario. |
 | **CA-10** | RF-08, RF-09; RN-12, RN-14 | **Propuesto:** si falla la acreditación tras registrar la realización, el turno sigue completado y la acreditación pendiente puede identificarse. Al recuperarla, existe un único movimiento asociado y el saldo refleja una sola acreditación. |
-| **CA-11** | RF-09, RF-10; RN-11, RN-12 | **Propuesto:** con saldo suficiente y condiciones satisfechas, un canje confirma un beneficio y su débito; con saldo insuficiente no modifica el saldo ni otorga el beneficio. El saldo resultante es explicable por los movimientos. |
-| **CA-12** | RF-10; RN-11 | **Propuesto:** si dos canjes concurrentes excederían juntos el saldo, no se confirman ambos. Repetir una misma intención conserva un solo canje, débito y beneficio. |
-| **CA-13** | RF-11; RN-14 | Se genera la notificación prevista para el evento acordado en PD-10. **Propuesto:** provocar una falla en su envío conserva el turno confirmado y permite identificar el efecto pendiente para su resolución. |
-| **CA-14** | RF-12–RF-14 | El administrador puede gestionar catálogo, profesionales, disponibilidad y reglas del programa según sus permisos acordados. Una reserva posterior valida la aptitud y disponibilidad vigentes; un canje o acreditación aplica la regla cuya vigencia se haya definido. Casos de modificación con operaciones existentes: PD-04 y PD-09. |
-| **CA-15** | RF-15; RN-15 | **Propuesto:** si se pierde la respuesta de una operación, el usuario ve que su resultado debe verificarse. La recuperación determina el resultado original sin otra reserva, acreditación o canje como efecto de la repetición. |
-
-La capacidad de integración deberá incorporar criterios propios una vez seleccionada, incluyendo su efecto en un flujo importante y el comportamiento observable ante la indisponibilidad del proveedor.
+| **CA-11** | RF-09, RF-10; RN-11, RN-12 | Con saldo y condiciones suficientes, el canje por descuento o tratamiento gratuito registra un beneficio y su débito. Al aplicarlo a una reserva se informa el importe restante presencial. Sin saldo suficiente no hay débito ni beneficio. |
+| **CA-12** | RF-10; RN-11 | Los canjes y aplicaciones concurrentes no permiten consumir dos veces los mismos puntos o beneficios. Repetir un canje o una restitución conserva un único efecto. |
+| **CA-13** | RF-11; RN-14 | Una reserva confirmada genera un correo electrónico de confirmación. **Propuesto:** si falla su envío, el turno sigue confirmado y el efecto pendiente puede identificarse y recuperarse. |
+| **CA-14** | RF-12–RF-14 | El administrador gestiona tratamientos, categorías, profesionales, disponibilidad, turnos, puntos fijos por tratamiento y beneficios. Las operaciones posteriores aplican la configuración vigente acordada (PD-04 y PD-09). |
+| **CA-15** | RF-15; RN-15 | **Propuesto:** una respuesta perdida se informa como resultado por verificar y se recupera la operación original sin duplicar reservas, puntos, canjes ni restituciones. |
+| **CA-16** | RF-05, RF-09 | El cliente puede consultar próximos turnos, historial, saldo y beneficios; el profesional puede consultar su agenda y detalles de sus turnos. |
+| **CA-17** | RF-16 | La API de consulta permite listar tratamientos con filtros y consultar información descriptiva y precios según su contrato versionado. Los criterios de la capacidad externa se definirán al acordar la integración. |
 
 ## 10. Decisiones pendientes
 
+Se conservan los identificadores originales. Las decisiones resueltas se registran como tales; los aspectos restantes requieren definición o aprobación.
+
 ### 10.1. Usuarios y catálogo
 
-| ID | Decisión |
+| ID | Estado y decisión |
 | :--- | :--- |
-| **PD-01** | Definir ingreso, alta de cuentas, asignación de roles y permisos, incluidas las facultades administrativas sobre reservas y canjes. Aprobar RN-13. |
-| **PD-02** | Definir datos de tratamientos y profesionales, filtros, ordenamiento y paginación; confirmar si se publicarán precios. |
-| **PD-04** | Definir cambios o retiros de tratamientos y profesionales y modificaciones de aptitud o disponibilidad con reservas existentes; conservar la información histórica necesaria. |
-| **PD-11** | Fijar el retraso máximo entre cambios del catálogo y resultados de búsqueda y cómo comunicar información desactualizada. |
+| **PD-01** | Parcialmente resuelta: catálogo público y sesión o registro obligatorios para reservar. Pendientes: asignación de roles, permisos administrativos y aprobación de RN-13. |
+| **PD-02** | Parcialmente resuelta: categorías y datos visibles definidos en RF-01. Pendientes: filtros concretos, ordenamiento y parámetros de paginación. |
+| **PD-04** | Pendiente: cambios o retiros de tratamientos y profesionales, cambios de aptitud o disponibilidad con reservas existentes y conservación histórica. |
+| **PD-11** | Pendiente: retraso máximo entre cambios del catálogo y búsqueda y comunicación de información desactualizada. |
 
 ### 10.2. Agenda y turnos
 
-| ID | Decisión |
+| ID | Estado y decisión |
 | :--- | :--- |
-| **PD-03** | Definir duración y límites de intervalos, horarios, excepciones y anticipación; confirmar tiempos entre atenciones y restricciones por cliente o recursos compartidos. |
-| **PD-05** | Definir condiciones, plazos, responsables y consecuencias de cancelación. Aprobar la liberación del intervalo de RN-07. |
-| **PD-06** | Aprobar estados y transiciones de turnos y RN-10; decidir sobre inasistencias, reprogramación, atención en curso, condiciones temporales de finalización y corrección de registros. |
+| **PD-03** | Parcialmente resuelta: selección por calendario, fecha y horario y confirmación automática. Pendientes: duración concreta, límites de intervalos, horarios, excepciones, anticipación y restricciones por cliente o recursos. |
+| **PD-05** | Resuelta para el cliente: cancelación hasta 24 horas antes, liberación de horario y restitución automática. Pendientes: facultades administrativas y tratamiento de excepciones. |
+| **PD-06** | Pendiente: aprobar estados y transiciones de turnos, RN-10 y estados de beneficios; decidir sobre inasistencias, reprogramación y correcciones. El profesional registra los tratamientos completados; cualquier facultad excepcional del administrador requiere confirmación. |
 
 ### 10.3. Puntos y beneficios
 
-| ID | Decisión |
+| ID | Estado y decisión |
 | :--- | :--- |
-| **PD-07** | Definir cálculo, unidad, elegibilidad y momento de acreditación; tratamiento de reglas inexistentes, prestaciones sin puntos, vencimientos y ajustes. |
-| **PD-08** | Definir beneficios, costo en puntos, disponibilidad, condiciones, entrega o utilización, límites, vencimientos y anulaciones. Aprobar RN-11. |
-| **PD-09** | Definir vigencia de cambios del programa y su aplicación a reservas existentes, tratamientos completados y canjes iniciados. |
+| **PD-07** | Resuelta la cantidad fija configurable y la acreditación al completar. Pendientes: valores concretos, puntos de tratamientos gratuitos o con descuento, vencimiento y ajustes. |
+| **PD-08** | Resueltos descuentos, tratamientos gratuitos, aplicación al reservar, importe restante presencial y restitución sin duplicados. Pendientes: costos, elegibilidad, cálculo del descuento, límites, canje previo o integrado y modalidad exacta de devolución de puntos o beneficio. |
+| **PD-09** | Pendiente: vigencia de cambios de puntos y beneficios para reservas existentes, tratamientos completados y canjes iniciados. |
 
 ### 10.4. Notificaciones, recuperación e integración
 
-| ID | Decisión |
+| ID | Estado y decisión |
 | :--- | :--- |
-| **PD-10** | Definir eventos, destinatarios, contenido y canales de notificación; resolver envíos fallidos y asignar responsables. Aprobar RN-14 junto con PD-13. |
-| **PD-12** | Seleccionar y documentar para la entrega del 9 de octubre la capacidad propia a compartir, con contrato y mock. Definir la capacidad externa según la asignación del proveedor, el flujo afectado y la conducta ante su indisponibilidad. |
-| **PD-13** | Aprobar RN-12, RN-15 y los estados de operaciones y acreditación. Definir cómo reconocer una misma intención, consultar resultados inciertos y resolver efectos pendientes sin duplicarlos. Completar la recuperación de acreditaciones de RN-14. |
+| **PD-10** | Resuelta la confirmación por correo electrónico. Pendientes: otros eventos y destinatarios, recuperación de envíos fallidos y aprobación de RN-14 junto con PD-13. |
+| **PD-12** | Resuelta la capacidad propia: API de consulta de tratamientos con filtros, descripción y precios. Pendientes: contrato versionado, mock, condiciones de consumo y capacidad externa con su flujo y conducta ante fallas. |
+| **PD-13** | Acordada la prevención de reservas, acreditaciones, canjes y restituciones duplicadas. Pendientes: aprobación de RN-12 y RN-15, estados de procesamiento, reconocimiento de una misma intención y responsables de recuperación. |
 
-Las decisiones comerciales permanecerán abiertas hasta su aprobación; esta versión no fija cantidades de puntos, precios, horarios ni plazos de cancelación.
+No se fijan precios, cantidades de puntos ni horarios comerciales en esta versión. El diseño detallado de las pantallas permanece abierto para el desarrollo del frontend.
