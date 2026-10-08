@@ -187,7 +187,7 @@ Se propone distinguir **disponible**, **aplicado** y **restituido**. Una aplicac
 
 ### 8.1. Reserva de un turno
 
-**Actor principal:** cliente. **Precondiciones:** sesión iniciada y tratamiento, profesional e intervalo identificados.
+**Actor principal:** cliente. **Precondiciones:** tratamiento, profesional e intervalo identificados.
 
 1. El cliente explora el catálogo público y consulta un tratamiento.
 2. Inicia sesión o se registra para reservar.
