@@ -1,0 +1,296 @@
+openapi: 3.0.3
+
+info:
+  title: API de Tratamientos MELT
+  description: API pública para consultar tratamientos del catálogo MELT.
+  version: 1.0.0
+
+servers:
+  - url: /api/v1
+
+paths:
+  /tratamientos:
+    get:
+      summary: Listar y buscar tratamientos
+      description: Obtiene una lista paginada de tratamientos. La búsqueda por q se realiza únicamente sobre el nombre del tratamiento.
+      parameters:
+        - name: q
+          in: query
+          description: Texto a buscar en el nombre del tratamiento.
+          required: false
+          schema:
+            type: string
+          example: limpieza
+
+        - name: categoria
+          in: query
+          description: Filtra los tratamientos por categoría.
+          required: false
+          schema:
+            type: string
+            enum:
+              - Facial
+              - Corporal
+              - Depilación
+              - Manos y uñas
+          example: Facial
+
+        - name: precioMax
+          in: query
+          description: Precio máximo del tratamiento.
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: 0
+          example: 20000
+
+        - name: page
+          in: query
+          description: Número de página.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+
+        - name: limit
+          in: query
+          description: Cantidad máxima de tratamientos por página.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+          example: 10
+
+        - name: sort
+          in: query
+          description: Campo utilizado para ordenar los resultados.
+          required: false
+          schema:
+            type: string
+            enum:
+              - nombre
+              - precio
+            default: nombre
+          example: precio
+
+        - name: order
+          in: query
+          description: Dirección del ordenamiento.
+          required: false
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: asc
+          example: asc
+
+      responses:
+        '200':
+          description: Lista de tratamientos obtenida correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TratamientosResponse'
+
+        '400':
+          description: Parámetros de consulta inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: INVALID_PARAMETER
+                  message: El parámetro limit no puede ser mayor que 50.
+
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Se produjo un error interno.
+
+  /tratamientos/{id}:
+    get:
+      summary: Obtener un tratamiento
+      description: Obtiene la información detallada de un tratamiento.
+      parameters:
+        - name: id
+          in: path
+          description: Identificador único del tratamiento.
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+
+      responses:
+        '200':
+          description: Tratamiento obtenido correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tratamiento'
+
+        '404':
+          description: Tratamiento no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: TRATAMIENTO_NOT_FOUND
+                  message: No existe un tratamiento con el identificador solicitado.
+
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Se produjo un error interno.
+
+components:
+  schemas:
+
+    Tratamiento:
+      type: object
+      required:
+        - id
+        - nombre
+        - categoria
+        - descripcion
+        - precio
+        - moneda
+        - duracionMinutos
+        - imagenes
+      properties:
+        id:
+          type: integer
+          description: Identificador único del tratamiento.
+          example: 1
+
+        nombre:
+          type: string
+          description: Nombre del tratamiento.
+          example: Limpieza facial profunda
+
+        categoria:
+          type: string
+          description: Categoría a la que pertenece el tratamiento.
+          enum:
+            - Facial
+            - Corporal
+            - Depilación
+            - Manos y uñas
+          example: Facial
+
+        descripcion:
+          type: string
+          description: Descripción del tratamiento.
+          example: Limpieza profunda de la piel.
+
+        precio:
+          type: number
+          format: double
+          minimum: 0
+          description: Precio del tratamiento.
+          example: 15000
+
+        moneda:
+          type: string
+          description: Moneda en la que se expresa el precio.
+          enum:
+            - ARS
+          example: ARS
+
+        duracionMinutos:
+          type: integer
+          minimum: 1
+          description: Duración estimada del tratamiento en minutos.
+          example: 60
+
+        imagenes:
+          type: array
+          description: URLs de las imágenes asociadas al tratamiento.
+          items:
+            type: string
+            format: uri
+          example:
+            - https://melt.example.com/images/limpieza-facial.jpg
+
+    TratamientosResponse:
+      type: object
+      required:
+        - tratamientos
+        - pagination
+      properties:
+        tratamientos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tratamiento'
+
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    Pagination:
+      type: object
+      required:
+        - page
+        - limit
+        - total
+        - totalPages
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          example: 10
+
+        total:
+          type: integer
+          minimum: 0
+          example: 25
+
+        totalPages:
+          type: integer
+          minimum: 0
+          example: 3
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              example: INVALID_PARAMETER
+
+            message:
+              type: string
+              example: El parámetro enviado no es válido.
