@@ -40,7 +40,7 @@ Las reglas detalladas y los criterios de aceptación se documentarán en [SPEC.m
 4. El sistema verifica que el profesional pueda atender el tratamiento y que el horario no se superponga con otra reserva confirmada.
 5. Si las validaciones son correctas, registra el turno y confirma la operación; de lo contrario, informa el motivo del rechazo.
 6. Se genera un evento de dominio para procesar efectos posteriores, como el envío de una notificación.
-7. Una vez realizado el tratamiento, el profesional o administrador registra su finalización y se inicia la acreditación de puntos correspondiente.
+7. Una vez realizado el tratamiento, el profesional registra su finalización y se inicia la acreditación de puntos correspondiente.
 
 La confirmación de una reserva y la acreditación de puntos deberán contemplar concurrencia, duplicación de solicitudes y fallas parciales.
 
@@ -50,9 +50,9 @@ El sistema se diseñará con un **frontend web**, un **API Gateway** y, como mí
 
 | Componente | Responsabilidad preliminar |
 | --- | --- |
-| Catálogo y Profesionales | Tratamientos, profesionales, información y disponibilidad publicada. |
-| Reservas | Creación, validación, cancelación y seguimiento del estado de los turnos. |
-| Beneficios | Saldos, movimientos de puntos y canjes de beneficios. |
+| Catálogo y Profesionales | Tratamientos, categorías, profesionales, precios, duraciones y puntos configurados. |
+| Reservas | Agenda, disponibilidad efectiva, creación, cancelación y finalización de turnos. |
+| Beneficios | Saldos, movimientos de puntos, canjes, aplicaciones y restituciones. |
 | API Gateway | Punto de entrada del frontend y enrutamiento hacia los servicios. |
 
 Cada microservicio será propietario de sus datos. Los límites definitivos, la asignación de la agenda y las comunicaciones se detallarán en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) y en los registros de decisiones arquitectónicas.
@@ -91,7 +91,7 @@ Cuando esté disponible, esta sección incluirá los requisitos previos, las var
 
 ## Integración con otro grupo
 
-Se diseñará y documentará una capacidad de MELT para consumo externo mediante un contrato formal y versionado. La capacidad concreta, su contrato y su mock se definirán en la documentación de integración. También se incorporará una capacidad provista por otro grupo según la asignación docente.
+Se diseñará y documentará una capacidad de MELT para consumo externo mediante un contrato formal y versionado. La capacidad elegida es una API versionada de consulta de tratamientos con filtros, información descriptiva y precios. Su contrato y mock se prepararán en la documentación de integración. También se incorporará una capacidad provista por otro grupo según la asignación docente.
 
 Documentación prevista: [docs/contracts/README.md](docs/contracts/README.md).
 
