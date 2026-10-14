@@ -54,7 +54,8 @@ flowchart TB
             catalogo["Catálogo y Profesionales<br/>Consulta y administración del catálogo<br/>Go y Gin"]
             reservas["Reservas<br/>Agenda y ciclo de los turnos<br/>Go y Gin"]
             beneficios["Beneficios<br/>Puntos, canjes y restituciones<br/>Go y Gin"]
-            mongo[("MongoDB<br/>Base privada de Catálogo")]
+            mongo1[("MongoDB<br/>catalogo_db")]
+             mongo2[("MongoDB<br/>profesionales_db")]
             pgres[("PostgreSQL<br/>Base privada de Reservas")]
             pgbenef[("PostgreSQL<br/>Base privada de Beneficios")]
 
@@ -244,7 +245,7 @@ El frontend y la configuración ejecutable de Docker Compose se incorporarán du
 | :--- | :--- | :--- |
 | D1 — Límites | Tres capacidades de negocio, sus relaciones y propiedad exclusiva de datos. | `docs/adr/ADR-001-limites-servicios.md` |
 | D8 — Contrato propio | API de tratamientos, consumidor, datos públicos, versionado y compatibilidad. | `docs/adr/ADR-008-contrato-propio.md` |
-| D3 inicial — Persistencia | MongoDB para Catálogo y PostgreSQL para Reservas y Beneficios; motivos, patrones de acceso y límites. | `docs/adr/ADR-003-persistencia.md` |
+| D3 — Persistencia actualizada | Bases lógicas MongoDB separadas para Catálogo y Profesionales; PostgreSQL para Reservas y Beneficios; Memcached como caché. | `docs/adr/ADR-003-persistencia.md` |
 | D5 inicial — Comunicación | Validaciones síncronas y eventos asíncronos; garantías y cuestiones abiertas. | `docs/adr/ADR-005-comunicacion.md` |
 
 Estos ADR deben ser archivos independientes con alternativas y consecuencias. Su descripción aquí no reemplaza los registros. La estructura real de servicios, el contrato y el mock siguen pendientes, por lo que la primera entrega todavía no está completa.
