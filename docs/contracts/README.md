@@ -26,7 +26,7 @@ Parámetros disponibles:
 
 | Parámetro | Tipo | Descripción |
 |---|---|---|
-| `q` | string | Busca únicamente por el nombre del tratamiento |
+| `q` | string | Busca por nombre y palabras clave (`keywords`) asociadas al tratamiento |
 | `categoria` | string | Filtra por categoría |
 | `precioMax` | number | Filtra por precio máximo |
 | `page` | integer | Número de página. Por defecto: `1` |
@@ -67,6 +67,7 @@ Un tratamiento contiene:
 - moneda
 - duración en minutos
 - imágenes
+- `keywords`: arreglo de términos relacionados y sinónimos utilizados para la búsqueda
 
 Ejemplo:
 
@@ -80,7 +81,8 @@ Ejemplo:
   "duracionMinutos": 60,
   "imagenes": [
     "https://melt.example.com/images/limpieza-facial.jpg"
-  ]
+  ],
+  "keywords": ["limpieza", "limpieza profunda", "higiene facial"]
 }
 
 ## Paginación
