@@ -39,7 +39,7 @@ Hay que definir modalidades de comunicación, cuándo usar cada una y qué probl
 | Catálogo → procesamiento de búsqueda | Asíncrona (candidata vía RabbitMQ) | Reflejar cambios del catálogo en el índice. |
 
 - El **API Gateway (NGINX)** enruta las solicitudes y aplica políticas de entrada; no concentra reglas de negocio de reservas ni de saldo.
-- Se proponen eventos de dominio tales como: turno confirmado, tratamiento completado, turno cancelado. Sus esquemas, reintentos y recuperación están pendientes.
+- Se proponen eventos de dominio tales como: turno confirmado, tratamiento completado y turno cancelado. La política inicial de reintentos de correo y el tratamiento de acreditaciones duplicadas quedan definidos en la enmienda aceptada; los esquemas definitivos de eventos y la configuración operativa de colas y recuperación se detallarán durante la implementación.
 
 ### Principios iniciales
 
