@@ -1,6 +1,6 @@
 # ADR-009 — Reglas de compatibilidad, carrito temporal y seña
 
-**Estado:** Aceptado para el diseño actualizado; parámetros comerciales pendientes.  
+**Estado:** Aceptado para el diseño actualizado; proveedor/modalidad de pago y procedimiento operativo de devolución pendientes.  
 **Fecha:** 2026-10-14  
 **Decisores:** Equipo MELT
 
@@ -29,13 +29,13 @@ Los bloqueos temporales participan de la validación de disponibilidad y compati
 
 La seña forma parte del alcance. Antes de confirmar la reserva, debe quedar registrado un resultado exitoso del pago de la seña. La seña se distingue del saldo restante, que continúa pagándose presencialmente, y del programa de puntos.
 
-**Pendiente de parametrización:** importe o porcentaje, modalidad/proveedor de pago, política de devolución, ausencias, cancelaciones tardías y cambios de turno. Hasta definirlos no se fijan valores comerciales ni se presume un proveedor específico.
+La seña equivale al **30 % del precio vigente del tratamiento** y debe abonarse para confirmar la reserva. Si el cliente cancela con **24 horas o más de anticipación**, se devuelve el **100 % de la seña**. Si cancela con menos de 24 horas o no asiste, no se devuelve. La cancelación tardía igualmente libera el horario. El proveedor/modalidad de pago y el procedimiento operativo para ejecutar y conciliar devoluciones quedan pendientes; no se presume una integración concreta.
 
 ### 4. Puntos y correos
 
-Los puntos se acreditan una única vez luego de que el profesional registra el tratamiento como completado. Ni el bloqueo del carrito, ni la reserva confirmada, ni el pago de la seña acreditan puntos.
+Los puntos se acreditan una única vez luego de que el profesional registra el tratamiento como completado. Ni el bloqueo del carrito, ni la reserva confirmada, ni el pago de la seña acreditan puntos. Cada acreditación utiliza un identificador único y una restricción de unicidad en la base de datos, junto con una operación transaccional, para evitar duplicados ante reintentos.
 
-La confirmación o cancelación de un turno realizada por el profesional genera un evento que da lugar al envío de un correo al cliente. El correo se procesa de forma asíncrona, con reintentos e idempotencia. Un fallo del proveedor de correo no revierte el cambio de estado del turno.
+La confirmación o cancelación de un turno realizada por el profesional genera un evento que da lugar al envío de un correo al cliente. El correo se procesa de forma asíncrona: intento inicial y hasta 3 reintentos automáticos con esperas crecientes. Si persiste el fallo, el evento se envía a una cola de errores para revisión y posible reenvío manual. El estado de procesamiento queda registrado y un fallo del proveedor no revierte el turno. Si el proveedor acepta el correo y se pierde la respuesta, puede quedar un resultado incierto que requiera revisión; el consumidor no puede garantizar por sí solo que nunca llegue un duplicado.
 
 ## Consecuencias
 
@@ -51,12 +51,13 @@ La confirmación o cancelación de un turno realizada por el profesional genera 
 - Los bloqueos temporales necesitan expiración confiable y limpieza de estados vencidos.
 - La validación de compatibilidad debe coordinarse con la reserva bajo concurrencia.
 - Pagos, devoluciones y mensajes requieren correlación, idempotencia y trazabilidad.
-- Los parámetros comerciales de la seña permanecen abiertos hasta acuerdo del equipo.
+- El proveedor/modalidad de pago y el procedimiento operativo de devolución siguen pendientes; los porcentajes y plazos de devolución ya están definidos en esta decisión.
 
 ## Criterios de aceptación
 
 1. Una combinación incompatible se rechaza tanto para el mismo profesional como para el mismo cliente.
 2. Un horario agregado al carrito se bloquea por un máximo de 10 minutos y se libera al confirmar, quitarlo o vencer.
-3. No se confirma una reserva sin pago exitoso de la seña registrada.
-4. Reintentar eventos no duplica puntos, correos ni efectos de pago/devolución.
+3. No se confirma una reserva sin pago exitoso de una seña equivalente al 30 % del precio del tratamiento.
+4. Reintentar eventos no duplica acreditaciones de puntos ni efectos de pago/devolución. Los correos tienen reintentos limitados y seguimiento de estado; los resultados inciertos del proveedor se revisan.
 5. Los puntos solo se acreditan tras registrar la realización efectiva del tratamiento.
+6. Una cancelación con 24 horas o más de anticipación devuelve el 100 % de la seña; una cancelación con menos de 24 horas o una inasistencia no la devuelve.
