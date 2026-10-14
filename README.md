@@ -27,8 +27,10 @@ Facilitar la organización de la agenda del centro, brindar a los clientes un me
 3. Reserva y cancelación de turnos, con validación de conflictos de agenda.
 4. Gestión de estados de turnos y registro de tratamientos completados.
 5. Acreditación de puntos y canje de beneficios según reglas del centro.
-6. Envío de notificaciones relacionadas con eventos relevantes de las reservas.
-7. Gestión administrativa del catálogo, la agenda y el programa de beneficios.
+6. Envío de correos electrónicos al confirmar o cancelar un turno por parte del profesional.
+7. Carrito de reserva con bloqueo temporal del horario durante 10 minutos y liberación automática al vencer.
+8. Gestión de seña por tratamiento, con reglas de pago, cancelación y devolución.
+9. Gestión administrativa del catálogo, la agenda y el programa de beneficios.
 
 Las reglas detalladas y los criterios de aceptación se documentarán en [SPEC.md](SPEC.md).
 
@@ -50,7 +52,7 @@ El sistema se diseñará con un **frontend web**, un **API Gateway** y, como mí
 
 | Componente | Responsabilidad preliminar |
 | --- | --- |
-| Catálogo y Profesionales | Tratamientos, categorías, profesionales, precios, duraciones y puntos configurados. |
+| Catálogo y Profesionales | Tratamientos, categorías, profesionales, precios, duraciones, palabras clave y puntos configurados. |
 | Reservas | Agenda, disponibilidad efectiva, creación, cancelación y finalización de turnos. |
 | Beneficios | Saldos, movimientos de puntos, canjes, aplicaciones y restituciones. |
 | API Gateway | Punto de entrada del frontend y enrutamiento hacia los servicios. |
@@ -71,7 +73,7 @@ Se prevé utilizar **comunicación síncrona** para las consultas y validaciones
 | Persistencia relacional | PostgreSQL |
 | Persistencia no relacional | MongoDB |
 | Mensajería asíncrona | RabbitMQ |
-| Caché | Redis |
+| Caché | Memcached |
 | Motor de búsqueda | OpenSearch |
 | Contenedores y ejecución local | Docker y Docker Compose |
 | Métricas y tableros | Prometheus y Grafana |
