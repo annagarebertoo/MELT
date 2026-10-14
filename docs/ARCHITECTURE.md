@@ -86,7 +86,7 @@ El frontend se comunica con el backend a través del gateway. El consumidor exte
 | :--- | :--- |
 | RabbitMQ | Mensajería para eventos y efectos posteriores, como puntos y notificaciones. |
 | OpenSearch | Búsqueda de tratamientos administrada por Catálogo. |
-| Redis | Caché de un flujo relevante de consulta del catálogo. |
+| Memcached | Caché de un flujo relevante de consulta del catálogo. |
 | Prometheus y Grafana | Métricas y tableros del sistema. |
 
 Estos componentes forman parte de la evolución prevista y no están configurados. La autenticación y autorización son necesarias; su mecanismo concreto permanece abierto.
@@ -109,13 +109,13 @@ Los límites deberán formalizarse en D1 y podrán evolucionar mediante ADR si a
 
 | Servicio | Datos propios | Persistencia propuesta y motivo |
 | :--- | :--- | :--- |
-| Catálogo y Profesionales | Categorías, tratamientos, referencias de imágenes, precios, duraciones, puntos configurados, profesionales y aptitudes. | MongoDB: lectura y actualización de documentos del catálogo con información descriptiva e imágenes asociadas. |
+| Catálogo y Profesionales | Categorías, tratamientos, palabras clave, referencias de imágenes, precios, duraciones, puntos configurados, profesionales y aptitudes. | Dos bases lógicas MongoDB: `catalogo_db` para tratamientos/categorías y `profesionales_db` para profesionales/aptitudes. La separación lógica es obligatoria aunque compartan una instancia física en desarrollo. |
 | Reservas | Horarios, excepciones, turnos, intervalos, estados, realizaciones y referencias a beneficios aplicados. | PostgreSQL: relaciones y transacciones para proteger la agenda y las transiciones del turno. |
 | Beneficios | Saldos, movimientos de puntos, beneficios, canjes, aplicaciones y restituciones. | PostgreSQL: cambios consistentes de saldo y movimientos, con control de duplicación. |
 
 Se proponen dos tipos de almacenamiento primario, relacional y no relacional. Cada servicio tendrá datos y credenciales privados. Reservas y Beneficios podrán compartir una instancia de PostgreSQL en desarrollo, pero utilizarán bases separadas: no compartirán tablas ni consultarán directamente datos ajenos.
 
-Las referencias entre servicios se transmitirán mediante identificadores por API o eventos. OpenSearch y Redis contendrán copias derivadas, no serán autoridad sobre agenda, saldo o validaciones comerciales. El alojamiento de imágenes, los esquemas, migraciones e índices se definirán posteriormente.
+Las referencias entre servicios se transmitirán mediante identificadores por API o eventos. OpenSearch y Memcached contendrán copias derivadas, no serán autoridad sobre agenda, saldo o validaciones comerciales. El alojamiento de imágenes, los esquemas, migraciones e índices se definirán posteriormente.
 
 La persistencia se registrará como versión inicial de D3. MongoDB no determina por sí solo cómo publicar cambios de forma confiable; ese mecanismo y sus requisitos de configuración se evaluarán con el diseño de comunicación.
 
@@ -129,7 +129,7 @@ La persistencia se registrará como versión inicial de D3. MongoDB no determina
 | Persistencia | MongoDB y PostgreSQL | Documentos del catálogo y operaciones transaccionales de agenda y puntos. |
 | Mensajería | RabbitMQ | Comunicación asíncrona mediante publicación y consumo de eventos. |
 | Búsqueda | OpenSearch | Búsqueda textual con filtros, paginación y ordenamiento. |
-| Caché | Redis | Copias temporales de lecturas relevantes del catálogo. |
+| Caché | Memcached | Copias temporales de lecturas relevantes del catálogo. |
 | Ejecución local | Docker y Docker Compose | Futuro procedimiento único y automatizado de arranque. |
 | Observabilidad | Prometheus y Grafana | Métricas y tableros para comprender el estado del sistema. |
 
@@ -274,7 +274,7 @@ Los requisitos del sistema completo se conservan como compromisos de desarrollo.
 ### 12.1. Compromisos técnicos pendientes de diseño y verificación
 
 - **Búsqueda:** filtros relevantes, paginación y ordenamiento; actualización ante cambios del catálogo y retraso máximo tolerable definido. OpenSearch es la propuesta, sin imponer ahora el mecanismo de reconstrucción.
-- **Caché:** al menos una lectura relevante, con justificación por necesidad observable y métricas de impacto. Redis es candidato; vigencia e invalidación se diseñarán y medirán posteriormente.
+- **Caché:** al menos una lectura relevante, con justificación por necesidad observable y métricas de impacto. Memcached es la tecnología seleccionada; vigencia e invalidación se diseñarán y medirán posteriormente.
 - **Balanceo:** al menos un servicio en dos o más instancias, con reconocimiento de indisponibilidad y evidencia de distribución. Reservas es candidato; la configuración de NGINX y la demostración quedan para su etapa.
 - **Resiliencia:** identificar dependencias y comportamiento ante lentitud o falla; seleccionar al menos un mecanismo de protección y demostrarlo mediante una caída controlada. Tiempos, reintentos, circuit breakers y recuperación se evaluarán sin fijar una combinación prematura.
 - **Observabilidad:** logs estructurados, métricas y tableros que permitan comprender una operación. La instrumentación, trazas, alertas y almacenamiento se definirán en las etapas correspondientes.
@@ -282,3 +282,30 @@ Los requisitos del sistema completo se conservan como compromisos de desarrollo.
 - **Operación:** arranque local único y automatizado, capacidad propia accesible durante la evaluación y `docs/POSTMORTEM.md` para la caída provocada. El repositorio público y la versión final en la rama principal deberán verificarse al preparar la entrega correspondiente.
 
 La principal limitación de esta propuesta es la coordinación entre datos privados de servicios distintos. La simplificación posterga su solución detallada, pero mantiene las garantías funcionales de reserva, acreditación, canje y restitución. No se compromete una arquitectura de alta disponibilidad completa ni una escala de producción todavía desconocida.
+
+
+## 12. Actualización de decisiones de diseño
+
+Las decisiones siguientes actualizan el diseño inicial y deben prevalecer sobre menciones anteriores que indiquen Redis o una única base de datos MongoDB para Catálogo y Profesionales. Estas capacidades están diseñadas, no necesariamente implementadas.
+
+### Persistencia documental
+
+- `catalogo_db` en MongoDB es propiedad lógica de Catálogo y contiene tratamientos, categorías, precios, duración, imágenes, puntos configurados y el arreglo `keywords`.
+- `profesionales_db` en MongoDB es propiedad lógica del componente responsable de profesionales y contiene perfiles, aptitudes y asociaciones con tratamientos. No se comparten colecciones entre dominios.
+- Reservas y Beneficios mantienen sus bases PostgreSQL propias.
+
+### Búsqueda y caché
+
+- OpenSearch indexa nombre, descripción, categoría y `keywords` del tratamiento. Los cambios del catálogo deben propagarse al índice de forma asíncrona; el retraso es consistencia eventual y debe observarse.
+- Memcached reemplaza a Redis para cachear consultas frecuentes del catálogo. Las claves deben considerar filtros y paginación; las modificaciones del catálogo deben invalidar o versionar las entradas afectadas. Se medirán hits, misses, latencia y errores.
+
+### Reserva con carrito, compatibilidad y seña
+
+- Al agregar un horario al carrito se crea un bloqueo temporal de 10 minutos, con titular y vencimiento. El bloqueo se libera al confirmar, quitar el elemento o vencer el plazo; no puede permanecer indefinidamente por la desconexión del cliente.
+- Reservas valida superposición de agenda del profesional e incompatibilidad de tratamientos del mismo cliente. Las reglas de incompatibilidad son explícitas por combinación de tratamientos/categorías y pueden incluir intervalos de separación. La operación de bloqueo debe ser atómica para prevenir carreras.
+- La seña forma parte del alcance. La reserva no se confirma hasta que el resultado exitoso de pago de la seña quede registrado. Los pagos y devoluciones requieren idempotencia, trazabilidad y reglas de cancelación/devolución aún por parametrizar.
+
+### Eventos y correo
+
+- Confirmación y cancelación realizadas por el profesional generan eventos para enviar correo al cliente. Los correos se procesan asíncronamente y con reintentos; el proveedor de correo no forma parte de la transacción de agenda.
+- La finalización del tratamiento genera el evento que habilita la acreditación de puntos una sola vez. Ni el carrito, ni la confirmación, ni el pago de la seña generan puntos.
