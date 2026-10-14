@@ -158,7 +158,7 @@ El gateway enruta las solicitudes y aplica políticas de entrada; no concentra r
 
 Las operaciones remotas necesitarán tiempos de espera, tratamiento de errores y respuestas ausentes o tardías, y una política de reintentos. Una respuesta perdida no prueba que el efecto no ocurrió. La repetición deberá preservar una única operación de negocio.
 
-La mensajería deberá publicar y consumir eventos de dominio, evitar efectos duplicados y tratar mensajes fallidos. Se proponen hechos como turno confirmado, tratamiento completado y turno cancelado; sus esquemas, reintentos y recuperación están pendientes.
+La mensajería deberá publicar y consumir eventos de dominio, evitar efectos duplicados y tratar mensajes fallidos. Se proponen hechos como turno confirmado, tratamiento completado y turno cancelado. Para correos se define un intento inicial y hasta 3 reintentos automáticos con esperas crecientes; luego el mensaje pasa a una cola de errores para revisión y posible reenvío manual. Los esquemas definitivos, la configuración de colas y la operación de recuperación se detallarán durante la implementación.
 
 Transactional Outbox se conserva como **patrón candidato** para evitar perder efectos entre la persistencia y la publicación. No se impone en todos los servicios ni se fija su implementación en esta entrega. Se evaluará con los mecanismos de idempotencia y recuperación cuando se diseñen los flujos.
 
@@ -305,9 +305,9 @@ Las decisiones siguientes actualizan el diseño inicial y deben prevalecer sobre
 
 - Al agregar un horario al carrito se crea un bloqueo temporal de 10 minutos, con titular y vencimiento. El bloqueo se libera al confirmar, quitar el elemento o vencer el plazo; no puede permanecer indefinidamente por la desconexión del cliente.
 - Reservas valida superposición de agenda del profesional e incompatibilidad de tratamientos del mismo cliente. Las reglas de incompatibilidad son explícitas por combinación de tratamientos/categorías y pueden incluir intervalos de separación. La operación de bloqueo debe ser atómica para prevenir carreras.
-- La seña forma parte del alcance. La reserva no se confirma hasta que el resultado exitoso de pago de la seña quede registrado. Los pagos y devoluciones requieren idempotencia, trazabilidad y reglas de cancelación/devolución aún por parametrizar.
+- La seña equivale al 30 % del precio vigente del tratamiento y debe pagarse para confirmar la reserva. Si el cliente cancela con 24 horas o más de anticipación, se devuelve el 100 %; con menos de 24 horas o ante inasistencia, no se devuelve. La cancelación tardía libera el horario. El resultado exitoso del pago debe quedar registrado antes de confirmar. El proveedor/modalidad y el procedimiento operativo de devolución siguen pendientes; los pagos y devoluciones requieren idempotencia y trazabilidad.
 
 ### Eventos y correo
 
-- Confirmación y cancelación realizadas por el profesional generan eventos para enviar correo al cliente. Los correos se procesan asíncronamente y con reintentos; el proveedor de correo no forma parte de la transacción de agenda.
-- La finalización del tratamiento genera el evento que habilita la acreditación de puntos una sola vez. Ni el carrito, ni la confirmación, ni el pago de la seña generan puntos.
+- Confirmación y cancelación realizadas por el profesional generan eventos identificados para enviar correo al cliente. Los correos se procesan asíncronamente con un intento inicial y hasta 3 reintentos automáticos con esperas crecientes; los fallos persistentes pasan a una cola de errores para revisión y posible reenvío manual. El estado del envío queda registrado y el proveedor de correo no forma parte de la transacción de agenda. Si la aceptación del proveedor y su respuesta quedan inciertas, se requiere revisión porque el consumidor no puede garantizar por sí solo que nunca haya duplicados.
+- La finalización del tratamiento genera el evento que habilita la acreditación de puntos una sola vez. Ni el carrito, ni la confirmación, ni el pago de la seña generan puntos. Beneficios registra cada acreditación con identificador único y restricción de unicidad en una operación transaccional para que los reintentos no dupliquen el saldo.
