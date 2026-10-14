@@ -70,7 +70,7 @@ MELT publicará una capacidad para otro grupo y consumirá una capacidad externa
 
 ### 3.2. Funcionalidades fuera de alcance
 
-Quedan fuera de esta versión la gestión de múltiples sucursales, pagos en línea, facturación, inventario de insumos, historias clínicas, gestión salarial y una aplicación móvil nativa.
+Quedan fuera de esta versión la gestión de múltiples sucursales, el pago en línea del saldo total del tratamiento, facturación, inventario de insumos, historias clínicas, gestión salarial y una aplicación móvil nativa. La seña sí está incluida en el alcance; su modalidad/proveedor de pago y sus políticas de devolución quedan pendientes de definición.
 
 Las decisiones técnicas de implementación se documentarán en `docs/ARCHITECTURE.md`.
 
@@ -95,14 +95,14 @@ El catálogo es público. Para reservar, el cliente debe iniciar sesión o regis
 | **RF-01** | Explorar el catálogo sin iniciar sesión, organizado inicialmente en Facial, Corporal, Depilación y Manos y uñas. Mostrar nombre, imagen, precio y acceso al detalle de cada tratamiento; el detalle incluye descripción, duración, precio, imágenes, puntos otorgados y profesionales asociados. | Datos principales definidos; filtros: PD-02. |
 | **RF-02** | Buscar tratamientos con filtros relevantes para el dominio, paginación y al menos un criterio de ordenamiento. Los resultados deberán reflejar los cambios del catálogo dentro del retraso máximo que se acuerde. | Filtros y orden: PD-02; retraso: PD-11. |
 | **RF-03** | Consultar profesionales, los tratamientos que pueden atender y los horarios disponibles para realizar la selección previa a una reserva. | Disponibilidad: PD-03. |
-| **RF-04** | Reservar con sesión iniciada: seleccionar tratamiento y profesional, consultar un calendario, elegir fecha y horario disponible y, opcionalmente, aplicar un beneficio. Confirmar automáticamente al validar aptitud, disponibilidad, ausencia de superposición y el beneficio seleccionado. Mostrar el resumen del turno. | Intervalos: PD-03; beneficios: PD-08. |
+| **RF-04** | Reservar con sesión iniciada: seleccionar tratamiento y profesional, consultar un calendario, elegir fecha y horario disponible y, opcionalmente, aplicar un beneficio. Al agregarlo al carrito se bloquea temporalmente el horario durante 10 minutos. La confirmación requiere validar aptitud, disponibilidad, compatibilidad, pago exitoso de la seña y el beneficio seleccionado. Mostrar el resumen del turno. | Intervalos: PD-03; beneficios: PD-08; seña: RN-20; bloqueo: RN-19. |
 | **RF-05** | Permitir al cliente consultar próximos turnos y el historial de tratamientos realizados desde su perfil; permitir al profesional consultar su agenda y los detalles de sus turnos. | Permisos: PD-01, RN-13. |
 | **RF-06** | Permitir al cliente cancelar desde su perfil hasta 24 horas antes del inicio del turno. Registrar la cancelación válida y restituir automáticamente los puntos o el beneficio utilizado, sin duplicar restituciones. | Condiciones adicionales: PD-05; aplicación: PD-08. |
 | **RF-07** | Permitir al profesional correspondiente registrar un tratamiento como completado, vinculándolo con el turno e iniciando la acreditación de puntos. | Transiciones y facultades excepcionales: PD-06. |
 | **RF-08** | Acreditar la cantidad fija de puntos configurada para el tratamiento cuando el profesional registra su finalización, nunca al reservar y sin duplicar acreditaciones. | Vigencia de cambios: PD-09. |
 | **RF-09** | Mostrar en el perfil del cliente sus puntos disponibles, beneficios e historial. | Trazabilidad: RN-12, PD-13. |
 | **RF-10** | Permitir canjear puntos por descuentos o tratamientos gratuitos y aplicar un beneficio disponible durante la reserva. Informar el beneficio aplicado y el importe restante, que se paga presencialmente. | Costos y condiciones: PD-08. |
-| **RF-11** | Enviar por correo electrónico la confirmación de la reserva, con el resumen del turno; notificar otros eventos relevantes según se acuerde. | Otros eventos y recuperación: PD-10. |
+| **RF-11** | Enviar por correo electrónico al cliente la confirmación de la reserva y notificaciones cuando el profesional confirme o cancele un turno. Los envíos se procesan de forma asíncrona y recuperable. | Recuperación y proveedor de correo: PD-10. |
 | **RF-12** | Permitir al administrador gestionar tratamientos, categorías, profesionales y su asociación con tratamientos. | Cambios con reservas existentes: PD-04. |
 | **RF-13** | Permitir al administrador gestionar disponibilidad y turnos, con las validaciones de negocio correspondientes. | Operaciones y cambios: PD-04, PD-06. |
 | **RF-14** | Permitir al administrador configurar la cantidad fija de puntos de cada tratamiento y gestionar beneficios y recompensas. | Condiciones: PD-08; vigencia: PD-09. |
