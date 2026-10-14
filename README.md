@@ -29,7 +29,7 @@ Facilitar la organización de la agenda del centro, brindar a los clientes un me
 5. Acreditación de puntos y canje de beneficios según reglas del centro.
 6. Envío de correos electrónicos al confirmar o cancelar un turno por parte del profesional.
 7. Carrito de reserva con bloqueo temporal del horario durante 10 minutos y liberación automática al vencer.
-8. Gestión de seña por tratamiento, con reglas de pago, cancelación y devolución.
+8. Gestión de seña obligatoria del 30 % del precio del tratamiento para confirmar la reserva; devolución del 100 % si se cancela con al menos 24 horas de anticipación, sin devolución por cancelación tardía o inasistencia.
 9. Gestión administrativa del catálogo, la agenda y el programa de beneficios.
 
 Las reglas detalladas y los criterios de aceptación se documentarán en [SPEC.md](SPEC.md).
@@ -41,11 +41,11 @@ Las reglas detalladas y los criterios de aceptación se documentarán en [SPEC.m
 3. Solicita la reserva.
 4. El sistema valida que el profesional pueda atender el tratamiento, que no haya incompatibilidades con la agenda del profesional ni con otros turnos del cliente y que el horario siga disponible.
 5. Al agregar el horario al carrito, lo bloquea durante 10 minutos; si el cliente no confirma, lo libera automáticamente.
-6. Para confirmar, valida el pago exitoso de la seña y transforma el bloqueo en reserva.
+6. Para confirmar, exige el pago exitoso de una seña equivalente al 30 % del precio del tratamiento y transforma el bloqueo en reserva. Si se cancela con 24 horas o más de anticipación, se devuelve el 100 % de la seña; con menos de 24 horas o ante inasistencia, no se devuelve.
 7. La confirmación o cancelación realizada por el profesional genera un evento para enviar un correo al cliente.
 8. Una vez realizado el tratamiento, el profesional registra su finalización y se inicia la acreditación de puntos correspondiente.
 
-La confirmación de una reserva y la acreditación de puntos deberán contemplar concurrencia, duplicación de solicitudes y fallas parciales. Los bloqueos temporales del carrito también deberán respetar las reglas de incompatibilidad y expirar automáticamente.
+La confirmación de una reserva y la acreditación de puntos deberán contemplar concurrencia, duplicación de solicitudes y fallas parciales. Los puntos se registran con una clave única para evitar acreditaciones duplicadas. Los correos usan un intento inicial y hasta 3 reintentos automáticos con esperas crecientes; si siguen fallando, pasan a una cola de errores para revisión. Los bloqueos temporales del carrito también deberán respetar las reglas de incompatibilidad y expirar automáticamente.
 
 ## Arquitectura propuesta
 
