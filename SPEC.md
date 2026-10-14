@@ -70,7 +70,7 @@ MELT publicará una capacidad para otro grupo y consumirá una capacidad externa
 
 ### 3.2. Funcionalidades fuera de alcance
 
-Quedan fuera de esta versión la gestión de múltiples sucursales, el pago en línea del saldo total del tratamiento, facturación, inventario de insumos, historias clínicas, gestión salarial y una aplicación móvil nativa. La seña sí está incluida en el alcance; su modalidad/proveedor de pago y sus políticas de devolución quedan pendientes de definición.
+Quedan fuera de esta versión la gestión de múltiples sucursales, el pago en línea del saldo total del tratamiento, facturación, inventario de insumos, historias clínicas, gestión salarial y una aplicación móvil nativa. La seña sí está incluida en el alcance: equivale al 30 % del precio del tratamiento, con devolución total si se cancela con al menos 24 horas de anticipación y sin devolución ante cancelación tardía o inasistencia. La modalidad/proveedor de pago y el procedimiento operativo de devolución quedan pendientes de definición.
 
 Las decisiones técnicas de implementación se documentarán en `docs/ARCHITECTURE.md`.
 
@@ -102,7 +102,7 @@ El catálogo es público. Para reservar, el cliente debe iniciar sesión o regis
 | **RF-08** | Acreditar la cantidad fija de puntos configurada para el tratamiento cuando el profesional registra su finalización, nunca al reservar y sin duplicar acreditaciones. | Vigencia de cambios: PD-09. |
 | **RF-09** | Mostrar en el perfil del cliente sus puntos disponibles, beneficios e historial. | Trazabilidad: RN-12, PD-13. |
 | **RF-10** | Permitir canjear puntos por descuentos o tratamientos gratuitos y aplicar un beneficio disponible durante la reserva. Informar el beneficio aplicado y el importe restante, que se paga presencialmente. | Costos y condiciones: PD-08. |
-| **RF-11** | Enviar por correo electrónico al cliente la confirmación de la reserva y notificaciones cuando el profesional confirme o cancele un turno. Los envíos se procesan de forma asíncrona y recuperable. | Recuperación y proveedor de correo: PD-10. |
+| **RF-11** | Enviar por correo electrónico al cliente la confirmación de la reserva y notificaciones cuando el profesional confirme o cancele un turno. Los envíos se procesan de forma asíncrona y recuperable: intento inicial más hasta 3 reintentos, con espera creciente; los fallos persistentes se envían a una cola de errores para revisión. | Proveedor de correo y operación de recuperación manual: PD-10. |
 | **RF-12** | Permitir al administrador gestionar tratamientos, categorías, profesionales y su asociación con tratamientos. | Cambios con reservas existentes: PD-04. |
 | **RF-13** | Permitir al administrador gestionar disponibilidad y turnos, con las validaciones de negocio correspondientes. | Operaciones y cambios: PD-04, PD-06. |
 | **RF-14** | Permitir al administrador configurar la cantidad fija de puntos de cada tratamiento y gestionar beneficios y recompensas. | Condiciones: PD-08; vigencia: PD-09. |
@@ -294,7 +294,7 @@ Se conservan los identificadores originales. Las decisiones resueltas se registr
 
 | ID | Estado y decisión |
 | :--- | :--- |
-| **PD-10** | Resuelta la confirmación por correo electrónico. Pendientes: otros eventos y destinatarios, recuperación de envíos fallidos y aprobación de RN-14 junto con PD-13. |
+| **PD-10** | Resueltas las notificaciones al cliente por confirmación/cancelación del profesional y la estrategia inicial de recuperación: intento inicial, hasta 3 reintentos con espera creciente y cola de errores para revisión. Pendientes: proveedor de correo, procedimiento operativo de reenvío manual, otros eventos/destinatarios y aprobación de RN-14 junto con PD-13. |
 | **PD-12** | Resuelta la capacidad propia: API de consulta de tratamientos con filtros, descripción y precios. Pendientes: contrato versionado, mock, condiciones de consumo y capacidad externa con su flujo y conducta ante fallas. |
 | **PD-13** | Acordada la prevención de reservas, acreditaciones, canjes y restituciones duplicadas. Pendientes: aprobación de RN-12 y RN-15, estados de procesamiento, reconocimiento de una misma intención y responsables de recuperación. |
 
@@ -307,8 +307,8 @@ Esta sección consolida las correcciones acordadas por el equipo. Continúa sien
 
 ### 12.1. Puntos y notificaciones
 
-- **RN-16 — Acreditación posterior a la realización.** Los puntos se acreditan únicamente después de que el profesional registra el tratamiento como completado. La reserva, el bloqueo temporal del carrito y el pago de la seña no acreditan puntos. El procesamiento debe ser idempotente.
-- **RN-17 — Correos por acciones del profesional.** Cuando el profesional confirma un turno o lo cancela, MELT genera un evento para enviar un correo al cliente con el estado actualizado y los datos relevantes del turno. Un fallo del proveedor de correo no revierte la operación de negocio; el envío debe poder reintentarse sin generar efectos duplicados.
+- **RN-16 — Acreditación posterior a la realización.** Los puntos se acreditan únicamente después de que el profesional registra el tratamiento como completado. La reserva, el bloqueo temporal del carrito y el pago de la seña no acreditan puntos. Cada acreditación se vincula a un identificador único de tratamiento/evento y se registra transaccionalmente con una restricción de unicidad, para que repetir o recibir varias veces el mismo evento no duplique puntos. Los fallos se reintentan; si no se resuelven, la operación queda identificada para revisión sin perder el registro de finalización.
+- **RN-17 — Correos por acciones del profesional.** Cuando el profesional confirma un turno o lo cancela, MELT genera un evento identificado de forma única para enviar un correo al cliente con el estado actualizado y los datos relevantes del turno. El envío es asíncrono y no revierte la operación de negocio si falla. Se realiza un intento inicial y hasta 3 reintentos automáticos con esperas crecientes. Si persiste el fallo, el mensaje pasa a una cola de errores (dead-letter) para revisión y eventual reenvío manual. Se registra el estado de procesamiento para no volver a tratar como nuevo un evento ya resuelto. Si el proveedor acepta el correo pero se pierde la respuesta, el resultado puede ser incierto y debe revisarse, ya que no puede garantizarse ausencia absoluta de duplicados solo desde el consumidor.
 
 ### 12.2. Compatibilidad de tratamientos
 
@@ -342,4 +342,6 @@ Esta sección consolida las correcciones acordadas por el equipo. Continúa sien
 - **CA-19:** un horario incorporado al carrito queda bloqueado durante un máximo de 10 minutos y se libera al confirmar, quitarlo o vencer el bloqueo.
 - **CA-20:** no se confirma una reserva si la seña del 30 % no tiene pago exitoso registrado; con cancelación a 24 horas o más se devuelve el 100 %, con menos de 24 horas o ante inasistencia no se devuelve. Los pagos y devoluciones no se procesan dos veces ante reintentos.
 - **CA-21:** una búsqueda por términos asociados encuentra tratamientos por sus `keywords` y respeta filtros, paginación y orden.
+- **CA-22:** cada acreditación de puntos está vinculada a un identificador único y repetir el mismo evento no altera el saldo por segunda vez; si el procesamiento falla de forma persistente, queda registrado para revisión.
+- **CA-23:** los correos se procesan con un intento inicial y hasta 3 reintentos automáticos; los fallos persistentes quedan registrados en una cola de errores para revisión, sin revertir el estado del turno.
 
