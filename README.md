@@ -39,10 +39,11 @@ Las reglas detalladas y los criterios de aceptación se documentarán en [SPEC.m
 1. El cliente busca un tratamiento y consulta su información.
 2. Selecciona un profesional y un horario disponible.
 3. Solicita la reserva.
-4. El sistema verifica que el profesional pueda atender el tratamiento y que el horario no se superponga con otra reserva confirmada.
-5. Si las validaciones son correctas, registra el turno y confirma la operación; de lo contrario, informa el motivo del rechazo.
-6. Se genera un evento de dominio para procesar efectos posteriores, como el envío de una notificación.
-7. Una vez realizado el tratamiento, el profesional registra su finalización y se inicia la acreditación de puntos correspondiente.
+4. El sistema valida que el profesional pueda atender el tratamiento, que no haya incompatibilidades con la agenda del profesional ni con otros turnos del cliente y que el horario siga disponible.
+5. Al agregar el horario al carrito, lo bloquea durante 10 minutos; si el cliente no confirma, lo libera automáticamente.
+6. Para confirmar, valida el pago exitoso de la seña y transforma el bloqueo en reserva.
+7. La confirmación o cancelación realizada por el profesional genera un evento para enviar un correo al cliente.
+8. Una vez realizado el tratamiento, el profesional registra su finalización y se inicia la acreditación de puntos correspondiente.
 
 La confirmación de una reserva y la acreditación de puntos deberán contemplar concurrencia, duplicación de solicitudes y fallas parciales. Los bloqueos temporales del carrito también deberán respetar las reglas de incompatibilidad y expirar automáticamente.
 
