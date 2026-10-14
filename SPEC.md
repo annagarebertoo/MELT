@@ -299,3 +299,46 @@ Se conservan los identificadores originales. Las decisiones resueltas se registr
 | **PD-13** | Acordada la prevención de reservas, acreditaciones, canjes y restituciones duplicadas. Pendientes: aprobación de RN-12 y RN-15, estados de procesamiento, reconocimiento de una misma intención y responsables de recuperación. |
 
 No se fijan precios, cantidades de puntos ni horarios comerciales en esta versión. El diseño detallado de las pantallas permanece abierto para el desarrollo del frontend.
+
+
+## 12. Decisiones funcionales incorporadas — revisión de alcance
+
+Esta sección consolida las correcciones acordadas por el equipo. Continúa siendo una especificación de diseño: no implica que estas funciones estén implementadas.
+
+### 12.1. Puntos y notificaciones
+
+- **RN-16 — Acreditación posterior a la realización.** Los puntos se acreditan únicamente después de que el profesional registra el tratamiento como completado. La reserva, el bloqueo temporal del carrito y el pago de la seña no acreditan puntos. El procesamiento debe ser idempotente.
+- **RN-17 — Correos por acciones del profesional.** Cuando el profesional confirma un turno o lo cancela, MELT genera un evento para enviar un correo al cliente con el estado actualizado y los datos relevantes del turno. Un fallo del proveedor de correo no revierte la operación de negocio; el envío debe poder reintentarse sin generar efectos duplicados.
+
+### 12.2. Compatibilidad de tratamientos
+
+- **RN-18 — Incompatibilidad por profesional y por cliente.** Antes de confirmar o bloquear un horario, el sistema evalúa las reglas de compatibilidad configuradas para los tratamientos involucrados. Debe impedirse una combinación incompatible tanto cuando afecte la agenda de un mismo profesional como cuando dos tratamientos del mismo cliente se solapen y sean incompatibles entre sí. No se prohíben automáticamente todos los tratamientos de una misma categoría: la incompatibilidad se define mediante reglas explícitas entre tratamientos/categorías y, cuando corresponda, intervalos de separación.
+- La validación debe contemplar reservas confirmadas y bloqueos temporales activos. Los controles concurrentes deben impedir que dos solicitudes incompatibles se acepten simultáneamente.
+
+### 12.3. Carrito y bloqueo temporal
+
+- **RN-19 — Bloqueo temporal de 10 minutos.** Al incorporar al carrito una selección que requiere un horario concreto, MELT crea un bloqueo temporal de ese intervalo por 10 minutos. El bloqueo evita que otra solicitud confirme o bloquee un turno incompatible mientras está vigente.
+- El bloqueo tiene identificador, titular y vencimiento explícito. Al confirmar la reserva, se transforma/libera de forma atómica según el flujo definido; al quitar el turno del carrito, abandonar la operación o vencer los 10 minutos, el intervalo se libera. Una reserva no confirmada nunca debe quedar bloqueada indefinidamente.
+- La creación y confirmación del bloqueo deben ser seguras ante concurrencia y repetición. La expiración no puede depender exclusivamente de que el cliente vuelva a abrir la página.
+
+### 12.4. Seña
+
+- **RN-20 — Seña requerida para reservar.** La reserva incluye el cobro de una seña asociada al tratamiento. El importe o porcentaje se configura de manera explícita y se muestra antes de confirmar. La reserva solo queda confirmada cuando se registra el resultado exitoso del pago de la seña; un pago pendiente o fallido no debe producir una reserva confirmada.
+- La seña es distinta del saldo restante del tratamiento y de los puntos del programa. La política debe definir cancelaciones, devoluciones, ausencias, cambios de turno y fallos de pago. Los efectos de pago y devolución deben ser idempotentes y trazables.
+- **Decisión pendiente de parametrización:** importe/porcentaje, proveedor o modalidad de pago, plazo de cancelación con devolución y tratamiento de la seña ante cancelaciones tardías o inasistencia. Estos valores no se inventan en esta revisión.
+
+### 12.5. Búsqueda, datos y caché
+
+- **RN-21 — Palabras clave del tratamiento.** Cada tratamiento incluye un arreglo `keywords` con términos relacionados, sinónimos y expresiones de búsqueda. La búsqueda indexa estos términos además del nombre y los campos ya definidos; los filtros, paginación y ordenamiento del contrato público deben mantenerse consistentes con el índice.
+- **Decisión de persistencia:** se separa la persistencia documental en dos bases lógicas MongoDB: una para Catálogo y otra para Profesionales. Cada servicio conserva la propiedad de sus datos; compartir una instancia física puede evaluarse para el entorno local, pero las bases y permisos lógicos se mantienen separados.
+- **Decisión de caché:** se reemplaza Redis por Memcached para la caché de lecturas del catálogo. La caché no es fuente de verdad; se documentarán TTL, invalidación, métricas de hit/miss y comportamiento ante indisponibilidad.
+
+### 12.6. Criterios de aceptación adicionales
+
+- **CA-16:** los puntos no se acreditan al reservar ni al pagar la seña; se acreditan una sola vez al registrar la finalización.
+- **CA-17:** la confirmación o cancelación de un turno por el profesional genera un correo al cliente. Una falla temporal del correo no revierte el cambio y el envío pendiente puede recuperarse.
+- **CA-18:** se rechazan combinaciones incompatibles tanto para un profesional como para un cliente, incluso ante solicitudes concurrentes.
+- **CA-19:** un horario incorporado al carrito queda bloqueado durante un máximo de 10 minutos y se libera al confirmar, quitarlo o vencer el bloqueo.
+- **CA-20:** no se confirma una reserva si la seña requerida no tiene pago exitoso registrado; los pagos y devoluciones no se procesan dos veces ante reintentos.
+- **CA-21:** una búsqueda por términos asociados encuentra tratamientos por sus `keywords` y respeta filtros, paginación y orden.
+
