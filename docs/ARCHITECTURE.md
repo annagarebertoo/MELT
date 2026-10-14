@@ -59,7 +59,8 @@ flowchart TB
             pgres[("PostgreSQL<br/>Base privada de Reservas")]
             pgbenef[("PostgreSQL<br/>Base privada de Beneficios")]
 
-            catalogo -->|"Lee y escribe"| mongo
+            catalogo -->|"Lee y escribe tratamientos"| mongo1
+            catalogo -->|"Lee y escribe profesionales"| mongo2
             reservas -->|"Lee y escribe"| pgres
             beneficios -->|"Lee y escribe"| pgbenef
         end
