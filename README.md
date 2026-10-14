@@ -44,7 +44,7 @@ Las reglas detalladas y los criterios de aceptación se documentarán en [SPEC.m
 6. Se genera un evento de dominio para procesar efectos posteriores, como el envío de una notificación.
 7. Una vez realizado el tratamiento, el profesional registra su finalización y se inicia la acreditación de puntos correspondiente.
 
-La confirmación de una reserva y la acreditación de puntos deberán contemplar concurrencia, duplicación de solicitudes y fallas parciales.
+La confirmación de una reserva y la acreditación de puntos deberán contemplar concurrencia, duplicación de solicitudes y fallas parciales. Los bloqueos temporales del carrito también deberán respetar las reglas de incompatibilidad y expirar automáticamente.
 
 ## Arquitectura propuesta
 
@@ -59,7 +59,7 @@ El sistema se diseñará con un **frontend web**, un **API Gateway** y, como mí
 
 Cada microservicio será propietario de sus datos. Los límites definitivos, la asignación de la agenda y las comunicaciones se detallarán en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) y en los registros de decisiones arquitectónicas.
 
-Se prevé utilizar **comunicación síncrona** para las consultas y validaciones que requieran una respuesta inmediata, y **mensajería asíncrona** para eventos y efectos posteriores. Se incorporarán un motor de búsqueda, caché, balanceo de carga, mecanismos de resiliencia y observabilidad.
+Se prevé utilizar **comunicación síncrona** para las consultas y validaciones que requieran una respuesta inmediata, y **mensajería asíncrona** para eventos y efectos posteriores. Se incorporarán un motor de búsqueda, caché, balanceo de carga, mecanismos de resiliencia y observabilidad. Las incompatibilidades se validarán para la agenda del profesional y para los turnos del mismo cliente.
 
 ## Tecnologías propuestas
 
