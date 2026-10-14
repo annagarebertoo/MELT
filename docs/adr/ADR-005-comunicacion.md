@@ -75,3 +75,14 @@ Hay que definir modalidades de comunicación, cuándo usar cada una y qué probl
 - Evaluación de **Transactional Outbox** como patrón candidato para no perder la publicación de eventos tras un commit.
 - Estrategia de recuperación y posibles compensaciones en el flujo de reserva con beneficio.
 - Instrumentación (trazas, métricas) para seguir una operación a través de servicios y colas.
+
+
+## Enmienda de decisión — eventos y efectos posteriores
+
+**Estado de esta enmienda:** Aceptada por el equipo para el diseño actualizado.
+
+- Los cambios de estado de un turno realizados por el profesional (confirmación y cancelación) publican eventos que originan el envío de correo al cliente.
+- La finalización registrada por el profesional publica el evento que habilita la acreditación de puntos. Los puntos no se acreditan por reservar ni por pagar una seña.
+- Los efectos de correo y puntos son asíncronos, reintentables e idempotentes. La falla del proveedor de correo no revierte la operación de agenda.
+- El bloqueo de horario por carrito durante 10 minutos es una operación síncrona de control de concurrencia en Reservas; su expiración libera el intervalo automáticamente. No debe modelarse como una confirmación definitiva del turno.
+- El resultado de pago de la seña debe verificarse antes de confirmar la reserva. Las notificaciones de pago y devolución deben correlacionarse con la operación original y no duplicar efectos.
