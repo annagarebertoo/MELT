@@ -2,7 +2,7 @@
 
 **Sistema web de gestión para un centro de estética**  
 **Materia:** Arquitectura de Software — 2026  
-**Estado:** Diseño inicial — Entrega 1 (9 de octubre de 2026)
+**Estado:** Implementación parcial en progreso — infraestructura local y catálogo inicial
 
 ## Descripción
 
@@ -120,3 +120,16 @@ Los enlaces a documentos aún no creados comenzarán a funcionar cuando se incor
 ## Estado del proyecto
 
 Este documento corresponde a la **primera entrega de diseño**. La arquitectura, las tecnologías y las funcionalidades aquí descritas representan el alcance y las decisiones preliminares del equipo, no funcionalidades ya implementadas. Se actualizará durante el desarrollo para reflejar el estado real del sistema.
+
+
+## Desarrollo local
+
+El entorno de desarrollo y los endpoints iniciales están documentados en [docs/LOCAL-DEV.md](docs/LOCAL-DEV.md). Para levantar los componentes declarados:
+
+```sh
+docker compose config
+docker compose up --build -d
+docker compose ps
+```
+
+El estado de resiliencia y el procedimiento para registrar evidencia real se encuentran en [docs/POSTMORTEM.md](docs/POSTMORTEM.md). No se deben interpretar las configuraciones declaradas como pruebas ejecutadas: las integraciones de búsqueda, caché, mensajería y métricas de negocio siguen pendientes.
