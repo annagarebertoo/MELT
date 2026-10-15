@@ -2,7 +2,7 @@
 
 **Versión:** 0.2 — Propuesta inicial para revisión del equipo.  
 **Entrega:** 1 — 9 de octubre de 2026.  
-**Estado:** Diseño y documentación. No hay servicios, infraestructura, pruebas, contratos, mocks ni despliegues implementados en el repositorio actual.
+**Estado:** Documentación más implementación parcial. El catálogo ya tiene una API inicial con MongoDB y hay una configuración de entorno local; los demás flujos y las pruebas de integración continúan pendientes. Ver [guía local](LOCAL-DEV.md).
 
 ## 1. Introducción y objetivos arquitectónicos
 
