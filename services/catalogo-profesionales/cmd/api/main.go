@@ -63,7 +63,7 @@ func main() {
 	}
 
 	servidor := &Servidor{coleccion: coleccion}
-	router := crearRouter(servidor, cliente.Ping)
+	router := crearRouter(servidor, func(ctx context.Context) error { return cliente.Ping(ctx, nil) })
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"
