@@ -12,11 +12,11 @@ paths:
   /tratamientos:
     get:
       summary: Listar y buscar tratamientos
-      description: Obtiene una lista paginada de tratamientos. La búsqueda por q se realiza únicamente sobre el nombre del tratamiento.
+      description: Obtiene una lista paginada de tratamientos. La búsqueda por q considera el nombre y las palabras clave asociadas al tratamiento.
       parameters:
         - name: q
           in: query
-          description: Texto a buscar en el nombre del tratamiento.
+          description: Texto a buscar en el nombre y en las palabras clave asociadas al tratamiento.
           required: false
           schema:
             type: string
@@ -178,6 +178,7 @@ components:
         - moneda
         - duracionMinutos
         - imagenes
+        - keywords
       properties:
         id:
           type: integer
@@ -232,6 +233,17 @@ components:
             format: uri
           example:
             - https://melt.example.com/images/limpieza-facial.jpg
+
+        keywords:
+          type: array
+          description: Términos relacionados y sinónimos utilizados por el motor de búsqueda.
+          items:
+            type: string
+            minLength: 1
+          example:
+            - limpieza
+            - limpieza profunda
+            - higiene facial
 
     TratamientosResponse:
       type: object

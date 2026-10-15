@@ -72,3 +72,15 @@ Esta elección cumple el requisito de combinar persistencia relacional y no rela
 - Evaluación de Transactional Outbox u otros patrones para publicar eventos de forma confiable desde cada base.
 - Decisión definitiva de instancias (compartida vs. separadas en entornos distintos).
 - Alojamiento de imágenes (objeto store vs. referencias en MongoDB).
+
+
+## Enmienda de decisión — revisión de alcance
+
+**Estado de esta enmienda:** Aceptada por el equipo para el diseño actualizado.
+
+1. Se mantienen PostgreSQL para Reservas y Beneficios.
+2. Se separa MongoDB en dos bases lógicas: `catalogo_db` (tratamientos, categorías y `keywords`) y `profesionales_db` (perfiles, aptitudes y asociaciones). Pueden residir en la misma instancia durante desarrollo, pero con bases y permisos lógicos separados.
+3. La caché seleccionada pasa a ser **Memcached** en lugar de Redis, para alinearse con las tecnologías trabajadas en clase. Se utilizará únicamente como caché descartable; nunca como fuente de verdad.
+4. OpenSearch conserva el índice de lectura y deberá indexar también el arreglo `keywords` de cada tratamiento.
+
+La separación lógica no implica por sí sola alta disponibilidad ni aislamiento físico. El esquema, las credenciales, los TTL y la estrategia de invalidación se especificarán en la implementación.
