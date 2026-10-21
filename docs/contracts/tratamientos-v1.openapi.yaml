@@ -120,6 +120,19 @@ paths:
                   code: INTERNAL_ERROR
                   message: Se produjo un error interno.
 
+
+        '503':
+          description: El catálogo no está disponible temporalmente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: CATALOGO_NO_DISPONIBLE
+                  message: El catálogo no está disponible temporalmente.
+
+
   /tratamientos/{id}:
     get:
       summary: Obtener un tratamiento
@@ -130,9 +143,9 @@ paths:
           description: Identificador único del tratamiento.
           required: true
           schema:
-            type: integer
-            minimum: 1
-          example: 1
+            type: string
+            minLength: 1
+          example: "1"
 
       responses:
         '200':
@@ -164,6 +177,20 @@ paths:
                   code: INTERNAL_ERROR
                   message: Se produjo un error interno.
 
+        '503':
+          description: El catálogo no está disponible temporalmente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: CATALOGO_NO_DISPONIBLE
+                  message: El catálogo no está disponible temporalmente.
+
+
+                  
+
 components:
   schemas:
 
@@ -181,9 +208,9 @@ components:
         - keywords
       properties:
         id:
-          type: integer
+          type: string
           description: Identificador único del tratamiento.
-          example: 1
+          example: "1"
 
         nombre:
           type: string

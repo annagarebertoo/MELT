@@ -17,13 +17,15 @@ import (
 )
 
 type Tratamiento struct {
-	ID          string   `bson:"id" json:"id"`
-	Nombre      string   `bson:"nombre" json:"nombre"`
-	Descripcion string   `bson:"descripcion" json:"descripcion"`
-	Categoria   string   `bson:"categoria" json:"categoria"`
-	Precio      float64  `bson:"precio" json:"precio"`
-	DuracionMin int      `bson:"duracionMin" json:"duracionMin"`
-	Keywords    []string `bson:"keywords" json:"keywords"`
+	ID              string   `bson:"id" json:"id"`
+	Nombre          string   `bson:"nombre" json:"nombre"`
+	Descripcion     string   `bson:"descripcion" json:"descripcion"`
+	Categoria       string   `bson:"categoria" json:"categoria"`
+	Precio          float64  `bson:"precio" json:"precio"`
+	Moneda          string   `bson:"moneda" json:"moneda"`
+	DuracionMinutos int      `bson:"duracionMinutos" json:"duracionMinutos"`
+	Imagenes        []string `bson:"imagenes" json:"imagenes"`
+	Keywords        []string `bson:"keywords" json:"keywords"`
 }
 
 type Servidor struct {
@@ -95,6 +97,7 @@ func crearRouter(servidor *Servidor, ping func(context.Context) error) *gin.Engi
 	})
 
 	router.GET("/tratamientos", servidor.listarTratamientos)
+	router.GET("/tratamientos/:id", servidor.obtenerTratamiento)
 	router.POST("/tratamientos", servidor.crearTratamiento)
 	return router
 }
@@ -105,14 +108,19 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 
 	page, limit, err := parsePagination(c.Query("page"), c.Query("limit"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"code":    "INVALID_PARAMETER",
+				"message": err.Error(),
+			},
+		})
 		return
 	}
 
 	filtro := bson.D{}
 	if categoria := strings.TrimSpace(c.Query("categoria")); categoria != "" {
 		filtro = append(filtro, bson.E{
-			Key: "categoria",
+			Key:   "categoria",
 			Value: bson.D{{Key: "$regex", Value: "^" + escapeRegex(categoria) + "$"}, {Key: "$options", Value: "i"}},
 		})
 	}
@@ -123,7 +131,6 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 			Key: "$or",
 			Value: bson.A{
 				bson.D{{Key: "nombre", Value: patron}},
-				bson.D{{Key: "descripcion", Value: patron}},
 				bson.D{{Key: "keywords", Value: patron}},
 			},
 		})
@@ -132,22 +139,37 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 	if precioMaxTexto := strings.TrimSpace(c.Query("precioMax")); precioMaxTexto != "" {
 		precioMax, parseErr := strconv.ParseFloat(precioMaxTexto, 64)
 		if parseErr != nil || precioMax < 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "precioMax debe ser un número mayor o igual a cero."})
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": gin.H{
+					"code":    "INVALID_PARAMETER",
+					"message": "precioMax debe ser un número mayor o igual a cero.",
+				},
+			})
 			return
 		}
 		filtro = append(filtro, bson.E{Key: "precio", Value: bson.D{{Key: "$lte", Value: precioMax}}})
 	}
 
 	sortField := strings.TrimSpace(c.DefaultQuery("sort", "nombre"))
-	sortFields := map[string]string{"nombre": "nombre", "precio": "precio", "duracionMin": "duracionMin"}
+	sortFields := map[string]string{"nombre": "nombre", "precio": "precio"}
 	mongoSortField, ok := sortFields[sortField]
 	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "sort debe ser nombre, precio o duracionMin."})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"code":    "INVALID_PARAMETER",
+				"message": "sort debe ser nombre o precio.",
+			},
+		})
 		return
 	}
 	order := strings.ToLower(strings.TrimSpace(c.DefaultQuery("order", "asc")))
 	if order != "asc" && order != "desc" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "order debe ser asc o desc."})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"code":    "INVALID_PARAMETER",
+				"message": "order debe ser asc o desc.",
+			},
+		})
 		return
 	}
 	direction := 1
@@ -179,12 +201,58 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"total":        total,
-		"page":         page,
-		"limit":        limit,
-		"totalPages":   totalPages(total, limit),
 		"tratamientos": tratamientos,
+		"pagination": gin.H{
+			"page":       page,
+			"limit":      limit,
+			"total":      total,
+			"totalPages": totalPages(total, limit),
+		},
 	})
+}
+
+func (s *Servidor) obtenerTratamiento(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"code":    "INVALID_PARAMETER",
+				"message": "El identificador del tratamiento es obligatorio.",
+			},
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	var tratamiento Tratamiento
+	err := s.coleccion.FindOne(ctx, bson.D{
+		{Key: "id", Value: id},
+	}).Decode(&tratamiento)
+
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": gin.H{
+				"code":    "TRATAMIENTO_NOT_FOUND",
+				"message": "No existe un tratamiento con el identificador solicitado.",
+			},
+		})
+		return
+	}
+
+	if err != nil {
+		log.Printf("Error al consultar tratamiento: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{
+				"code":    "INTERNAL_ERROR",
+				"message": "Se produjo un error interno.",
+			},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, tratamiento)
 }
 
 func (s *Servidor) crearTratamiento(c *gin.Context) {
@@ -202,15 +270,26 @@ func (s *Servidor) crearTratamiento(c *gin.Context) {
 		tratamiento.Keywords[i] = strings.TrimSpace(tratamiento.Keywords[i])
 	}
 
-	if tratamiento.ID == "" || tratamiento.Nombre == "" || tratamiento.Categoria == "" ||
-		tratamiento.Precio < 0 || tratamiento.DuracionMin <= 0 {
+	if tratamiento.ID == "" ||
+		tratamiento.Nombre == "" ||
+		tratamiento.Categoria == "" ||
+		tratamiento.Descripcion == "" ||
+		tratamiento.Moneda != "ARS" ||
+		tratamiento.Precio < 0 ||
+		tratamiento.DuracionMinutos <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "ID, nombre y categoría son obligatorios; precio no puede ser negativo y duración debe ser positiva.",
+			"error": gin.H{
+				"code":    "INVALID_PARAMETER",
+				"message": "ID, nombre, categoría, descripción y moneda ARS son obligatorios; el precio no puede ser negativo y la duración debe ser positiva.",
+			},
 		})
 		return
 	}
 	if tratamiento.Keywords == nil {
 		tratamiento.Keywords = []string{}
+	}
+	if tratamiento.Imagenes == nil {
+		tratamiento.Imagenes = []string{}
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
@@ -231,9 +310,9 @@ func parsePagination(pageText, limitText string) (int, int, error) {
 	if err != nil {
 		return 0, 0, errors.New("page debe ser un entero positivo.")
 	}
-	limit, err := parsePositiveInt(limitText, 20, 100)
+	limit, err := parsePositiveInt(limitText, 10, 50)
 	if err != nil {
-		return 0, 0, errors.New("limit debe ser un entero entre 1 y 100.")
+		return 0, 0, errors.New("limit debe ser un entero entre 1 y 50.")
 	}
 	return page, limit, nil
 }
@@ -259,7 +338,10 @@ func totalPages(total int64, limit int) int64 {
 func responderErrorDB(c *gin.Context, err error) {
 	log.Printf("Error de base de datos: %v", err)
 	c.JSON(http.StatusServiceUnavailable, gin.H{
-		"error": "El catálogo no está disponible temporalmente.",
+		"error": gin.H{
+			"code":    "CATALOGO_NO_DISPONIBLE",
+			"message": "El catálogo no está disponible temporalmente.",
+		},
 	})
 }
 

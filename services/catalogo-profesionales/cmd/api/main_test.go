@@ -38,14 +38,14 @@ func TestHealthEndpointDegradado(t *testing.T) {
 
 func TestParsePagination(t *testing.T) {
 	tests := []struct {
-		name, page, limit string
+		name, page, limit   string
 		wantPage, wantLimit int
-		wantErr bool
+		wantErr             bool
 	}{
-		{"defaults", "", "", 1, 20, false},
+		{"defaults", "", "", 1, 10, false},
 		{"custom", "3", "50", 3, 50, false},
 		{"page invalid", "0", "20", 0, 0, true},
-		{"limit too high", "1", "101", 0, 0, true},
+		{"limit too high", "1", "51", 0, 0, true},
 		{"not a number", "abc", "20", 0, 0, true},
 	}
 	for _, tt := range tests {
@@ -75,5 +75,23 @@ func TestTotalPages(t *testing.T) {
 	}
 	if got := totalPages(41, 20); got != 3 {
 		t.Fatalf("totalPages(41, 20) = %d, esperado 3", got)
+	}
+
+}
+
+func TestRutaObtenerTratamientoRegistrada(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	router := crearRouter(nil, func(context.Context) error {
+		return nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/tratamientos/1", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code == http.StatusNotFound {
+		t.Fatal("la ruta GET /tratamientos/:id no está registrada")
 	}
 }
