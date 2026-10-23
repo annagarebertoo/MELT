@@ -1,5 +1,7 @@
 # MELT — Arquitectura inicial
 
+> **Revisión de Entrega 2 — 23/10/2026:** este documento conserva el diseño inicial y sus enmiendas. Algunas frases históricas sobre archivos inexistentes o tecnologías todavía sin configurar quedaron desactualizadas. El estado comprobado y las limitaciones actuales se registran en la [matriz de cierre](ENTREGA-2.md) y en las revisiones de D1, D2, D6, D7, D10, D12 y D13. Los diagramas muestran diseño previsto, no la implementación completa; no deben usarse como evidencia funcional.
+
 **Versión:** 0.2 — Propuesta inicial para revisión del equipo.  
 **Entrega:** 1 — 9 de octubre de 2026.  
 **Estado:** Documentación más implementación parcial. El catálogo ya tiene una API inicial con MongoDB y hay una configuración de entorno local; los demás flujos y las pruebas de integración continúan pendientes. Ver [guía local](LOCAL-DEV.md).
