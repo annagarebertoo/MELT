@@ -84,3 +84,15 @@ Esta elección cumple el requisito de combinar persistencia relacional y no rela
 4. OpenSearch conserva el índice de lectura y deberá indexar también el arreglo `keywords` de cada tratamiento.
 
 La separación lógica no implica por sí sola alta disponibilidad ni aislamiento físico. El esquema, las credenciales, los TTL y la estrategia de invalidación se especificarán en la implementación.
+
+## Validación incremental — Entrega 2 (23/10/2026)
+
+**Estado de la validación:** comprobada para el flujo de lectura de Catálogo; implementación parcial del diseño. Se conservan la decisión inicial y su enmienda, sin dar por implementadas todas las bases previstas.
+
+- Se verificó el flujo cliente HTTP → NGINX → Catálogo → MongoDB, recuperando el documento preexistente `test-001` desde `catalogo_db.tratamientos`. El detalle, el listado y las dos réplicas consultan datos reales.
+- Se agregaron pruebas automatizadas de integración de solo lectura y evidencia reproducible. No se modificó el servicio, no se insertaron ni eliminaron registros y no se alteraron índices o volúmenes.
+- Se inspeccionaron el índice único `uq_tratamientos_id` y el volumen persistente montado en `/data/db`. La coincidencia de lecturas no acredita escrituras concurrentes, transacciones ni recuperación ante reinicio de MongoDB.
+- `profesionales_db`, las bases PostgreSQL privadas y sus permisos siguen pendientes. La configuración inicial de PostgreSQL declara una base `melt`, pero Reservas y Beneficios todavía no utilizan almacenamiento.
+- Las garantías para agenda y saldos, la coordinación entre servicios y la sincronización de copias derivadas mantienen su estado de diseño pendiente de validación. No se incorporan mecanismos nuevos ni se modifica la comparación histórica de alternativas.
+
+Los patrones de acceso, resultados ejecutados y limitaciones se detallan en [Validación de persistencia](../PERSISTENCE.md), con [evidencia de la ejecución](../evidence/d3-2026-10-23.json). Esta validación cubre D3 y el almacenamiento integrado exigido para la Entrega 2; no acredita la integración de los dos tipos de almacenamiento requerida para la etapa posterior.
