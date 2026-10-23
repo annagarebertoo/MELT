@@ -1,124 +1,111 @@
-# MELT — Cierre de revisión de la Entrega 2
+# MELT — Entrega 2: cierre y demostración
 
-**Fecha del hito:** 23/10/2026. **Estado del informe:** para revisión; entrega con brechas, no aprobada integralmente.
+**Hito:** 23/10/2026. **Estado:** preparado para revisión y demostración local; cumplimiento global parcial.
 
-**Rama:** `feature/sofia-adr-entrega-2`. **Base:** `0940e43092988dcf21f0fd540cb76cbd74617db8`.
+**Rama:** `feature/sofia-adr-entrega-2`. **Base de esta etapa:** `cc230fa` (auditoría protegida). No se crearon más ramas ni se integró a otras.
 
-## Alcance del cierre
+## Requisitos y alcance
 
-La referencia exclusiva de requisitos es `Enunciado TP Final (3).pdf`. Su apartado 6.3 pide al menos un servicio y la funcionalidad compartida operativos, un almacenamiento integrado, logs estructurados y correlacionados y una primera traza distribuida. También pide D2, D6, D7, D9, D10, D12 y D13; validación de D1, D3 y D5; primera versión de D11 y actualización de D8 si cambió el contrato.
+La fuente exclusiva de requisitos es `Enunciado TP Final (3).pdf`. El apartado 6.3 exige un servicio y la capacidad compartida operativos, un almacenamiento integrado, logs estructurados/correlacionados y primera traza; D2, D6, D7, D9, D10, D12 y D13; validaciones D1, D3, D5, primera D11 y actualización D8 si corresponde. La tabla del apartado 5 define el contenido de cada decisión: un archivo existente no basta para darla por cubierta.
 
-El contenido de cada decisión se evalúa con la tabla del apartado 5: no basta con que exista un archivo. La implementación completa de búsqueda indexada, caché, dos estilos internos, tres servicios de negocio y mensajería se desarrolla para la presentación posterior. El balanceo con caída, las fallas controladas, la carga y la observabilidad completa tienen demostraciones explícitas en la defensa. Esto no permite omitir hoy las decisiones ni declarar como implementadas las propuestas.
+La presentación posterior incluye tres servicios completos, frontend, autenticación, dos estilos reconocibles, segundo almacenamiento, búsqueda indexada, caché, eventos y consumo del proveedor. La defensa explicita garantías críticas, carga, fallas controladas, balanceo ante caída y observabilidad completa. La publicación accesible de la capacidad y su continuidad están además en el apartado 4: localhost no acredita ese acceso para otro grupo.
 
-La exigencia de publicar la capacidad en un entorno accesible y mantenerla operativa está en el apartado 4. La implementación local no acredita esa accesibilidad. Aunque el cronograma posterior explicita despliegue en nube y URL pública, se registra como pendiente la disponibilidad para el consumidor; no se presume una excepción concedida por la cátedra.
+Los números de TTL, retraso, carga, recursos y objetivos agregados en este cierre son decisiones o hipótesis técnicas del proyecto para revisión. No proceden del profesor ni se presentan como mediciones. No se cambió lógica de negocio, OpenAPI, mock, Compose ni NGINX.
 
-Se preservó el trabajo anterior mediante commits locales: D11 `0273c0b`, D3 `1d5394b`, D5 `3b7e5e4`, D8 `3601c0d` y registro de bloqueo D9 `0940e43`. La rama actual contiene esos commits por ascendencia. `feature/sofia-entrega-2` sigue en `3b7e5e4`: D8 y D9 todavía no fueron integradas allí. No hubo push ni merge en esta revisión.
+## Matriz final de requisitos del 23/10
 
-## Criterios de estado
+Cumplido significa evidencia suficiente para el alcance de la fila; parcial indica una brecha; bloqueado indica información externa faltante; pendiente significa que falta la acción o evidencia. El cierre documental no equivale a implementación ni aprobación docente. No se asignan responsables por inferir autoría de commits.
 
-- **Cumplido:** evidencia suficiente para el alcance preciso indicado en la fila; no implica cumplimiento final del sistema.
-- **Parcial:** existe una propuesta, implementación o evidencia útil, pero faltan aspectos para cerrar el requisito de hoy.
-- **Bloqueado:** falta información externa imprescindible para decidir o validar.
-- **Pendiente:** no se dispone de la evidencia o acción necesaria.
-
-Un responsable no confirmado figura como tal. La autoría de un commit o la revisión documental no se toma como asignación de trabajo futuro.
-
-## Matriz del hito
-
-| Requisito del 23/10 | Estado | Evidencia verificable y alcance | Responsable confirmado | Próxima acción |
+| Requisito | Estado | Evidencia verificable | Responsable confirmado | Próxima acción |
 | :--- | :--- | :--- | :--- | :--- |
-| Al menos un servicio operativo y capacidad propia funcionando | Cumplido, local | Catálogo real, GET contractual por NGINX y MongoDB; [D8](contracts/README.md), [28 casos históricos](evidence/d8-2026-10-23.json) y 12 GET actuales en [evidencia de cierre](evidence/entrega-2-2026-10-23.json). | Sofía, validación D8; mantenimiento futuro no confirmado | Revisar límites conocidos y preparar demostración desde la rama que se acuerde presentar. |
-| Capacidad accesible al consumidor, apartado 4 | Pendiente | Solo URL local `http://localhost:8080/api/v1`. No hay URL de Internet ni prueba desde otro grupo. | No confirmado | Definir entorno accesible, condiciones de acceso y continuidad operativa; comprobar acceso del consumidor. |
-| Al menos un almacenamiento integrado | Cumplido, flujo actual | MongoDB en Catálogo; [D3](PERSISTENCE.md), [evidencia D3](evidence/d3-2026-10-23.json) y tres subtests de integración real ejecutados de nuevo. | Sofía, validación D3 | Conservar evidencia y datos; segundo motor integrado corresponde a la etapa posterior. |
-| Logs estructurados y correlacionados, primera traza | Cumplido, flujo actual | [D11](OBSERVABILITY.md), regresión actual con cuatro casos y traza NGINX → Catálogo → driver MongoDB. No es todavía el flujo de reservas. | Sofía, D11 | Mostrar una traza vigente; métricas, tablero y alertas completos siguen pendientes. |
-| D1 — validación de límites | Cumplido, diseño y flujo disponibles | [ADR-001](adr/ADR-001-limites-servicios.md): tres responsabilidades, datos y API de Catálogo coherentes; ninguna consulta cruzada encontrada. Reservas/Beneficios siguen siendo diseño. | No confirmado | Mantener esos límites al implementar agenda y puntos; verificar permisos y flujos futuros. |
-| D2 — arquitectura interna | Parcial | [ADR-002](adr/ADR-002-arquitectura-interna.md): capas y hexagonal justificadas como propuesta. Catálogo mezcla handler y colección MongoDB; no hay puertos/adaptadores de negocio. | No confirmado | Ratificar y concretar dependencias internas del diseño. Materializar y demostrar dos estilos después. |
-| D6 — búsqueda | Parcial | [ADR-006](adr/ADR-006-busqueda.md): OpenSearch, campos y consultas propuestos. Código actual usa MongoDB; sin índice o sincronizador implementados. | No confirmado | Cerrar mecanismo de actualización/reconstrucción y retraso máximo aceptable; implementación y mediciones posteriores. |
-| D7 — caché | Parcial | [ADR-007](adr/ADR-007-cache.md): Memcached y claves de consultas propuestos; sin cliente ni medición de necesidad. | No confirmado | Seleccionar flujo, invalidación, vigencia y degradación; justificar necesidad y plan de métricas. Integrar y medir después. |
-| D9 — consumo del proveedor | Bloqueado | [ADR-014](adr/ADR-014-consumo-proveedor.md): sin grupo proveedor, contrato, URL ni operaciones identificadas. ADR-009 es una decisión de negocio diferente. | Sofía, registro de investigación; proveedor y servicio consumidor no confirmados | Confirmar asignación docente y solicitar contrato/URL/acceso. No sustituir por una API inventada. |
-| D10 — resiliencia | Parcial | [ADR-010](adr/ADR-010-resiliencia.md): límites reales y errores inspeccionados; test unitario de salud degradada aprobado. Sin prueba de dependencia real caída. | No confirmado | Cerrar política por dependencia, resultados visibles y condiciones de reintento; ejecutar ensayo autorizado y postmortem después. |
-| D12 — balanceo | Parcial | [ADR-012](adr/ADR-012-balanceo-carga.md): Catálogo, dos réplicas y NGINX operativos; distribución 6/6 comprobada. Disponibilidad ante caída no demostrada. | No confirmado | Explicitar exclusión/recuperación de destinos. Verificar falla y recuperación en un ensayo autorizado posterior. |
-| D13 — capacidad y costos | Parcial | [ADR-013](adr/ADR-013-capacidad-costos.md): método y alternativas de escalado propuestos; instantánea de recursos. No hay carga, límite medido ni estimación de costos. | No confirmado | Definir escenario, objetivo, dimensionamiento y entorno; obtener resultados y estimación sustentada. Acordar alcance de evidencia inicial, sin llamar medición al plan. |
-| D3 — validación de persistencia | Cumplido, alcance de Entrega 2 | Decisión y lectura real ya documentadas y verificadas. No se acreditan permisos, escrituras concurrentes o durabilidad ante reinicios. | Sofía, D3 | Mantener límites explícitos y validar garantías finales con implementaciones posteriores. |
-| D5 — validación de comunicación | Parcial | [D5](COMMUNICATION.md): HTTP y correlación probados; asincronía solo diseñada, políticas de falla y reintentos aún incompletas. | Sofía, validación D5 | Completar decisiones pendientes de comunicación sin dar por existentes productores/consumidores. |
-| Primera versión D11 | Cumplido | Implementación, [ADR-011](adr/ADR-011-observabilidad.md) y pruebas existentes; regresión volvió a pasar. | Sofía, D11 | Preparar evidencia de presentación y completar observabilidad para la etapa final. |
-| D8 — revisión/actualización | Cumplido, actualización local | [ADR-008](adr/ADR-008-contrato-propio.md) actualizado y alias contractual operativo. OpenAPI no cambió por el alias; persisten limitaciones documentadas. | Sofía, validación D8 | Resolver publicación y coordinar consumidores; corregir divergencias pendientes con autorización. |
+| Servicio y capacidad compartida operativos | Cumplido localmente | Catálogo, MongoDB y ruta contractual; [28 casos finales D8](evidence/cierre-final-d8-2026-10-23.json). | Sofía: validación D8 | Presentar la demostración local y resolver acceso externo. |
+| Capacidad accesible al consumidor y disponible hasta evaluación | Pendiente | Solo URL local; no se comprobó despliegue público. | No confirmado | Seleccionar entorno, publicar de forma segura y verificar desde el grupo consumidor. |
+| Un almacenamiento integrado | Cumplido para este flujo | [D3 final](evidence/cierre-final-d3-2026-10-23.json), documento test-001 y comparación con API. | Sofía: D3 | Conservar evidencia y completar garantías finales posteriormente. |
+| Logs correlacionados y primera traza | Cumplido para Catálogo | [D5/D11 final](evidence/cierre-final-d5-2026-10-23.json) y traza de D8. | Sofía: D11 | Mostrar traza vigente; métricas/tablero finales pendientes. |
+| D1: validación | Cumplido en diseño y flujo disponible | [ADR-001](adr/ADR-001-limites-servicios.md); datos de Catálogo propios, sin acceso cruzado encontrado. | No confirmado | Mantener los límites en futuras implementaciones. |
+| D2: decisión | Cumplido documentalmente, para revisión | [ADR-002](adr/ADR-002-arquitectura-interna.md): módulos, responsabilidades y dependencias definidos. | No confirmado | Aplicar y probar capas/hexagonal en el desarrollo posterior. |
+| D6: decisión | Cumplido documentalmente, para revisión | [ADR-006](adr/ADR-006-busqueda.md): reconstrucción, generación/alias, objetivo 60s, errores y medición. | No confirmado | Implementar y medir; OpenSearch no integrado hoy. |
+| D7: decisión | Cumplido documentalmente, para revisión | [ADR-007](adr/ADR-007-cache.md): cache-aside, claves, TTL 30s, invalidación, caída y métricas. | No confirmado | Contrastar necesidad observable antes de habilitar; medir beneficio real. |
+| D9: decisión de consumo | Bloqueado | [ADR-014](adr/ADR-014-consumo-proveedor.md): falta proveedor, contrato, URL y operaciones. | Sofía: registro; servicio consumidor sin asignar | Confirmar asignación y solicitar información; no inventar integración. |
+| D10: decisión y validación | Parcial | [ADR-010](adr/ADR-010-resiliencia.md), timeouts, errores y [ensayo real](evidence/fallo-replica-2026-10-23.json): un 504 con réplica sana disponible. | No confirmado | Investigar y acordar política de intentos/degradación; cambios requieren autorización. |
+| D12: decisión y validación | Parcial | [ADR-012](adr/ADR-012-balanceo-carga.md): reparto saludable, caída y reincorporación comprobados; no failover sin errores. | No confirmado | Explicitar/validar exclusión y recuperación efectiva; investigar 504. |
+| D13: decisión | Parcial | [ADR-013](adr/ADR-013-capacidad-costos.md): hipótesis, recursos, métricas, umbrales y referencia económica verificable; sin carga ni cuello de botella medidos. | No confirmado | Ejecutar carga acordada y contrastar dimensionamiento/costo total. |
+| D3: validación | Cumplido para Entrega 2 | Tres subtests de integración real y verificador final aprobados; sin escrituras. | Sofía: D3 | Permisos, concurrencia y durabilidad ante reinicios siguen fuera de esta prueba. |
+| D5: validación | Parcial | Seis casos HTTP y regresión D11 aprobados; eventos y política completa de fallas pendientes. | Sofía: validación D5 | Conservar separación entre comunicación real y diseño asíncrono. |
+| D11: primera versión | Cumplido | Logs, trazas y tests existentes; regresión aprobada tras restauración. | Sofía: D11 | Completar observabilidad final en su etapa. |
+| D8: actualización | Cumplido localmente | Contrato v1/1.0.0 y alias NGINX; ambas rutas coinciden. | Sofía: D8 | Publicar capacidad y resolver divergencias conocidas autorizadamente. |
 
-## Lectura de las decisiones revisadas
+## Estado de D1 a D13
 
-### D1 y D2: responsabilidades frente a estructura del código
+D1 validada; D2 concretada como diseño; D3 validada en lectura real; **D4 no se cierra en este hito**: consistencia/concurrencia críticas siguen pendientes de implementación y defensa. D5 parcial; D6 y D7 concretadas como diseño, sin motores integrados; D8 operativa localmente; D9 bloqueada; D10 parcial; D11 inicial operativa; D12 parcial; D13 parcial en mediciones, con estimación inicial de recursos y costos. ADR-009 documenta reglas de negocio, no D9: se conserva sin modificaciones.
 
-El diseño mantiene Catálogo como autoridad de tratamientos y perfiles, Reservas como autoridad de agenda y Beneficios como autoridad de saldos. El único acceso a datos de negocio implementado e inspeccionado usa `catalogo_db.tratamientos`. La ausencia de accesos cruzados en esqueletos de servicios no demuestra aislamiento por permisos ni garantías de agenda o saldo.
+## Implementado y solamente diseñado
 
-Cada servicio tiene módulo y proceso propios. Eso acredita separación de despliegue, no estilos internos diferentes. `main.go` de Catálogo contiene modelo, HTTP y persistencia; Reservas y Beneficios solo salud. D2 puede documentarse hoy sin implementar los tres servicios, pero debe mostrar qué dependencias se propone separar. La revisión agrega esa precisión conservando los estilos elegidos.
+Implementado/comprobado: HTTP Go/Gin de Catálogo, MongoDB real, gateway, dos réplicas, GET contractual y ruta anterior, búsqueda simple MongoDB, filtros, paginación, logs estructurados, correlación y trazas Jaeger. Reservas y Beneficios solo tienen salud HTTP, no flujos de negocio.
 
-### D6 y D7: tecnologías seleccionadas frente a mecanismos pendientes
+Solo diseñado: capas/hexagonal completas, OpenSearch y reconstrucción periódica, caché Memcached y su invalidación, eventos, garantías de agenda y puntos. PostgreSQL, RabbitMQ, OpenSearch, Memcached, Prometheus y Grafana están declarados, no integrados en el flujo probado. D6 define ciclos de 30s y objetivo de visibilidad de 60s; D7 define TTL 30s y objetivo de intento de caché de 50 ms. No se afirma que esos parámetros estén configurados o cumplidos.
 
-El diseño de búsqueda enumera nombre, descripción, categoría y keywords; el endpoint real busca solo en nombre y keywords con MongoDB. Compose declara OpenSearch, pero no hay cliente ni sincronizador. Falta cerrar mecanismo de actualización/reconstrucción y tolerancia de retraso; son aspectos de la decisión, aunque el índice funcional se implemente después.
+D13 propone evaluar 5 solicitudes/s y ráfagas de 20, p95 menor que 500 ms y errores menores que 1 %, sobre un dataset autorizado distinto de la muestra actual de un documento. Presupuesta inicialmente 2 vCPU, 4 GiB y 20 GiB. La referencia comercial nominal es USD 24/mes para un host ilustrativo; el ADR enlaza la tarifa, fecha, inclusiones/exclusiones y escenario de crecimiento. No se contrató nada ni se midió capacidad máxima.
 
-Memcached está declarado, sin cliente ni uso real. Las claves deben distinguir filtros, páginas y ordenamiento, pero siguen sin elegirse invalidación, TTL y comportamiento ante indisponibilidad. No se asignan valores por conveniencia ni se afirma una mejora de latencia. D7 requiere justificar necesidad observable, no únicamente elegir una tecnología.
+## Pruebas finales y evidencia
 
-### D10 y D12: configuración y distribución frente a falla comprobada
+| Verificación ejecutada | Resultado |
+| :--- | :--- |
+| Compilación de Catálogo, tests existentes y go vet con etiqueta integration | Correctos; diez tests principales aprobados. |
+| TestPersistenceReadOnly | Tres subtests aprobados con MongoDB y gateway reales. |
+| Verificador D3 tras restauración | Aprobado: test-001, listado, detalle, réplicas, volumen y snapshots sin cambios. |
+| Verificador D5 tras restauración | Seis casos aprobados: tres 200, dos 400 y un 404, correlación y configuración. |
+| Regresión D11 incluida en D5 | Cuatro casos aprobados; privacidad, relaciones entre spans y dos réplicas saludables. |
+| Verificador D8 tras restauración | OpenAPI válido y 28 casos aprobados contra esquemas, parámetros, errores y ruta anterior; logs/trazas y MongoDB reales. |
+| Distribución saludable previa | Doce GET 200, seis por réplica, en [captura de auditoría](evidence/entrega-2-2026-10-23.json). No es carga. |
+| Caída autorizada de réplica 2 | Once 200 y un 504 entre doce GET; máximo 2.004,042 ms. **Criterio estricto de cero errores no aprobado (código 1).** |
+| Restauración | Mismo contenedor recuperado; doce GET posteriores 200 y ambas instancias nuevamente observadas. |
+| Protección de datos/servicios | Snapshot MongoDB sin cambios; MongoDB, Jaeger y gateway con mismos IDs y horas de inicio durante el ensayo. |
 
-Los timeouts 2s/5s/5s de NGINX están presentes; Catálogo limita operaciones MongoDB y devuelve 503 en salud degradada. El test de esa salud usa una dependencia simulada. No se provocaron vencimientos, errores del proxy ni pérdida de una réplica; `POSTMORTEM.md` continúa como plantilla.
+El [postmortem](POSTMORTEM.md) describe hechos, hipótesis de causa y acciones. No se probó una caída total, de MongoDB o proveedor, ni agotamiento de todos los timeouts. No se modificó infraestructura para ocultar el resultado. El usuario autorizó conservar el fallo y confirmar documentación/evidencias si pasaban las regresiones saludables; dichas regresiones pasaron.
 
-Los 12 GET de esta revisión se distribuyeron 6/6 entre las dos instancias, con upstream, instancia y traza correlacionados. Esto verifica distribución saludable, no detección de caída. No hay healthcheck activo de NGINX explícito en los archivos inspeccionados; tampoco una política explícita `proxy_next_upstream*`. No se supone que eso elimine el comportamiento implícito de NGINX. La política exacta y el ensayo permanecen pendientes.
+Las evidencias D3/D5/D8 finales son ejecuciones nuevas, posteriores al ensayo. Las anteriores se conservan históricamente. La captura general contiene una instantánea de recursos, no una medición de carga. El test unitario de salud degradada usa un ping simulado; el test histórico de ruta con colección nula sigue pasando con 500 y no se usa como evidencia de persistencia.
 
-### D13: inventario frente a capacidad y costo
+## Demostración reproducible sin alterar datos
 
-La evidencia incluye una captura de recursos del motor Docker y de los contenedores, no datos de carga ni costo. El motor informó 16 CPU lógicas y 7.956.668.416 bytes de memoria; son recursos del entorno local, no de una máquina de producción dimensionada. Las réplicas no tienen límites específicos de CPU/memoria configurados. Ninguno de estos datos prueba que soporte cierto número de clientes.
-
-La tabla D13 del enunciado pide resultados de carga, límite identificado, alternativa de escalado y estimación de costos, mientras el cronograma explicita la ejecución del test de carga en la defensa. Para el 23/10 se conserva esa brecha visible: el ADR actual es un plan inicial, no una decisión validada con todos esos elementos. No se da por cerrado D13 ni se inventan importes. Preparar un plan no sustituye los resultados cuando deban evaluarse.
-
-## Evidencia y comandos ejecutados
-
-La [captura de cierre](evidence/entrega-2-2026-10-23.json) fue tomada el 23/10 a las 14:33 de Argentina. Incluye revisión de fuentes, configuración, nombres y estado de contenedores, salud, 12 solicitudes y distribución, además de una instantánea de recursos. No contiene configuración de credenciales. Los hashes identifican archivos de la implementación inspeccionada, no una aprobación de todos los ADR.
-
-Desde la raíz, con el entorno existente en funcionamiento:
+Requisitos: entorno existente con gateway, dos Catálogos, MongoDB, Jaeger y test-001 preexistente. No ejecutar arranques generales o cambios de escala sin revisar el entorno. Desde la raíz:
 
 ```powershell
+docker compose ps
+curl.exe -i http://localhost:8080/api/v1/tratamientos
+curl.exe -i http://localhost:8080/api/v1/tratamientos/test-001
+curl.exe -i "http://localhost:8080/api/v1/tratamientos?q=facial&categoria=Facial&precioMax=20000&page=1&limit=10&sort=precio&order=asc"
+curl.exe -i "http://localhost:8080/api/v1/tratamientos?limit=0"
+python -X utf8 scripts/verify-persistence.py
+python -X utf8 scripts/verify-communication.py
 python -X utf8 scripts/verify-delivery2.py
 ```
 
-Para otra captura sin reemplazar la evidencia del hito:
+Para las pruebas de esquemas, usar las dependencias de prueba aisladas ya instaladas o prepararlas según la guía de consumo:
 
 ```powershell
-python -X utf8 scripts/verify-delivery2.py --output "$env:TEMP\melt-cierre-nueva-captura.json"
+$env:PYTHONPATH = "$env:TEMP\melt-d8-contract-tools"
+python -X utf8 scripts/verify-shared-capability.py
 ```
 
-El verificador solo inspecciona Docker y archivos, consulta salud y envía 12 GET secuenciales. No arranca servicios, reinicia contenedores ni inyecta fallas. No es una prueba de carga ni un validador automático de todas las decisiones de diseño. El campo de distribución informa si se observaron ambas réplicas; que existan dos contenedores no garantiza por sí solo que ambos hayan recibido tráfico.
+La instalación reproducible está en [contratos](contracts/README.md). Ninguno de esos verificadores necesita crear datos. Si falta test-001, fallan sin prepararlo automáticamente. Usar --output con otra ruta para nuevas capturas; no reemplazar las históricas. Jaeger está en http://localhost:16686 y sus trazas son temporales: elegir un trace ID recién emitido por el verificador, no confiar en que una traza vieja siga disponible.
 
-| Verificación ejecutada en esta revisión | Resultado y límite |
-| :--- | :--- |
-| Lectura completa del PDF definitivo y revisión de siete ADR | Requisitos del hito separados de los finales; no se usaron otras versiones del enunciado. |
-| Inspección de código, Compose, NGINX, CI y Prometheus | Catálogo con dependencia directa de MongoDB; dos esqueletos; sin integración OpenSearch/Memcached. CI declara tests y compilación, pero no se ejecutó GitHub Actions ni `-race` en esta revisión. |
-| `docker compose ps --all` y configuración | Siete contenedores operativos: gateway, dos Catálogos, MongoDB, Jaeger, Reservas y Beneficios. Sin contenedores de OpenSearch, Memcached, RabbitMQ, PostgreSQL, Prometheus o Grafana. |
-| `nginx -T` | Correcto; no recarga el proceso. |
-| Salud directa de las dos réplicas | Correcta; el health endpoint consulta MongoDB. |
-| Doce GET a `/api/v1/tratamientos` | 12 respuestas 200; distribución 6/6 y correlación comprobadas. |
-| `docker stats --no-stream` y recursos del motor | Captura puntual; sin concluir capacidad o costos. |
-| `go test -mod=readonly -count=1 -v ./...` en Catálogo | Diez tests principales aprobados, incluido `TestHealthEndpointDegradado` con ping simulado. El test previo de ruta con colección nula sigue pasando con 500 y no se interpreta como persistencia funcional. |
-| `go vet -mod=readonly -tags=integration ./...` y compilación de Catálogo | Correctos; binario temporal fuera del repositorio. |
-| `TestPersistenceReadOnly` con etiqueta `integration` | Tres subtests aprobados con MongoDB y gateway reales, sin escrituras. |
-| `scripts/verify-observability.py` | Cuatro casos aprobados; trazas, privacidad y dos réplicas saludables. Traza de esta ejecución: `f20aa0fc6b3a9abc55558dff7533007d`. |
+La caída **no forma parte de esta demostración rutinaria**. El script verify-replica-failure.py requiere autorización previa y --execute-authorized; detiene una réplica y la restaura en finally. El ensayo ejecutado ya quedó preservado: no repetirlo para obtener un resultado más favorable sin investigar.
 
-La regresión de D11 y los comandos Go anteriores se ejecutaron durante esta revisión; sus resultados están resumidos aquí. La captura JSON del verificador de cierre no contiene esas salidas completas. Las evidencias históricas de D3, D5 y D8 se conservan y no se presentan como nuevas ejecuciones de sus verificadores completos. Las trazas de Jaeger residen en memoria y pueden expirar o perderse al reiniciar ese componente.
+## Limitaciones y dependencias para presentar
 
-## Coherencia documental y cambios mínimos
+- D9 impide declarar todas las decisiones del 23/10 completas. Solicitar asignación docente y al proveedor contrato versionado, URL, operaciones, ejemplos/errores, condiciones de acceso, datos de prueba y garantías de idempotencia cuando correspondan. No hay proveedor supuesto ni cliente externo implementado.
+- La capacidad solo está en localhost. Falta URL accesible al consumidor y continuidad; no se expone el Compose local de bases sin preparación.
+- D10/D12 recuperan servicio pero mostraron un 504 transitorio. Se desconoce la causa exacta de la ausencia de segundo intento en esa solicitud. La reincorporación fue comprobada; no se garantiza failover sin errores.
+- D13 tiene hipótesis y referencia de presupuesto, pero no carga, cuello de botella o costo total medidos. La muestra de un tratamiento no demuestra orden relativo entre documentos ni capacidad de producción.
+- Persisten las divergencias de entradas límite y el mock desactualizado detallados en D8. No se modificaron contrato ni negocio para resolverlos en esta etapa.
+- D5 mantiene la asincronía como diseño y políticas pendientes. No se acreditan permisos privados, segundo motor integrado, concurrencia, garantías críticas o backups por una lectura correcta.
+- D2/D6/D7 son decisiones documentales nuevas para revisión, no implementación ni aprobación docente. README/arquitectura conservan texto histórico señalado en la auditoría; los estados operativos actuales están en este informe y guías específicas.
 
-Se conservaron las decisiones y se agregaron revisiones a D1, D2, D6, D7, D10, D12 y D13. En D12 se corrigió la afirmación de que faltaban configuración y réplicas, ya contradicha por la implementación. El resto de los agregados delimita evidencia, alternativas y pendientes, sin introducir valores comerciales o nuevas políticas técnicas cerradas.
+**Preparación real:** lista para demostrar el flujo local y presentar decisiones, evidencias y limitaciones de manera honesta. **No es una entrega íntegramente completa:** D9, acceso externo y brechas D5/D10/D12/D13 siguen visibles. No afirmar aprobación de la cátedra ni conformidad exhaustiva.
 
-La arquitectura conserva afirmaciones históricas desactualizadas sobre ausencia de contratos, servicios o configuración. Se agregó una advertencia con enlace a esta matriz, sin reescribir diagramas o decisiones ajenas. Las enmiendas de negocio posteriores siguen siendo aplicables. README también tiene texto histórico: su actualización general y la preparación final de la presentación quedan pendientes, no se corrigen silenciosamente en esta etapa.
+## Git y archivos de esta etapa
 
-No se modificaron D3, D5, D8, D9, D11, OpenAPI, mocks, lógica de negocio, Compose o NGINX. La ausencia de cambios en esos archivos no elimina sus limitaciones ya documentadas.
+Se protegió la auditoría en cc230fa y se trabajó en esta misma rama. Se modificaron D2, D6, D7, D10, D12, D13, este informe y el postmortem; se agregaron el verificador del ensayo y cuatro evidencias nuevas. D1, D3, D5, D8, D9, D11, servicios, contrato, mock y configuración permanecen intactos durante este cierre.
 
-## Acciones necesarias antes de presentar
-
-1. Revisar y acordar el cierre de diseño de D2, D6, D7, D10 y D12, con responsables confirmados. Mantener visibles los parámetros o mecanismos que el equipo todavía no resolvió.
-2. Desbloquear D9 con asignación docente, contrato, URL y condiciones del proveedor. No marcar como satisfecha esa decisión con un registro de bloqueo.
-3. Definir qué evidencia inicial sustentará D13 y cómo completar resultados y costos; no confundir estas consultas secuenciales con carga.
-4. Completar decisiones pendientes de D5 y presentar su validación HTTP como parcial, con asincronía solo diseñada.
-5. Resolver la accesibilidad de la capacidad para el consumidor y preparar una demostración reproducible con datos existentes, logs y traza vigente. Acordar publicación y acceso con el equipo; no exponer indiscriminadamente las bases del Compose local.
-6. Revisar esta etapa y acordar integración/publicación de ramas por el procedimiento del equipo. La evidencia actual vive en la rama de auditoría, no en `develop`, `main` ni toda ella en `feature/sofia-entrega-2`.
-
-Para la etapa final quedan implementación reconocible de dos estilos, servicios de negocio completos, frontend, autenticación, segundo tipo de almacenamiento integrado, índice y caché con mediciones, eventos idempotentes y mensajes fallidos, consumo del proveedor y pruebas de contrato, garantías de la operación crítica, carga/costos, failover y caída controlada con postmortem, además de observabilidad completa. Esta lista no justifica postergar las decisiones de diseño exigidas hoy ni inventa funcionalidades adicionales.
+Historial requerido: D11 0273c0b → D3 1d5394b → D5 3b7e5e4 → D8 3601c0d → D9 0940e43 → auditoría cc230fa → cierre. El hash definitivo del cierre se informa después del commit, evitando un identificador autorreferente en el archivo. No se hizo merge ni push y las demás ramas no se movieron.

@@ -1,0 +1,901 @@
+{
+  "started_at_utc": "2026-10-23T17:45:09.574656+00:00",
+  "base_commit": "cc230fafd8f9015668f388d243619d083b22bae0",
+  "target": "melt-catalogo-profesionales-2",
+  "authorization": "User explicitly authorized single-replica outage and restoration in this session.",
+  "before": {
+    "id": "d218caf44cf98f6c6a85d9b2afca71838353a57e6e8b57f5f9564be64a114d37",
+    "running": true,
+    "started_at": "2026-10-23T16:40:31.728623139Z",
+    "service": "catalogo-profesionales",
+    "project": "melt"
+  },
+  "requests": [
+    {
+      "phase": "one_replica_stopped",
+      "request_id": "sofia-fallo-17825e62f77344bc8b86fc9e40829eae",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 56.462,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:10.095815767Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 2.089,
+          "request_id": "sofia-fallo-17825e62f77344bc8b86fc9e40829eae",
+          "trace_id": "2e50f2671db16bbc8eda9ab3e75fd9cb",
+          "span_id": "3b415d2f7d71b886"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:10+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.004,
+          "request_id": "sofia-fallo-17825e62f77344bc8b86fc9e40829eae",
+          "trace_id": "2e50f2671db16bbc8eda9ab3e75fd9cb",
+          "span_id": "f0fc42e59c0efae0",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "one_replica_stopped",
+      "request_id": "sofia-fallo-1b98f1fbf44f46828b9e7445e7e56064",
+      "status": 504,
+      "valid_list": false,
+      "duration_ms": 2004.042,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:12+00:00",
+          "level": "ERROR",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 504,
+          "duration_seconds": 2.0,
+          "request_id": "sofia-fallo-1b98f1fbf44f46828b9e7445e7e56064",
+          "trace_id": "4b89e7b43c803a21455a15cce626bdf5",
+          "span_id": "f7d76bf61918a1d2",
+          "upstream": "172.19.0.4:8081"
+        }
+      ]
+    },
+    {
+      "phase": "one_replica_stopped",
+      "request_id": "sofia-fallo-47f32782f4a14410b418a38df768ba49",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 21.272,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:12.121744956Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.24,
+          "request_id": "sofia-fallo-47f32782f4a14410b418a38df768ba49",
+          "trace_id": "9b0b35e6eee73dc8de54d464680d29d9",
+          "span_id": "7a4df113fb13338a"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:12+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-fallo-47f32782f4a14410b418a38df768ba49",
+          "trace_id": "9b0b35e6eee73dc8de54d464680d29d9",
+          "span_id": "7a21fa847e6717e8",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "one_replica_stopped",
+      "request_id": "sofia-fallo-82a4c5aff07d4d68a46396f557623b95",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 4.176,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:12.126069926Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 0.981,
+          "request_id": "sofia-fallo-82a4c5aff07d4d68a46396f557623b95",
+          "trace_id": "4b21c753ee3df97a3e11bb0b7c34a5d1",
+          "span_id": "d02eb1b24e85a2de"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:12+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-82a4c5aff07d4d68a46396f557623b95",
+          "trace_id": "4b21c753ee3df97a3e11bb0b7c34a5d1",
+          "span_id": "cc630c1675cb6d40",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "one_replica_stopped",
+      "request_id": "sofia-fallo-84965c14b4e3442f8508c1d00e6c6c3e",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 4.627,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:12.130646204Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.104,
+          "request_id": "sofia-fallo-84965c14b4e3442f8508c1d00e6c6c3e",
+          "trace_id": "2d3d4f22bce48ec6a8d8bc00a27fea78",
+          "span_id": "3cec997232fe3b00"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:12+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-fallo-84965c14b4e3442f8508c1d00e6c6c3e",
+          "trace_id": "2d3d4f22bce48ec6a8d8bc00a27fea78",
+          "span_id": "5dfdc33f45776808",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "one_replica_stopped",
+      "request_id": "sofia-fallo-2f579e67d14c4e93b0d299f1c26385d4",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 4.692,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:12.135352761Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.154,
+          "request_id": "sofia-fallo-2f579e67d14c4e93b0d299f1c26385d4",
+          "trace_id": "a9fb8dea3db27ec026c95c8ff63f7692",
+          "span_id": "7e32b09e858586c9"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:12+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-2f579e67d14c4e93b0d299f1c26385d4",
+          "trace_id": "a9fb8dea3db27ec026c95c8ff63f7692",
+          "span_id": "4c6a3fa495532ab0",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "one_replica_stopped",
+      "request_id": "sofia-fallo-76d170b7eb4c497bbf090814639398c3",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 24.037,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:12.159503242Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.283,
+          "request_id": "sofia-fallo-76d170b7eb4c497bbf090814639398c3",
+          "trace_id": "f702e4f68a8efb08af40abe17057a7a3",
+          "span_id": "75b16f54bbfccf48"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:12+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-76d170b7eb4c497bbf090814639398c3",
+          "trace_id": "f702e4f68a8efb08af40abe17057a7a3",
+          "span_id": "44226f042b13315c",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "one_replica_stopped",
+      "request_id": "sofia-fallo-dd646cc0ac654d6a9c65f797acd8e7d2",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 4.061,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:12.163665774Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.074,
+          "request_id": "sofia-fallo-dd646cc0ac654d6a9c65f797acd8e7d2",
+          "trace_id": "640a274a66b4ba70e7c99c80b7e20b7e",
+          "span_id": "d1f4ab8a78b61064"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:12+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-fallo-dd646cc0ac654d6a9c65f797acd8e7d2",
+          "trace_id": "640a274a66b4ba70e7c99c80b7e20b7e",
+          "span_id": "dce13c8ac370fee1",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "one_replica_stopped",
+      "request_id": "sofia-fallo-72a96557eed147e7a4f9f406c867fb62",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 4.77,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:12.168412071Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.053,
+          "request_id": "sofia-fallo-72a96557eed147e7a4f9f406c867fb62",
+          "trace_id": "c28ad37beb303688ab603897c9c4fe83",
+          "span_id": "d4df6e3817d72146"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:12+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-fallo-72a96557eed147e7a4f9f406c867fb62",
+          "trace_id": "c28ad37beb303688ab603897c9c4fe83",
+          "span_id": "f135a42eb9820576",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "one_replica_stopped",
+      "request_id": "sofia-fallo-21e89876013146268e5cd2fd908f69d7",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 4.102,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:12.172805349Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.02,
+          "request_id": "sofia-fallo-21e89876013146268e5cd2fd908f69d7",
+          "trace_id": "0e22de6b42594475b2865ab058fda69a",
+          "span_id": "64416271913332e7"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:12+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-fallo-21e89876013146268e5cd2fd908f69d7",
+          "trace_id": "0e22de6b42594475b2865ab058fda69a",
+          "span_id": "2b8f49a7f402a13a",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "one_replica_stopped",
+      "request_id": "sofia-fallo-76ec4cd2a3444bdab98ca79526c5c408",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 15.429,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:12.188190186Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.321,
+          "request_id": "sofia-fallo-76ec4cd2a3444bdab98ca79526c5c408",
+          "trace_id": "40c280a153ff6170d6ba1f42b47c2db8",
+          "span_id": "4c8404cff6f81dae"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:12+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-76ec4cd2a3444bdab98ca79526c5c408",
+          "trace_id": "40c280a153ff6170d6ba1f42b47c2db8",
+          "span_id": "50a5685fdf619cf1",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "one_replica_stopped",
+      "request_id": "sofia-fallo-1f4b8884772d4bd796ea297f46f09f4e",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 4.056,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:12.192331445Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.02,
+          "request_id": "sofia-fallo-1f4b8884772d4bd796ea297f46f09f4e",
+          "trace_id": "47b98d60d77d8de2296a8d80ce78a1c0",
+          "span_id": "499e67364937b5d9"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:12+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-fallo-1f4b8884772d4bd796ea297f46f09f4e",
+          "trace_id": "47b98d60d77d8de2296a8d80ce78a1c0",
+          "span_id": "e9e6a7b1e896a4f1",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "after_recovery",
+      "request_id": "sofia-fallo-862a28d3e8ce4d32ac72c818f9d317e3",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 6.057,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:18.855896014Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.519,
+          "request_id": "sofia-fallo-862a28d3e8ce4d32ac72c818f9d317e3",
+          "trace_id": "b810b28ca52843e98d5952cf8d8ebf4b",
+          "span_id": "7c9ec38a1374ff4f"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:18+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-862a28d3e8ce4d32ac72c818f9d317e3",
+          "trace_id": "b810b28ca52843e98d5952cf8d8ebf4b",
+          "span_id": "507de7912af6358f",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "after_recovery",
+      "request_id": "sofia-fallo-08f443081d324d67a937ca64cfcddb41",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 5.925,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:18.86192576Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "d218caf44cf9",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 2.445,
+          "request_id": "sofia-fallo-08f443081d324d67a937ca64cfcddb41",
+          "trace_id": "86e2b1247c159e9ec8e84b8cf1d91e3a",
+          "span_id": "17b5a75491a4d58f"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:18+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.003,
+          "request_id": "sofia-fallo-08f443081d324d67a937ca64cfcddb41",
+          "trace_id": "86e2b1247c159e9ec8e84b8cf1d91e3a",
+          "span_id": "18e52d781c2faf59",
+          "upstream": "172.19.0.4:8081"
+        }
+      ]
+    },
+    {
+      "phase": "after_recovery",
+      "request_id": "sofia-fallo-14b5699d3d7a4aaf9802ca23a90eb9a2",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 4.574,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:18.866513322Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.278,
+          "request_id": "sofia-fallo-14b5699d3d7a4aaf9802ca23a90eb9a2",
+          "trace_id": "fe98cb18d93aeada4f1234403b23770f",
+          "span_id": "1cd192fa36d5af98"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:18+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-14b5699d3d7a4aaf9802ca23a90eb9a2",
+          "trace_id": "fe98cb18d93aeada4f1234403b23770f",
+          "span_id": "51a04d3570c220e7",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "after_recovery",
+      "request_id": "sofia-fallo-068dd648adbd4ba08866460ec90df75b",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 4.587,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:18.871232045Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "d218caf44cf9",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.263,
+          "request_id": "sofia-fallo-068dd648adbd4ba08866460ec90df75b",
+          "trace_id": "c85e73f809e04979cb9afdaf5b6efe49",
+          "span_id": "cc803c4766dbe11d"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:18+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-068dd648adbd4ba08866460ec90df75b",
+          "trace_id": "c85e73f809e04979cb9afdaf5b6efe49",
+          "span_id": "9b4c1258c70dc3d7",
+          "upstream": "172.19.0.4:8081"
+        }
+      ]
+    },
+    {
+      "phase": "after_recovery",
+      "request_id": "sofia-fallo-aee9ec02af0241f1a179bc0ebd092891",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 18.1,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:18.889092266Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.428,
+          "request_id": "sofia-fallo-aee9ec02af0241f1a179bc0ebd092891",
+          "trace_id": "a3ce7c8f4442ec1b0386296f9c3bd527",
+          "span_id": "3f4bcfc1f9724337"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:18+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-aee9ec02af0241f1a179bc0ebd092891",
+          "trace_id": "a3ce7c8f4442ec1b0386296f9c3bd527",
+          "span_id": "089f5052beb65026",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "after_recovery",
+      "request_id": "sofia-fallo-71f263c5346f48848e483a1a1833498b",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 15.496,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:18.904684672Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "d218caf44cf9",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.542,
+          "request_id": "sofia-fallo-71f263c5346f48848e483a1a1833498b",
+          "trace_id": "f291fdc8306bb3ac7eea0e164410a8a5",
+          "span_id": "9894db4211d9c4e3"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:18+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-71f263c5346f48848e483a1a1833498b",
+          "trace_id": "f291fdc8306bb3ac7eea0e164410a8a5",
+          "span_id": "16884806dfce8f4f",
+          "upstream": "172.19.0.4:8081"
+        }
+      ]
+    },
+    {
+      "phase": "after_recovery",
+      "request_id": "sofia-fallo-81ba782466d747e3b58040af304af1ac",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 16.325,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:18.921206125Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.483,
+          "request_id": "sofia-fallo-81ba782466d747e3b58040af304af1ac",
+          "trace_id": "ab6d1d0036abdcc74c0d9f1885dfcf88",
+          "span_id": "2b53fd130ee8bef2"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:18+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-81ba782466d747e3b58040af304af1ac",
+          "trace_id": "ab6d1d0036abdcc74c0d9f1885dfcf88",
+          "span_id": "c486f0e6190ff323",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "after_recovery",
+      "request_id": "sofia-fallo-0988cc34cf7e4e47a7f3164222a2d02c",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 4.772,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:18.926041529Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "d218caf44cf9",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.07,
+          "request_id": "sofia-fallo-0988cc34cf7e4e47a7f3164222a2d02c",
+          "trace_id": "0eeaadbb3057ae9003e218c0d3a7c6bf",
+          "span_id": "45f9bee5ec429574"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:18+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-0988cc34cf7e4e47a7f3164222a2d02c",
+          "trace_id": "0eeaadbb3057ae9003e218c0d3a7c6bf",
+          "span_id": "d8e872b9d2233697",
+          "upstream": "172.19.0.4:8081"
+        }
+      ]
+    },
+    {
+      "phase": "after_recovery",
+      "request_id": "sofia-fallo-1276386dc993434382e68c47bf010dfd",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 5.012,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:18.931145363Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.213,
+          "request_id": "sofia-fallo-1276386dc993434382e68c47bf010dfd",
+          "trace_id": "e6ccaa3ff6c5e3c49d40b7b2e2c87c69",
+          "span_id": "e8b597fc29ab25f2"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:18+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-1276386dc993434382e68c47bf010dfd",
+          "trace_id": "e6ccaa3ff6c5e3c49d40b7b2e2c87c69",
+          "span_id": "19654bbb214d79af",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "after_recovery",
+      "request_id": "sofia-fallo-8b1e891839484d5d845ef086cf189a0d",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 4.811,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:18.936082336Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "d218caf44cf9",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.305,
+          "request_id": "sofia-fallo-8b1e891839484d5d845ef086cf189a0d",
+          "trace_id": "de00eb16ca2ab3337463830438491811",
+          "span_id": "5644d7fd48149a1f"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:18+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-8b1e891839484d5d845ef086cf189a0d",
+          "trace_id": "de00eb16ca2ab3337463830438491811",
+          "span_id": "da0385aab5da7982",
+          "upstream": "172.19.0.4:8081"
+        }
+      ]
+    },
+    {
+      "phase": "after_recovery",
+      "request_id": "sofia-fallo-6e1e54fb2f494226855926607da32aa1",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 26.478,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:18.962605269Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.515,
+          "request_id": "sofia-fallo-6e1e54fb2f494226855926607da32aa1",
+          "trace_id": "6988f4df5ea563dde5822e88e91cddd3",
+          "span_id": "68c565c85b92968b"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:18+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-6e1e54fb2f494226855926607da32aa1",
+          "trace_id": "6988f4df5ea563dde5822e88e91cddd3",
+          "span_id": "9c158b4a3e8f09a7",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "phase": "after_recovery",
+      "request_id": "sofia-fallo-12f08a640aaf49f49608c9ef5cf4404d",
+      "status": 200,
+      "valid_list": true,
+      "duration_ms": 17.46,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:45:18.98019219Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "d218caf44cf9",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.305,
+          "request_id": "sofia-fallo-12f08a640aaf49f49608c9ef5cf4404d",
+          "trace_id": "2c5d521b78753850218e22fabbf379c9",
+          "span_id": "589725283e292aa9"
+        },
+        {
+          "timestamp": "2026-10-23T17:45:18+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-fallo-12f08a640aaf49f49608c9ef5cf4404d",
+          "trace_id": "2c5d521b78753850218e22fabbf379c9",
+          "span_id": "ea7366e094fd2fad",
+          "upstream": "172.19.0.4:8081"
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "restored": true,
+  "stopped_at_utc": "2026-10-23T17:45:09.971755+00:00",
+  "while_stopped": {
+    "id": "d218caf44cf98f6c6a85d9b2afca71838353a57e6e8b57f5f9564be64a114d37",
+    "running": false,
+    "started_at": "2026-10-23T16:40:31.728623139Z",
+    "service": "catalogo-profesionales",
+    "project": "melt"
+  },
+  "restart_requested_at_utc": "2026-10-23T17:45:12.570011+00:00",
+  "after": {
+    "id": "d218caf44cf98f6c6a85d9b2afca71838353a57e6e8b57f5f9564be64a114d37",
+    "running": true,
+    "started_at": "2026-10-23T17:45:12.290620737Z",
+    "service": "catalogo-profesionales",
+    "project": "melt"
+  },
+  "same_container": true,
+  "protected_containers_unchanged": true,
+  "mongodb_snapshot_unchanged": true,
+  "phase_instances": {
+    "one_replica_stopped": [
+      "6ab9b7fac2b2"
+    ],
+    "after_recovery": [
+      "6ab9b7fac2b2",
+      "d218caf44cf9"
+    ]
+  },
+  "all_requests_succeeded": false,
+  "limitations": [
+    "No outage of MongoDB, Jaeger, gateway or all replicas.",
+    "No proof of explicit passive-ejection timer or exhausted proxy timeouts.",
+    "Recovery includes a new start of the same replica; not proof of crash recovery durability."
+  ]
+}

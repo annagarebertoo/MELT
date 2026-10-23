@@ -52,3 +52,11 @@ La implementación ya contiene límites concretos: NGINX configura conexión/env
 No hay política explícita `proxy_next_upstream*` en los archivos inspeccionados ni circuit breaker de negocio. No se infiere ausencia de reintentos implícitos de NGINX. El proveedor de correo desacoplado sigue siendo diseño, no una degradación funcional comprobada.
 
 Para cerrar D10 como decisión faltan concretar por dependencia los resultados visibles, las condiciones de reintento y el mecanismo de protección seleccionado; no se agregan circuit breakers por anticipación. La caída controlada y el postmortem real quedan para la validación posterior autorizada. `docs/POSTMORTEM.md` sigue siendo una plantilla, no evidencia de un incidente ejecutado. Ver [matriz de cierre](../ENTREGA-2.md).
+
+## Resultado del ensayo autorizado y política de cierre
+
+El apartado anterior registra el estado previo al ensayo. Se ejecutó una caída real de una sola réplica y su recuperación: once de doce consultas durante la caída devolvieron 200 y una devolvió 504 en unos dos segundos. Tras la restauración, doce de doce devolvieron 200 y ambas réplicas recibieron tráfico. El [postmortem](../POSTMORTEM.md) ya incluye esa ejecución y la [evidencia](../evidence/fallo-replica-2026-10-23.json), con el resultado estricto de continuidad total no aprobado.
+
+Se mantienen como protección inicial los timeouts existentes, errores observables y separación de fallas de telemetría. La lectura GET no produce un efecto de negocio duplicado; para escrituras no se habilitarán reintentos de negocio sin idempotencia. Aún no se fija ni implementa una política adicional de reintento del gateway. El detalle puede devolver 500 ante error MongoDB y el listado 503; el proxy puede responder con errores propios. No se afirma una degradación uniforme ni un fallback de negocio implementado.
+
+La documentación técnica de [NGINX](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_next_upstream) establece reintentos predeterminados ante error/timeout, pero eso no demuestra su aplicación efectiva a la solicitud fallida observada. La documentación es apoyo técnico; los requisitos del hito siguen procediendo exclusivamente del enunciado definitivo. D10 queda validada parcialmente, con la limitación visible y sin cambios de infraestructura no autorizados.

@@ -1,0 +1,84 @@
+{
+  "captured_at_utc": "2026-10-23T17:49:04.854503+00:00",
+  "branch": "feature/sofia-adr-entrega-2",
+  "base_commit": "cc230fafd8f9015668f388d243619d083b22bae0",
+  "read_only": true,
+  "mongodb": {
+    "database": "catalogo_db",
+    "collection": "tratamientos",
+    "ping": 1,
+    "count": 1,
+    "existing_treatment_id": "test-001",
+    "indexes": [
+      {
+        "name": "_id_",
+        "key": {
+          "_id": 1
+        },
+        "unique": false
+      },
+      {
+        "name": "uq_tratamientos_id",
+        "key": {
+          "id": 1
+        },
+        "unique": true
+      }
+    ],
+    "databases_present": [
+      "admin",
+      "catalogo_db",
+      "config",
+      "local"
+    ],
+    "data_volume": {
+      "type": "volume",
+      "name": "melt_melt_mongodb_data",
+      "destination": "/data/db"
+    },
+    "container_started_at": "2026-10-23T15:47:00.49600366Z"
+  },
+  "requests": [
+    {
+      "path": "/api/v1/catalogo/health",
+      "status": 200,
+      "request_id": "91d869be21f3fae450dca14083fc489b",
+      "trace_id": "bfcbcac5df46b96d8434c3b40939f9f5"
+    },
+    {
+      "path": "/api/v1/catalogo/tratamientos/test-001",
+      "status": 200,
+      "request_id": "bfa49c5402d06f346f0f304db2ed8787",
+      "trace_id": "11ff47bd7f70108dc55addf5d7dcfb5f"
+    },
+    {
+      "path": "/api/v1/catalogo/tratamientos?page=1&limit=10",
+      "status": 200,
+      "request_id": "890d2dfa93dd34481f4b69eca73191c9",
+      "trace_id": "7ee289aed1962b1f67d9200d69815a92"
+    }
+  ],
+  "detail_matches_mongodb": true,
+  "public_document_sha256": "11e424868c49987dc421108ac6471ecaf7748f6e10e8cc01f42db488fc6880dc",
+  "list_matches_mongodb": true,
+  "replicas": [
+    {
+      "name": "melt-catalogo-profesionales-1",
+      "detail_matches_mongodb": true,
+      "started_at": "2026-10-23T16:40:31.506320779Z"
+    },
+    {
+      "name": "melt-catalogo-profesionales-2",
+      "detail_matches_mongodb": true,
+      "started_at": "2026-10-23T17:45:12.290620737Z"
+    }
+  ],
+  "snapshot_unchanged": true,
+  "snapshot_sha256": "aa6cd035f79a95b76309f9a733558b68a23ed8af8096ffed764372b054c4b8e3",
+  "limits": [
+    "No insert, delete, index modification or service restart performed.",
+    "Volume attachment and repeated retrieval verified; crash/restart durability not tested.",
+    "Uniqueness index inspected; duplicate-write and concurrent-write behavior not tested.",
+    "No PostgreSQL, cross-service consistency or database permission isolation validated."
+  ]
+}

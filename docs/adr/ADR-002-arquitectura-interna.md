@@ -1,5 +1,7 @@
 # ADR-002: Arquitectura interna de los servicios
 
+> **Cierre de diseño para Entrega 2:** el apartado final concreta la propuesta conservada. Es una decisión documental para implementar; no acredita una refactorización ya realizada.
+
 - **Estado:** Propuesto
 - **Fecha:** 2026-10-21
 
@@ -43,3 +45,24 @@ Se conserva la propuesta de capas para Catálogo y hexagonal para Reservas y Ben
 La inspección muestra que Catálogo concentra modelo, handlers y acceso directo a `*mongo.Collection` en `cmd/api/main.go`; solo la observabilidad está separada en otro archivo. No se acredita una arquitectura por capas implementada. Reservas y Beneficios contienen únicamente `cmd/api/main.go` con salud HTTP: no hay núcleo, puertos ni adaptadores hexagonales de negocio.
 
 La decisión está documentada como propuesta justificada, pendiente de ratificación y de definir dependencias internas concretas. Para cerrar el diseño, explicitar los límites HTTP → aplicación → persistencia de Catálogo y adaptadores → casos de uso/dominio ← puertos en los servicios hexagonales; su materialización y la demostración de dos estilos reconocibles corresponden al desarrollo posterior. No se refactoriza código en esta revisión. Ver [cierre de Entrega 2](../ENTREGA-2.md).
+
+## Diseño concretado para implementar
+
+Se conserva capas para Catálogo y hexagonal para Reservas/Beneficios. Esta concreción reemplaza los pendientes de dependencias del apartado anterior, sin cambiar los estilos elegidos ni afirmar aprobación docente.
+
+| Servicio / módulo lógico | Responsabilidad | Dependencia permitida |
+| :--- | :--- | :--- |
+| Catálogo: HTTP | Decodificar parámetros, validar formato y traducir resultados a HTTP. | Aplicación; no construir consultas MongoDB. |
+| Catálogo: aplicación | Coordinar consultas y operaciones del catálogo, validaciones y errores del caso de uso. | Modelo del catálogo y capa de persistencia; no Gin ni detalles del request. |
+| Catálogo: persistencia | Traducir filtros y documentos, ejecutar MongoDB y convertir errores técnicos. | Driver MongoDB y modelo; no handlers HTTP ni bases ajenas. |
+| Reservas/Beneficios: dominio | Invariantes de agenda, estados, saldo y movimientos de su respectivo servicio. | Tipos propios; sin Gin, SQL, AMQP o clientes de otros servicios. |
+| Reservas/Beneficios: aplicación y puertos | Coordinar casos de uso y declarar operaciones requeridas de repositorios, eventos y proveedores. | Dominio y contratos de puertos propios; sin implementaciones de adaptadores. |
+| Adaptadores de entrada | HTTP o recepción de eventos, validación de transporte y traducción. | Casos de uso; no acceso directo a repositorios para saltar reglas. |
+| Adaptadores de salida | Implementar repositorios PostgreSQL, clientes HTTP y publicación de eventos. | Puertos y tecnologías correspondientes; no reglas duplicadas del dominio. |
+| Composición de cada servicio | Crear dependencias, configuración e instrumentación y conectarlas al iniciar. | Módulos propios; no lógica comercial. |
+
+No se permiten ciclos entre capas, importaciones desde dominio hacia adaptadores ni acceso de un microservicio a la base de otro. Las llamadas remotas se encapsulan en el servicio responsable, no en el frontend ni en reglas del gateway. Las pruebas de dominio serán independientes del transporte; los adaptadores tendrán integración real.
+
+Capas mantiene simple el flujo documental de Catálogo; hexagonal protege las reglas más sensibles de agenda y saldos de cambios de transporte y persistencia. Se acepta mayor trabajo de interfaces y traducciones en los servicios hexagonales. No se exige crear un archivo por cada clase o abstracción: las responsabilidades y dirección de dependencias deben ser reconocibles.
+
+**Implementación actual:** Catálogo todavía accede a MongoDB desde handlers; los otros dos servicios solo ofrecen salud. Las tablas anteriores son diseño, no descripción del código actual. No se modifican servicios en este cierre.
