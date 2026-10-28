@@ -305,7 +305,16 @@ func (s *authServer) requiereRol(roles ...string) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error":gin.H{"code":"TOKEN_INVALIDO","message":"La sesión venció o el token no es válido."}})
 			return
 		}
-		for _, actual := range cl.Roles {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer cancel()
+		var usuario Usuario
+		if err := s.users.FindOne(ctx, bson.D{{Key: "id", Value: cl.Subject}}).Decode(&usuario); err != nil || !usuario.Activo {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code":"CUENTA_NO_DISPONIBLE","message":"La cuenta no está disponible."}})
+			return
+		}
+		cl.Roles = usuario.Roles
+		cl.Email = usuario.Email
+		for _, actual := range usuario.Roles {
 			for _, permitido := range roles {
 				if actual == permitido { c.Set("claims",cl); c.Next(); return }
 			}
