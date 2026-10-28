@@ -55,6 +55,8 @@ services:
       MONGODB_URI: mongodb://mongodb:27017
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Defini AUTH_JWT_SECRET en tu entorno}
       AUTH_TOKEN_TTL_MINUTES: ${AUTH_TOKEN_TTL_MINUTES:-15}
+      AUTH_ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL:-}
+      AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-}
     depends_on:
       mongodb:
         condition: service_healthy
