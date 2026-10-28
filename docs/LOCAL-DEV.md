@@ -198,3 +198,18 @@ El middleware `requierePermiso` aplica autorización por operación y deniega po
 | `reservas.gestionar-turnos` | recepción, administrador, superadministrador |
 
 Cuando se implementen los handlers, encadenar ambos middlewares en este orden: `requiereIdentidad(), requierePermiso("clave.de.operacion")`. La autorización por rol no reemplaza la autorización por recurso: consultar, cancelar o modificar una reserva propia debe comparar el ID autenticado con el propietario de la reserva. Las rutas reales de turnos aún no están implementadas; por eso esta política y sus tests preparan el control de acceso, pero no implican que crear/cancelar reservas ya funcione.
+
+
+## Reservas: agenda y endpoints iniciales
+
+El servicio Reservas persiste agendas semanales y turnos en MongoDB, en la base `reservas_db`. Compose configura `MONGODB_URI=mongodb://mongodb:27017` y espera que MongoDB esté saludable.
+
+- `PUT /api/v1/reservas/agenda`: crea o actualiza el horario semanal. `diaSemana` usa 0=domingo y 6=sábado; `horaInicio` y `horaFin` usan `HH:MM`. Un profesional solo puede editar su propia agenda; recepción y administración pueden gestionar la agenda de un profesional indicado.
+- `GET /api/v1/reservas/disponibilidad?profesionalId=ID&fecha=YYYY-MM-DD&duracionMinutos=60`: devuelve inicios disponibles cada 15 minutos dentro de la agenda. La duración debe estar entre 5 y 480 minutos.
+- `POST /api/v1/reservas/turnos`: requiere rol cliente y JSON con `profesionalId`, `tratamientoId`, `inicio` (RFC3339 con zona horaria) y `duracionMinutos`.
+- `GET /api/v1/reservas/turnos`: clientes ven sus turnos, profesionales sus turnos asignados y recepción/administración pueden consultar todos.
+- `DELETE /api/v1/reservas/turnos/{id}`: el cliente solo cancela turnos propios; recepción/administración pueden cancelar otros turnos.
+
+Todos los endpoints de Reservas quedan detrás de `auth_request` en el gateway y aplican middleware de identidad y permisos por operación. El backend verifica que el horario esté dentro de la agenda y que no se solape con turnos confirmados.
+
+**Limitaciones de esta primera implementación:** la duración del tratamiento llega en la solicitud y todavía debe validarse contra Catálogo; no se implementaron pagos/seña, carrito con bloqueo de 10 minutos, reglas de devolución ni verificación de propiedad del profesional contra el catálogo de usuarios. La prevención de solapamientos usa un mutex dentro de una instancia del servicio; para despliegues con múltiples réplicas hace falta coordinación distribuida o una restricción transaccional en la persistencia. No usar este diseño como garantía de concurrencia multiinstancia en producción.
