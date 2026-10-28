@@ -73,6 +73,7 @@ func TestRutasDeAutenticacionRegistradas(t *testing.T) {
 		"POST /registro": false,
 		"POST /login": false,
 		"GET /me": false,
+		"GET /verify": false,
 		"POST /usuarios": false,
 	}
 	for _, route := range router.Routes() {
