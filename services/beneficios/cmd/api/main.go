@@ -33,8 +33,9 @@ type RegistroExterno struct {
 	Origen          string    `bson:"origen" json:"origen"`
 	Plan            string    `bson:"plan" json:"plan"`
 	Membresia       string    `bson:"membresia" json:"membresia"`
-	PuntosRegalo    int       `bson:"puntosRegalo" json:"puntosRegalo"`
-	RegaloAcreditado bool     `bson:"regaloAcreditado" json:"regaloAcreditado"`
+	PuntosRegalo     int       `bson:"puntosRegalo" json:"puntosRegalo"`
+	SaldoPuntos      int       `bson:"saldoPuntos" json:"saldoPuntos"`
+	RegaloAcreditado bool      `bson:"regaloAcreditado" json:"regaloAcreditado"`
 	CreadoEn        time.Time `bson:"creadoEn" json:"creadoEn"`
 }
 
@@ -158,6 +159,10 @@ func (s *Servidor) registrarExterno(c *gin.Context) {
 	var existente RegistroExterno
 	err := s.registros.FindOne(ctx, bson.D{{Key: "solicitudId", Value: req.SolicitudID}}).Decode(&existente)
 	if err == nil {
+		if !strings.EqualFold(existente.Email, req.Email) {
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "SOLICITUD_YA_PROCESADA", "message": "La solicitud ya fue procesada con otros datos."}})
+			return
+		}
 		c.JSON(http.StatusOK, existente)
 		return
 	}
@@ -175,6 +180,7 @@ func (s *Servidor) registrarExterno(c *gin.Context) {
 		Plan:             req.Plan,
 		Membresia:        req.Membresia,
 		PuntosRegalo:     puntos,
+		SaldoPuntos:      puntos,
 		RegaloAcreditado: true,
 		CreadoEn:         time.Now().UTC(),
 	}
