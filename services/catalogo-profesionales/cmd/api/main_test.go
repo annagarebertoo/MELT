@@ -82,19 +82,14 @@ func TestTotalPages(t *testing.T) {
 
 func TestRutaObtenerTratamientoRegistrada(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	router := crearRouter(nil, func(context.Context) error { return nil })
 
-	router := crearRouter(nil, func(context.Context) error {
-		return nil
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/tratamientos/1", nil)
-	recorder := httptest.NewRecorder()
-
-	router.ServeHTTP(recorder, req)
-
-	if recorder.Code == http.StatusNotFound {
-		t.Fatal("la ruta GET /tratamientos/:id no está registrada")
+	for _, route := range router.Routes() {
+		if route.Method == http.MethodGet && route.Path == "/tratamientos/:id" {
+			return
+		}
 	}
+	t.Fatal("la ruta GET /tratamientos/:id no está registrada")
 }
 
 func TestPrecioValido(t *testing.T) {
