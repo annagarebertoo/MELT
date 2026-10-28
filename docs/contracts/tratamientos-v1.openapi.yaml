@@ -145,7 +145,7 @@ paths:
           schema:
             type: string
             minLength: 1
-          example: "1"
+          example: "trat-001"
 
       responses:
         '200':
@@ -210,7 +210,7 @@ components:
         id:
           type: string
           description: Identificador único del tratamiento.
-          example: "1"
+          example: "trat-001"
 
         nombre:
           type: string
