@@ -46,6 +46,7 @@ services:
     environment:
       PORT: "8082"
       MONGODB_URI: mongodb://mongodb:27017
+      PAGOS_URL: ${PAGOS_URL:-}
     depends_on:
       mongodb:
         condition: service_healthy
