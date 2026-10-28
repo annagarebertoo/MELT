@@ -71,7 +71,7 @@ Ejemplo válido (cambiar el ID si ya existe; el campo es `duracionMinutos`, no `
 }
 ```
 
-Resultado esperado: `201 Created` y el tratamiento creado en el cuerpo de la respuesta. Si se repite un ID existente, la API responde `409 Conflict`. Los campos obligatorios incluyen `id`, `nombre`, `descripcion`, `categoria`, `moneda: "ARS"`, `precio` no negativo y `duracionMinutos` positivo. Si no se envían `imagenes` o `keywords`, el servicio los inicializa como arreglos vacíos.
+Resultado esperado: `201 Created` y el tratamiento creado en el cuerpo de la respuesta. Si se repite un ID existente, la API responde `409 Conflict`. Los campos obligatorios incluyen `id`, `nombre`, `descripcion`, una `categoria` exactamente igual a `Facial`, `Corporal`, `Depilación` o `Manos y uñas`, `moneda: "ARS"`, un `precio` finito no negativo y `duracionMinutos` positivo. Si no se envían `imagenes` o `keywords`, el servicio los inicializa como arreglos vacíos.
 
 ## Escalar el catálogo
 
