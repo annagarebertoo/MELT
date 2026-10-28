@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/mail"
 	"os"
 	"strings"
 	"time"
@@ -345,8 +346,9 @@ func crearAdminInicial(ctx context.Context, users *mongo.Collection) error {
 	if email == "" && password == "" {
 		return nil
 	}
-	if email == "" || len(password) < 12 {
-		return errors.New("configurá email y contraseña inicial de al menos 12 caracteres")
+	parsedEmail, emailErr := mail.ParseAddress(email)
+	if email == "" || emailErr != nil || parsedEmail.Address != email || len(password) < 12 || len([]byte(password)) > 72 {
+		return errors.New("configurá un email válido y una contraseña inicial de entre 12 y 72 bytes")
 	}
 	var existente Usuario
 	err := users.FindOne(ctx, bson.D{{Key: "email", Value: email}}).Decode(&existente)
