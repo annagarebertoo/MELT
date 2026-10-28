@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read
 
+# Keep only the newest CI run for each branch/PR ref while iterating.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
