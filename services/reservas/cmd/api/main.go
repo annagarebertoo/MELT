@@ -42,12 +42,19 @@ type turno struct {
 	Fin time.Time `bson:"fin" json:"fin"`
 	Estado string `bson:"estado" json:"estado"`
 	CreadoEn time.Time `bson:"creadoEn" json:"creadoEn"`
+	PrecioTratamiento float64 `bson:"precioTratamiento" json:"precioTratamiento"`
+	Sena float64 `bson:"sena" json:"sena"`
+	PagoID string `bson:"pagoId,omitempty" json:"pagoId,omitempty"`
+	EstadoPago string `bson:"estadoPago,omitempty" json:"estadoPago,omitempty"`
+	ImporteDevolucion float64 `bson:"importeDevolucion,omitempty" json:"importeDevolucion,omitempty"`
+	EstadoDevolucion string `bson:"estadoDevolucion,omitempty" json:"estadoDevolucion,omitempty"`
 }
 
 type servidorReservas struct {
 	agendas *mongo.Collection
 	turnos *mongo.Collection
 	bloqueos *mongo.Collection
+	carritos *mongo.Collection
 	catalogoURL string
 	httpClient *http.Client
 }
@@ -57,6 +64,8 @@ type tratamientoCatalogo struct {
 	Nombre string `json:"nombre"`
 	DuracionMinutos int `json:"duracionMinutos"`
 	ProfesionalesIDs []string `json:"profesionalesIds"`
+	Precio float64 `json:"precio"`
+	Moneda string `json:"moneda"`
 }
 
 func tratamientoCompatible(t tratamientoCatalogo, profesionalID string) bool {
@@ -71,6 +80,7 @@ type bloqueoTurno struct {
 	ProfesionalID string `bson:"profesionalId"`
 	Minuto int64 `bson:"minuto"`
 	TurnoID string `bson:"turnoId"`
+	ExpiraEn *time.Time `bson:"expiraEn,omitempty"`
 }
 
 func (s *servidorReservas) obtenerTratamiento(ctx context.Context, id string) (tratamientoCatalogo, int, error) {
@@ -114,13 +124,17 @@ func main() {
 	db := client.Database("reservas_db")
 	catalogoURL := strings.TrimSpace(os.Getenv("CATALOGO_URL"))
 	if catalogoURL == "" { catalogoURL = "http://catalogo-profesionales:8081" }
-	s := &servidorReservas{agendas: db.Collection("agendas_semanales"), turnos: db.Collection("turnos"), bloqueos: db.Collection("bloqueos_turnos"), catalogoURL: catalogoURL, httpClient: &http.Client{Timeout: 3*time.Second}}
+	s := &servidorReservas{agendas: db.Collection("agendas_semanales"), turnos: db.Collection("turnos"), bloqueos: db.Collection("bloqueos_turnos"), carritos: db.Collection("carritos_bloqueos"), catalogoURL: catalogoURL, httpClient: &http.Client{Timeout: 3*time.Second}}
 	_, err = s.agendas.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key:"profesionalId",Value:1},{Key:"diaSemana",Value:1}}, Options: options.Index().SetUnique(true).SetName("uq_agenda_profesional_dia")})
 	if err != nil { log.Fatal("no se pudo crear índice de agenda") }
 	_, err = s.turnos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key:"profesionalId",Value:1},{Key:"inicio",Value:1}}, Options: options.Index().SetName("ix_turnos_profesional_inicio")})
 	if err != nil { log.Fatal("no se pudo crear índice de turnos") }
 	_, err = s.bloqueos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key:"profesionalId",Value:1},{Key:"minuto",Value:1}}, Options: options.Index().SetUnique(true).SetName("uq_bloqueo_profesional_minuto")})
 	if err != nil { log.Fatal("no se pudo crear índice de bloqueos de turnos") }
+	_, err = s.bloqueos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key:"expiraEn",Value:1}}, Options: options.Index().SetExpireAfterSeconds(0).SetName("ttl_bloqueos_carrito")})
+	if err != nil { log.Fatal("no se pudo crear índice TTL de bloqueos") }
+	_, err = s.carritos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key:"expiraEn",Value:1}}, Options: options.Index().SetExpireAfterSeconds(0).SetName("ttl_carritos")})
+	if err != nil { log.Fatal("no se pudo crear índice TTL de carritos") }
 	if err := s.router().Run(":8082"); err != nil { log.Fatal("no se pudo iniciar Reservas") }
 }
 
@@ -132,7 +146,9 @@ func (s *servidorReservas) router() *gin.Engine {
 	r.PUT("/agenda", requiereIdentidad("profesional","recepcion","administrador","superadministrador"), requierePermiso("reservas.gestionar-agenda"), s.guardarAgenda)
 	r.GET("/disponibilidad", requiereIdentidad("cliente","profesional","recepcion","administrador","superadministrador"), requierePermiso("reservas.consultar-disponibilidad"), s.disponibilidad)
 	r.GET("/turnos", requiereIdentidad(), requierePermiso("reservas.consultar-mis-turnos"), s.listarTurnos)
-	r.POST("/turnos", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.crearTurno)
+	r.POST("/carrito/bloqueos", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.crearBloqueoCarrito)
+	r.POST("/carrito/bloqueos/:id/confirmar", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.confirmarBloqueoCarrito)
+	r.POST("/turnos", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.confirmarTurnoDesdeCarrito)
 	r.DELETE("/turnos/:id", requiereIdentidad(), requierePermiso("reservas.cancelar-turno"), s.cancelarTurno)
 	return r
 }
