@@ -1,0 +1,129 @@
+openapi: 3.0.3
+info:
+  title: MELT - Registro externo del gimnasio
+  version: 1.0.0
+  description: >
+    Registra un alta referida por el gimnasio y guarda los puntos de regalo
+    configurados para el plan y la membresía. No reemplaza el servicio de
+    usuarios/autenticación.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Entorno local
+paths:
+  /beneficios/registro-externo:
+    post:
+      summary: Registrar un alta referida por el gimnasio
+      operationId: registrarAltaExterna
+      security:
+        - partnerKey: []
+      parameters:
+        - in: header
+          name: X-Partner-Key
+          required: true
+          schema:
+            type: string
+          description: Clave privada configurada entre los dos grupos.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistroExternoRequest'
+            example:
+              solicitudId: gym-req-0001
+              nombre: Cliente de prueba
+              email: cliente@example.com
+              codigoReferido: CODIGO_CONFIGURADO
+              plan: basico
+              membresia: mensual
+      responses:
+        '201':
+          description: Registro creado y regalo guardado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistroExterno'
+        '200':
+          description: La misma solicitud ya se había procesado; no se vuelve a acreditar el regalo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistroExterno'
+        '400':
+          description: Faltan campos o hay datos inválidos.
+        '401':
+          description: Falta la clave del consumidor o no es válida.
+        '403':
+          description: El código de referido no es válido.
+        '409':
+          description: El email ya existe o la solicitud se repitió con otros datos.
+        '422':
+          description: La combinación de plan y membresía no tiene puntos configurados.
+        '503':
+          description: Servicio o configuración no disponible.
+components:
+  securitySchemes:
+    partnerKey:
+      type: apiKey
+      in: header
+      name: X-Partner-Key
+  schemas:
+    RegistroExternoRequest:
+      type: object
+      required:
+        - solicitudId
+        - nombre
+        - email
+        - codigoReferido
+        - plan
+        - membresia
+      properties:
+        solicitudId:
+          type: string
+          minLength: 1
+          description: Identificador único de la solicitud generado por el consumidor.
+        nombre:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        codigoReferido:
+          type: string
+          minLength: 1
+        plan:
+          type: string
+          minLength: 1
+        membresia:
+          type: string
+          minLength: 1
+    RegistroExterno:
+      type: object
+      properties:
+        id:
+          type: string
+        solicitudId:
+          type: string
+        nombre:
+          type: string
+        email:
+          type: string
+          format: email
+        origen:
+          type: string
+          enum: [gimnasio]
+        plan:
+          type: string
+        membresia:
+          type: string
+        puntosRegalo:
+          type: integer
+          minimum: 0
+        saldoPuntos:
+          type: integer
+          minimum: 0
+        regaloAcreditado:
+          type: boolean
+        creadoEn:
+          type: string
+          format: date-time
