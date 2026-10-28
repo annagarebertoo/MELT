@@ -150,6 +150,7 @@ func (s *servidorReservas) router() *gin.Engine {
 	r.GET("/turnos", requiereIdentidad(), requierePermiso("reservas.consultar-mis-turnos"), s.listarTurnos)
 	r.POST("/carrito/bloqueos", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.crearBloqueoCarrito)
 	r.POST("/carrito/bloqueos/:id/confirmar", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.confirmarBloqueoCarrito)
+	r.DELETE("/carrito/bloqueos/:id", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.liberarBloqueoCarrito)
 	r.POST("/turnos", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.confirmarTurnoDesdeCarrito)
 	r.DELETE("/turnos/:id", requiereIdentidad(), requierePermiso("reservas.cancelar-turno"), s.cancelarTurno)
 	r.POST("/turnos/:id/devolucion/reintentar", requiereIdentidad(), requierePermiso("reservas.cancelar-turno"), s.reintentarDevolucion)
@@ -482,6 +483,17 @@ func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
 	}
 	if _,err:=s.carritos.InsertOne(ctx,doc); err!=nil { _,_ = s.bloqueos.DeleteMany(context.Background(),bson.D{{Key:"turnoId",Value:id}}); c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo guardar el carrito"}); return }
 	c.JSON(http.StatusCreated,gin.H{"bloqueo":doc,"seña":{"porcentaje":30,"importe":doc.Sena,"moneda":doc.Moneda},"mensaje":"El horario queda bloqueado por 10 minutos. Para confirmar, aboná la seña y enviá el pago aprobado."})
+}
+
+func (s *servidorReservas) liberarBloqueoCarrito(c *gin.Context) {
+	u:=c.MustGet("identidad").(identidad)
+	id:=strings.TrimSpace(c.Param("id"))
+	ctx,cancel:=context.WithTimeout(c.Request.Context(),5*time.Second); defer cancel()
+	res,err:=s.carritos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id},{Key:"clienteId",Value:u.ID},{Key:"estado",Value:"pendiente_pago"}},bson.D{{Key:"$set",Value:bson.D{{Key:"estado",Value:"liberado"},{Key:"expiraEn",Value:time.Now().UTC()}}}})
+	if err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo liberar el carrito"}); return }
+	if res.MatchedCount==0 { c.JSON(http.StatusNotFound,gin.H{"error":gin.H{"code":"CARRITO_NO_ENCONTRADO","message":"No existe un bloqueo pendiente de tu propiedad."}}); return }
+	_,_ = s.bloqueos.DeleteMany(ctx,bson.D{{Key:"turnoId",Value:id}})
+	c.Status(http.StatusNoContent)
 }
 
 func (s *servidorReservas) confirmarBloqueoCarrito(c *gin.Context) {
