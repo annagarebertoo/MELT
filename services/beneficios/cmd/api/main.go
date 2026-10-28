@@ -198,6 +198,10 @@ func (s *Servidor) registrarExterno(c *gin.Context) {
 			// A unique email or request ID prevents a second gift from being credited.
 			var porSolicitud RegistroExterno
 			if findErr := s.registros.FindOne(ctx, bson.D{{Key: "solicitudId", Value: req.SolicitudID}}).Decode(&porSolicitud); findErr == nil {
+				if !strings.EqualFold(porSolicitud.Email, req.Email) {
+					c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "SOLICITUD_YA_PROCESADA", "message": "La solicitud ya fue procesada con otros datos."}})
+					return
+				}
 				c.JSON(http.StatusOK, porSolicitud)
 				return
 			}
