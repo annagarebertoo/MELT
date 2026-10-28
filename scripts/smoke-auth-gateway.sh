@@ -14,10 +14,13 @@ fail() {
 
 wait_for_gateway() {
   for _ in $(seq 1 60); do
-    if curl --silent --fail "$BASE_URL/health" >/dev/null; then return 0; fi
+    if curl --silent --fail "$BASE_URL/health" >/dev/null; then
+      auth_code=$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST "$BASE_URL/api/v1/auth/login" -H 'Content-Type: application/json' -d '{}')
+      if [[ "$auth_code" == "400" ]]; then return 0; fi
+    fi
     sleep 2
   done
-  fail "el gateway no respondió dentro del tiempo esperado"
+  fail "el gateway o el servicio auth no respondió dentro del tiempo esperado"
 }
 
 http_code() {
