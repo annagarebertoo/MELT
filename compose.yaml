@@ -45,6 +45,10 @@ services:
       context: ./services/reservas
     environment:
       PORT: "8082"
+      MONGODB_URI: mongodb://mongodb:27017
+    depends_on:
+      mongodb:
+        condition: service_healthy
     restart: unless-stopped
 
   auth:
