@@ -340,7 +340,7 @@ func (s *Servidor) crearTratamiento(c *gin.Context) {
 }
 
 func categoriaValida(categoria string) bool {
-	switch strings.ToLower(strings.TrimSpace(categoria)) {
+	switch strings.TrimSpace(categoria) {
 	case "facial", "corporal", "depilación", "manos y uñas":
 		return true
 	default:
