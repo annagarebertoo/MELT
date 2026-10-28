@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -93,5 +94,27 @@ func TestRutaObtenerTratamientoRegistrada(t *testing.T) {
 
 	if recorder.Code == http.StatusNotFound {
 		t.Fatal("la ruta GET /tratamientos/:id no está registrada")
+	}
+}
+
+func TestPrecioValido(t *testing.T) {
+	tests := []struct {
+		name  string
+		value float64
+		want  bool
+	}{
+		{"cero", 0, true},
+		{"positivo", 12500.50, true},
+		{"negativo", -1, false},
+		{"NaN", math.NaN(), false},
+		{"positivo infinito", math.Inf(1), false},
+		{"negativo infinito", math.Inf(-1), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := precioValido(tt.value); got != tt.want {
+				t.Fatalf("precioValido(%v) = %v; esperado %v", tt.value, got, tt.want)
+			}
+		})
 	}
 }
