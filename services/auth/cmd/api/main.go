@@ -128,6 +128,7 @@ func (s *authServer) router() *gin.Engine {
 	r.POST("/registro", s.registrarCliente)
 	r.POST("/login", s.login)
 	r.GET("/me", s.requiereAuth(), s.me)
+	r.GET("/verify", s.verificarSesion)
 	r.POST("/usuarios", s.requiereRol("administrador", "superadministrador"), s.crearUsuario)
 	return r
 }
@@ -322,6 +323,28 @@ func (s *authServer) requiereRol(roles ...string) gin.HandlerFunc {
 		}
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error":gin.H{"code":"PERMISOS_INSUFICIENTES","message":"No tenés permisos para realizar esta acción."}})
 	}
+}
+
+
+func (s *authServer) verificarSesion(c *gin.Context) {
+	header := strings.TrimSpace(c.GetHeader("Authorization"))
+	if !strings.HasPrefix(header, "Bearer ") {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+	cl, err := s.validarToken(strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")))
+	if err != nil {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+	defer cancel()
+	var usuario Usuario
+	if err := s.users.FindOne(ctx, bson.D{{Key: "id", Value: cl.Subject}}).Decode(&usuario); err != nil || !usuario.Activo {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (s *authServer) me(c *gin.Context) {
