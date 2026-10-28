@@ -56,3 +56,10 @@ func TestPermisosPorOperacion(t *testing.T) {
 		if rec.Code!=tc.want { t.Fatalf("se esperaba %d y se obtuvo %d: %s",tc.want,rec.Code,rec.Body.String()) }
 	}) }
 }
+
+func TestTratamientoCompatible(t *testing.T) {
+	tratamiento := tratamientoCatalogo{ID: "facial-01", ProfesionalesIDs: []string{"prof-1", "prof-2"}}
+	if !tratamientoCompatible(tratamiento, "prof-2") { t.Fatal("se esperaba que prof-2 estuviera habilitado") }
+	if tratamientoCompatible(tratamiento, "prof-3") { t.Fatal("un profesional no asociado no debe ser habilitado") }
+	if tratamientoCompatible(tratamientoCatalogo{ID: "sin-asignar"}, "prof-1") { t.Fatal("un tratamiento sin profesionales asociados debe fallar de forma segura") }
+}
