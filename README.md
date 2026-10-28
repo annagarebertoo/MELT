@@ -93,9 +93,18 @@ La autenticación ya tiene una primera implementación, pero la autorización de
 
 ## Ejecución local
 
- Se prevé ofrecer un procedimiento único de arranque mediante Docker Compose, que permita iniciar los servicios y sus dependencias sin configuraciones manuales específicas de cada integrante.
+El entorno local se inicia con Docker Compose. Antes de arrancar, configurá una clave JWT por fuera del repositorio.
 
-Cuando esté disponible, esta sección incluirá los requisitos previos, las variables de entorno de ejemplo, el comando de inicio, las direcciones de acceso y las verificaciones de funcionamiento. Los secretos no se almacenarán en el repositorio.
+En PowerShell:
+
+```powershell
+$env:AUTH_JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+docker compose config
+docker compose up --build -d
+docker compose ps
+```
+
+La guía completa, las variables opcionales del administrador inicial y los ejemplos de registro/login están en [docs/LOCAL-DEV.md](docs/LOCAL-DEV.md). No guardes la clave generada ni contraseñas reales en el repositorio.
 
 ## Despliegue
 
