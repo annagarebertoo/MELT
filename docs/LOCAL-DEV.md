@@ -132,7 +132,18 @@ La primera solicitud devuelve `201`; repetir la misma `solicitudId` con el mismo
 
 ## Autenticación y cuentas
 
-El servicio `auth` se publica por el gateway en `http://localhost:8080/api/v1/auth`. Para levantarlo, definí una clave JWT de al menos 32 caracteres en `AUTH_JWT_SECRET`. No uses una clave real en archivos versionados. Opcionalmente, configurá `AUTH_ADMIN_EMAIL` y `AUTH_ADMIN_PASSWORD` para crear el primer superadministrador; la contraseña inicial debe tener al menos 12 caracteres. Si la cuenta ya existe, el arranque no la modifica.
+Antes de iniciar Compose, configurá el secreto JWT fuera del repositorio. En PowerShell podés usar:
+
+```powershell
+$env:AUTH_JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+docker compose config
+docker compose up --build -d
+docker compose ps
+```
+
+En Bash, podés generar una clave con `openssl rand -base64 48` y exportarla en `AUTH_JWT_SECRET`. No compartas ni subas la clave generada. Para crear el primer superadministrador, definí también `AUTH_ADMIN_EMAIL` y `AUTH_ADMIN_PASSWORD` en el entorno; la contraseña inicial debe tener al menos 12 caracteres.
+
+El servicio `auth` se publica por el gateway en `http://localhost:8080/api/v1/auth`. Para levantarlo, definí una clave JWT de al menos 32 caracteres en `AUTH_JWT_SECRET`. No uses una clave real en archivos versionados. Si la cuenta de superadministrador ya existe, el arranque no modifica sus datos.
 
 Endpoints iniciales:
 
