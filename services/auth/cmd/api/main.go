@@ -95,6 +95,9 @@ func main() {
 	if err != nil {
 		log.Fatal("no se pudo crear el índice de email")
 	}
+	if err := crearAdminInicial(ctx, users); err != nil {
+		log.Fatal("no se pudo configurar el administrador inicial")
+	}
 	ttl := 15 * time.Minute
 	if raw := strings.TrimSpace(os.Getenv("AUTH_TOKEN_TTL_MINUTES")); raw != "" {
 		minutes, parseErr := time.ParseDuration(raw + "m")
@@ -284,3 +287,36 @@ func (s *authServer) me(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"usuario":usuario})
 }
 
+
+func crearAdminInicial(ctx context.Context, users *mongo.Collection) error {
+	email := strings.ToLower(strings.TrimSpace(os.Getenv("AUTH_ADMIN_EMAIL")))
+	password := os.Getenv("AUTH_ADMIN_PASSWORD")
+	if email == "" && password == "" {
+		return nil
+	}
+	if email == "" || len(password) < 12 {
+		return errors.New("configurá email y contraseña inicial de al menos 12 caracteres")
+	}
+	var existente Usuario
+	err := users.FindOne(ctx, bson.D{{Key: "email", Value: email}}).Decode(&existente)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, mongo.ErrNoDocuments) {
+		return err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	admin := Usuario{
+		ID: bson.NewObjectID().Hex(), Nombre: "Administrador inicial", Email: email,
+		PasswordHash: string(hash), Roles: []string{"superadministrador"},
+		Activo: true, CreadoEn: time.Now().UTC(),
+	}
+	_, err = users.InsertOne(ctx, admin)
+	if mongo.IsDuplicateKeyError(err) {
+		return nil
+	}
+	return err
+}
