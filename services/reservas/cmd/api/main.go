@@ -261,7 +261,22 @@ func (s *servidorReservas) crearTurno(c *gin.Context) {
 	if err==nil { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"HORARIO_OCUPADO","message":"Ese horario ya está reservado."}}); return }
 	if !errors.Is(err,mongo.ErrNoDocuments) { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo verificar el horario"}); return }
 	doc:=turno{ID:bson.NewObjectID().Hex(),ClienteID:u.ID,ProfesionalID:req.ProfesionalID,TratamientoID:tratamiento.ID,Inicio:start.UTC(),Fin:end.UTC(),Estado:"confirmado",CreadoEn:time.Now().UTC()}
-	if _,err:=s.turnos.InsertOne(ctx,doc); err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo crear el turno"}); return }
+	// El índice único en profesionalId + minuto coordina todas las réplicas.
+	bloqueos := make([]interface{}, 0, duracionMinutos)
+	for minuto := start.UTC().Unix()/60; minuto < end.UTC().Unix()/60; minuto++ {
+		bloqueos = append(bloqueos, bloqueoTurno{ProfesionalID:req.ProfesionalID, Minuto:minuto, TurnoID:doc.ID})
+	}
+	if len(bloqueos) > 0 {
+		if _, err := s.bloqueos.InsertMany(ctx, bloqueos); err != nil {
+			_, _ = s.bloqueos.DeleteMany(context.Background(), bson.D{{Key:"turnoId",Value:doc.ID}})
+			if mongo.IsDuplicateKeyError(err) { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"HORARIO_OCUPADO","message":"Ese horario ya está reservado o fue tomado por otra solicitud."}}); return }
+			c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo bloquear el horario de forma segura"}); return
+		}
+	}
+	if _,err:=s.turnos.InsertOne(ctx,doc); err!=nil {
+		_, _ = s.bloqueos.DeleteMany(context.Background(), bson.D{{Key:"turnoId",Value:doc.ID}})
+		c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo crear el turno"}); return
+	}
 	c.JSON(http.StatusCreated,gin.H{"turno":doc})
 }
 
@@ -301,6 +316,7 @@ func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 	if t.Estado!="confirmado" { c.JSON(http.StatusConflict,gin.H{"error":"el turno ya no está confirmado"}); return }
 	_,err:=s.turnos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id},{Key:"estado",Value:"confirmado"}},bson.D{{Key:"$set",Value:bson.D{{Key:"estado",Value:"cancelado"}}}})
 	if err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo cancelar el turno"}); return }
+	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key:"turnoId",Value:id}})
 	c.Status(http.StatusNoContent)
 }
 
