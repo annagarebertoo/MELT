@@ -51,6 +51,7 @@ type servidorReservas struct {
 
 var permisosPorOperacion = map[string]map[string]bool{
 	"reservas.consultar-propias": {"cliente": true},
+	"reservas.consultar-disponibilidad": {"cliente": true, "profesional": true, "recepcion": true, "administrador": true, "superadministrador": true},
 	"reservas.consultar-mis-turnos": {"cliente": true, "profesional": true, "recepcion": true, "administrador": true, "superadministrador": true},
 	"reservas.cancelar-turno": {"cliente": true, "recepcion": true, "administrador": true, "superadministrador": true},
 	"reservas.crear": {"cliente": true},
@@ -85,7 +86,7 @@ func (s *servidorReservas) router() *gin.Engine {
 	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"servicio":"reservas","estado":"ok"}) })
 	r.GET("/me", requiereIdentidad(), func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"usuario": identidadDesdeHeaders(c)}) })
 	r.PUT("/agenda", requiereIdentidad("profesional","recepcion","administrador","superadministrador"), requierePermiso("reservas.gestionar-agenda"), s.guardarAgenda)
-	r.GET("/disponibilidad", requiereIdentidad("cliente","profesional","recepcion","administrador","superadministrador"), s.disponibilidad)
+	r.GET("/disponibilidad", requiereIdentidad("cliente","profesional","recepcion","administrador","superadministrador"), requierePermiso("reservas.consultar-disponibilidad"), s.disponibilidad)
 	r.GET("/turnos", requiereIdentidad(), requierePermiso("reservas.consultar-mis-turnos"), s.listarTurnos)
 	r.POST("/turnos", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.crearTurno)
 	r.DELETE("/turnos/:id", requiereIdentidad(), requierePermiso("reservas.cancelar-turno"), s.cancelarTurno)
@@ -225,7 +226,16 @@ func (s *servidorReservas) crearTurno(c *gin.Context) {
 func (s *servidorReservas) listarTurnos(c *gin.Context) {
 	u:=c.MustGet("identidad").(identidad)
 	filter:=bson.D{}
-	if tieneRol(u,"cliente") && !tieneRol(u,"recepcion","administrador","superadministrador") { filter=append(filter,bson.E{Key:"clienteId",Value:u.ID}) } else if tieneRol(u,"profesional") && !tieneRol(u,"recepcion","administrador","superadministrador") { filter=append(filter,bson.E{Key:"profesionalId",Value:u.ID}) }
+	if tieneRol(u,"recepcion","administrador","superadministrador") {
+		// Personal autorizado puede consultar todos los turnos.
+	} else if tieneRol(u,"cliente") {
+		filter=append(filter,bson.E{Key:"clienteId",Value:u.ID})
+	} else if tieneRol(u,"profesional") {
+		filter=append(filter,bson.E{Key:"profesionalId",Value:u.ID})
+	} else {
+		c.JSON(http.StatusForbidden,gin.H{"error":gin.H{"code":"PERMISOS_INSUFICIENTES","message":"No tenés permisos para consultar turnos."}})
+		return
+	}
 	ctx,cancel:=context.WithTimeout(c.Request.Context(),5*time.Second); defer cancel()
 	cur,err:=s.turnos.Find(ctx,filter,options.Find().SetSort(bson.D{{Key:"inicio",Value:1}}))
 	if err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudieron consultar los turnos"}); return }
