@@ -50,3 +50,36 @@ func TestHealthSinServidorDevuelve503(t *testing.T) {
 		t.Fatalf("se esperaba %d y se obtuvo %d", http.StatusServiceUnavailable, recorder.Code)
 	}
 }
+
+func TestMisPuntosRequiereIdentidadYRolCliente(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	servidor := &Servidor{}
+	router := crearRouter(servidor)
+
+	sinSesion := httptest.NewRecorder()
+	router.ServeHTTP(sinSesion, httptest.NewRequest(http.MethodGet, "/mis-puntos", nil))
+	if sinSesion.Code != http.StatusUnauthorized {
+		t.Fatalf("sin identidad: esperado 401, obtenido %d", sinSesion.Code)
+	}
+
+	noCliente := httptest.NewRequest(http.MethodGet, "/mis-puntos", nil)
+	noCliente.Header.Set("X-Auth-User-ID", "u-1")
+	noCliente.Header.Set("X-Auth-User-Email", "admin@example.com")
+	noCliente.Header.Set("X-Auth-User-Roles", "administrador")
+	prohibido := httptest.NewRecorder()
+	router.ServeHTTP(prohibido, noCliente)
+	if prohibido.Code != http.StatusForbidden {
+		t.Fatalf("rol no cliente: esperado 403, obtenido %d", prohibido.Code)
+	}
+}
+
+func TestRutaMisPuntosRegistrada(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := crearRouter(nil)
+	for _, route := range router.Routes() {
+		if route.Method == http.MethodGet && route.Path == "/mis-puntos" {
+			return
+		}
+	}
+	t.Fatal("la ruta GET /mis-puntos no está registrada")
+}
