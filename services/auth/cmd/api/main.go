@@ -349,6 +349,7 @@ func (s *authServer) verificarSesion(c *gin.Context) {
 	// por el cliente antes de reenviar la petición al servicio de negocio.
 	c.Header("X-Auth-User-ID", usuario.ID)
 	c.Header("X-Auth-User-Roles", strings.Join(usuario.Roles, ","))
+	c.Header("X-Auth-User-Email", usuario.Email)
 	c.Status(http.StatusNoContent)
 }
 
