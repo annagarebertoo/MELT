@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -171,7 +172,7 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 
 	if precioMaxTexto := strings.TrimSpace(c.Query("precioMax")); precioMaxTexto != "" {
 		precioMax, parseErr := strconv.ParseFloat(precioMaxTexto, 64)
-		if parseErr != nil || precioMax < 0 {
+		if parseErr != nil || !precioValido(precioMax) {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": gin.H{
 					"code":    "INVALID_PARAMETER",
@@ -308,7 +309,7 @@ func (s *Servidor) crearTratamiento(c *gin.Context) {
 		tratamiento.Categoria == "" ||
 		tratamiento.Descripcion == "" ||
 		tratamiento.Moneda != "ARS" ||
-		tratamiento.Precio < 0 ||
+		!precioValido(tratamiento.Precio) ||
 		tratamiento.DuracionMinutos <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
@@ -336,6 +337,10 @@ func (s *Servidor) crearTratamiento(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, tratamiento)
+}
+
+func precioValido(precio float64) bool {
+	return precio >= 0 && !math.IsNaN(precio) && !math.IsInf(precio, 0)
 }
 
 func parsePagination(pageText, limitText string) (int, int, error) {
