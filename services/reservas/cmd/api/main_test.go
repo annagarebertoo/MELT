@@ -4,85 +4,55 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-func TestMeRequiereIdentidadVerificada(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	router.GET("/me", requiereIdentidad(), func(c *gin.Context) { c.Status(http.StatusOK) })
-
-	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/me", nil))
-	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("se esperaba 401 sin identidad y se obtuvo %d", recorder.Code)
+func TestAgendaValida(t *testing.T) {
+	cases := []struct { name string; day int; start, end string; want bool }{
+		{"rango válido", 1, "09:00", "17:00", true},
+		{"día fuera de rango", 7, "09:00", "17:00", false},
+		{"fin igual a inicio", 2, "09:00", "09:00", false},
+		{"hora inválida", 2, "25:00", "26:00", false},
+		{"fin anterior", 2, "18:00", "09:00", false},
 	}
+	for _, tc := range cases { t.Run(tc.name, func(t *testing.T) {
+		if got:=agendaValida(tc.day,tc.start,tc.end); got!=tc.want { t.Fatalf("agendaValida()=%v, se esperaba %v",got,tc.want) }
+	}) }
 }
 
-func TestRequiereIdentidadRechazaRolIncorrecto(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	router.GET("/profesional", requiereIdentidad("profesional"), func(c *gin.Context) { c.Status(http.StatusOK) })
-
-	req := httptest.NewRequest(http.MethodGet, "/profesional", nil)
-	req.Header.Set("X-Auth-User-ID", "cliente-1")
-	req.Header.Set("X-Auth-User-Email", "cliente@example.com")
-	req.Header.Set("X-Auth-User-Roles", "cliente")
-	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, req)
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("se esperaba 403 para rol incorrecto y se obtuvo %d", recorder.Code)
+func TestSlotNoSuperpuesto(t *testing.T) {
+	base:=time.Date(2026,10,28,10,0,0,0,time.UTC)
+	cases:=[]struct{name string; start,end time.Time; want bool}{
+		{"solapado",base.Add(30*time.Minute),base.Add(90*time.Minute),false},
+		{"adyacente posterior",base.Add(time.Hour),base.Add(2*time.Hour),true},
+		{"adyacente anterior",base.Add(-time.Hour),base,true},
 	}
+	for _,tc:=range cases { t.Run(tc.name,func(t *testing.T){
+		if got:=slotNoSuperpuesto(tc.start,tc.end,base,base.Add(time.Hour)); got!=tc.want { t.Fatalf("slotNoSuperpuesto()=%v, se esperaba %v",got,tc.want) }
+	}) }
 }
 
-func TestMeDevuelveIdentidadDelGateway(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	router.GET("/me", requiereIdentidad(), func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"usuario": identidadDesdeHeaders(c)})
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/me", nil)
-	req.Header.Set("X-Auth-User-ID", "cliente-1")
-	req.Header.Set("X-Auth-User-Email", "CLIENTE@example.com")
-	req.Header.Set("X-Auth-User-Roles", "cliente")
-	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, req)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("se esperaba 200 y se obtuvo %d: %s", recorder.Code, recorder.Body.String())
-	}
+func TestRequiereIdentidadDeniegaAnonimo(t *testing.T) {
+	gin.SetMode(gin.TestMode); router:=gin.New()
+	router.GET("/turnos",requiereIdentidad(),requierePermiso("reservas.consultar-mis-turnos"),func(c *gin.Context){c.Status(http.StatusOK)})
+	rec:=httptest.NewRecorder(); router.ServeHTTP(rec,httptest.NewRequest(http.MethodGet,"/turnos",nil))
+	if rec.Code!=http.StatusUnauthorized { t.Fatalf("se esperaba 401 y se obtuvo %d",rec.Code) }
 }
 
 func TestPermisosPorOperacion(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	tests := []struct {
-		name       string
-		operacion  string
-		rol        string
-		wantStatus int
-	}{
-		{"cliente crea reserva", "reservas.crear", "cliente", http.StatusOK},
-		{"profesional no crea reserva de cliente", "reservas.crear", "profesional", http.StatusForbidden},
-		{"recepcion consulta todas", "reservas.consultar-todas", "recepcion", http.StatusOK},
-		{"cliente no consulta todas", "reservas.consultar-todas", "cliente", http.StatusForbidden},
-		{"operación sin política denegada", "reservas.operacion-desconocida", "administrador", http.StatusForbidden},
+	cases:=[]struct{name,op,role string; want int}{
+		{"cliente puede crear","reservas.crear","cliente",http.StatusOK},
+		{"profesional no crea por cliente","reservas.crear","profesional",http.StatusForbidden},
+		{"recepción puede consultar turnos","reservas.consultar-mis-turnos","recepcion",http.StatusOK},
+		{"cliente no gestiona agenda","reservas.gestionar-agenda","cliente",http.StatusForbidden},
+		{"operación desconocida denegada","reservas.desconocida","administrador",http.StatusForbidden},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			router := gin.New()
-			router.GET("/operacion", requiereIdentidad(), requierePermiso(tt.operacion), func(c *gin.Context) {
-				c.Status(http.StatusOK)
-			})
-			req := httptest.NewRequest(http.MethodGet, "/operacion", nil)
-			req.Header.Set("X-Auth-User-ID", "user-1")
-			req.Header.Set("X-Auth-User-Email", "user@example.com")
-			req.Header.Set("X-Auth-User-Roles", tt.rol)
-			recorder := httptest.NewRecorder()
-			router.ServeHTTP(recorder, req)
-			if recorder.Code != tt.wantStatus {
-				t.Fatalf("se esperaba %d y se obtuvo %d: %s", tt.wantStatus, recorder.Code, recorder.Body.String())
-			}
-		})
-	}
+	for _,tc:=range cases { t.Run(tc.name,func(t *testing.T){
+		router:=gin.New()
+		router.GET("/test",func(c *gin.Context){ c.Set("identidad",identidad{ID:"u1",Email:"u@example.com",Roles:[]string{tc.role}}); c.Next() },requierePermiso(tc.op),func(c *gin.Context){c.Status(http.StatusOK)})
+		rec:=httptest.NewRecorder(); router.ServeHTTP(rec,httptest.NewRequest(http.MethodGet,"/test",nil))
+		if rec.Code!=tc.want { t.Fatalf("se esperaba %d y se obtuvo %d: %s",tc.want,rec.Code,rec.Body.String()) }
+	}) }
 }
