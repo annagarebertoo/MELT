@@ -125,7 +125,7 @@ curl -X POST http://localhost:8080/api/v1/beneficios/registro-externo \
   }'
 ```
 
-La primera solicitud devuelve `201`; repetir la misma `solicitudId` con el mismo email devuelve `200` sin sumar el regalo otra vez. Un email ya registrado con otra solicitud devuelve `409`. La ruta requiere configuración: si faltan las variables, devuelve `503` y no inventa puntos.
+La primera solicitud devuelve `201`; repetir la misma `solicitudId` con el mismo email devuelve `200` sin sumar el regalo otra vez. Un email ya registrado con otra solicitud devuelve `409`. La ruta requiere configuración: si faltan las variables, devuelve `503` y no inventa puntos. Esta ruta de integración del gimnasio se autentica con `X-Partner-Key`, por lo que queda exceptuada de la sesión Bearer de clientes.
 
 **Alcance importante:** este endpoint guarda el registro externo y el saldo inicial de puntos en la base de Beneficios. No reemplaza una integración con un servicio de usuarios/autenticación, que todavía no existe en este repositorio. Antes de usarlo con el Grupo 1 hay que acordar los nombres reales de planes/membresías y las cantidades de puntos, configurar las credenciales por fuera del código y desplegar una URL accesible para ambos grupos.
 
