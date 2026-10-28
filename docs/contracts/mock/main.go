@@ -246,7 +246,7 @@ func tratamientoPorIDHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func filtrarTratamientos(q, categoria string, hasMaxPrice bool, precioMax float64) []Tratamiento {
-	var resultados []Tratamiento
+	resultados := make([]Tratamiento, 0)
 
 	for _, tratamiento := range tratamientos {
 
