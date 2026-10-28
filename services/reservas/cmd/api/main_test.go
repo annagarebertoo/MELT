@@ -63,3 +63,14 @@ func TestTratamientoCompatible(t *testing.T) {
 	if tratamientoCompatible(tratamiento, "prof-3") { t.Fatal("un profesional no asociado no debe ser habilitado") }
 	if tratamientoCompatible(tratamientoCatalogo{ID: "sin-asignar"}, "prof-1") { t.Fatal("un tratamiento sin profesionales asociados debe fallar de forma segura") }
 }
+
+func TestImporteSenaTreintaPorCiento(t *testing.T) {
+	cases := []struct{ precio, want float64 }{{10000,3000},{1999.99,600},{0,0}}
+	for _,tc:=range cases { if got:=importeSena(tc.precio); got!=tc.want { t.Fatalf("importeSena(%v)=%v; esperado %v",tc.precio,got,tc.want) } }
+}
+
+func TestImporteDevolucionSegunAnticipacion(t *testing.T) {
+	now:=time.Date(2026,10,28,12,0,0,0,time.UTC)
+	cases:=[]struct{name string; inicio time.Time; want float64}{{"más de 24 horas",now.Add(25*time.Hour),3000},{"exactamente 24 horas",now.Add(24*time.Hour),3000},{"menos de 24 horas",now.Add(23*time.Hour+59*time.Minute),0},{"seña cero",now.Add(48*time.Hour),0}}
+	for _,tc:=range cases { t.Run(tc.name,func(t *testing.T){if got:=importeDevolucion(3000,tc.inicio,now);tc.name=="seña cero" { got=importeDevolucion(0,tc.inicio,now); if got!=tc.want {t.Fatalf("got %v want %v",got,tc.want)} } else if got!=tc.want {t.Fatalf("got %v want %v",got,tc.want)}}) }
+}
