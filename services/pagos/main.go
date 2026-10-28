@@ -55,7 +55,7 @@ type mpPayment struct {
 func (s *server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "provider": "mercadopago", "mode": "test"})
+		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "provider": "mercadopago", "mode": "test", "configured": s.token != ""})
 	})
 	mux.HandleFunc("POST /payments/verify", s.verify)
 	mux.HandleFunc("POST /payments/refunds", s.refund)
