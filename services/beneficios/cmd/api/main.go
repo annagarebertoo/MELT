@@ -41,6 +41,7 @@ type RegistroExterno struct {
 }
 
 type Servidor struct {
+	cliente            *mongo.Client
 	registros          *mongo.Collection
 	codigoGimnasio     string
 	claveAPI           string
@@ -82,6 +83,7 @@ func main() {
 		log.Fatal("PUNTOS_POR_PLAN_MEMBRESIA debe ser un JSON válido con puntos no negativos")
 	}
 	servidor := &Servidor{
+		cliente:            cliente,
 		registros:          coleccion,
 		codigoGimnasio:     strings.TrimSpace(os.Getenv("CODIGO_GIMNASIO")),
 		claveAPI:           strings.TrimSpace(os.Getenv("CLAVE_API_GIMNASIO")),
@@ -101,13 +103,13 @@ func crearRouter(servidor *Servidor) *gin.Engine {
 	router.Use(gin.Logger(), gin.Recovery())
 
 	router.GET("/health", func(c *gin.Context) {
-		if servidor == nil || servidor.registros == nil {
+		if servidor == nil || servidor.cliente == nil || servidor.registros == nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"servicio": "beneficios", "estado": "degradado"})
 			return
 		}
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
-		if err := servidor.registros.Database().Client().Ping(ctx, nil); err != nil {
+		if err := servidor.cliente.Ping(ctx, nil); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"servicio": "beneficios", "estado": "degradado"})
 			return
 		}
