@@ -137,6 +137,10 @@ func (s *authServer) registrarCliente(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code":"DATOS_INVALIDOS","message":"Completá nombre, email válido y contraseña de al menos 8 caracteres."}})
 		return
 	}
+	if !passwordValida(req.Password) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code":"PASSWORD_INVALIDA","message":"La contraseña debe tener entre 8 y 72 bytes."}})
+		return
+	}
 	usuario, err := s.nuevoUsuario(c, req.Nombre, req.Email, req.Password, []string{"cliente"})
 	if err != nil { return }
 	c.JSON(http.StatusCreated, gin.H{"usuario": usuario})
@@ -146,6 +150,10 @@ func (s *authServer) crearUsuario(c *gin.Context) {
 	var req crearUsuarioRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code":"DATOS_INVALIDOS","message":"Completá nombre, email, contraseña y al menos un rol válido."}})
+		return
+	}
+	if !passwordValida(req.Password) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code":"PASSWORD_INVALIDA","message":"La contraseña debe tener entre 8 y 72 bytes."}})
 		return
 	}
 	for _, rol := range req.Roles {
@@ -179,6 +187,10 @@ func (s *authServer) crearUsuario(c *gin.Context) {
 	usuario, err := s.nuevoUsuario(c, req.Nombre, req.Email, req.Password, req.Roles)
 	if err != nil { return }
 	c.JSON(http.StatusCreated, gin.H{"usuario": usuario})
+}
+
+func passwordValida(password string) bool {
+	return len([]byte(password)) >= 8 && len([]byte(password)) <= 72
 }
 
 func (s *authServer) nuevoUsuario(c *gin.Context, nombre, email, password string, roles []string) (*Usuario, error) {
@@ -217,7 +229,7 @@ func (s *authServer) login(c *gin.Context) {
 	defer cancel()
 	var usuario Usuario
 	err := s.users.FindOne(ctx, bson.D{{Key:"email", Value:strings.ToLower(strings.TrimSpace(req.Email))}}).Decode(&usuario)
-	if err != nil || bcrypt.CompareHashAndPassword([]byte(usuario.PasswordHash), []byte(req.Password)) != nil || !usuario.Activo {
+	if !passwordValida(req.Password) || err != nil || bcrypt.CompareHashAndPassword([]byte(usuario.PasswordHash), []byte(req.Password)) != nil || !usuario.Activo {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code":"CREDENCIALES_INVALIDAS","message":"Email o contraseña incorrectos."}})
 		return
 	}
@@ -243,6 +255,14 @@ func (s *authServer) emitirToken(u Usuario) (string, error) {
 func (s *authServer) validarToken(token string) (*claims, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 { return nil, errors.New("token inválido") }
+	headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return nil, errors.New("header inválido")
+	}
+	var header map[string]string
+	if err := json.Unmarshal(headerJSON, &header); err != nil || header["alg"] != "HS256" || header["typ"] != "JWT" {
+		return nil, errors.New("algoritmo de token inválido")
+	}
 	unsigned := parts[0]+"."+parts[1]
 	mac := hmac.New(sha256.New, s.jwtSecret)
 	_, _ = mac.Write([]byte(unsigned))
@@ -342,3 +362,4 @@ func crearAdminInicial(ctx context.Context, users *mongo.Collection) error {
 	}
 	return err
 }
+
