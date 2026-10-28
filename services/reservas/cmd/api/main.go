@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -46,7 +48,31 @@ type turno struct {
 type servidorReservas struct {
 	agendas *mongo.Collection
 	turnos *mongo.Collection
+	catalogoURL string
+	httpClient *http.Client
 	mu sync.Mutex
+}
+
+type tratamientoCatalogo struct {
+	ID string `json:"id"`
+	Nombre string `json:"nombre"`
+	DuracionMinutos int `json:"duracionMinutos"`
+}
+
+func (s *servidorReservas) obtenerTratamiento(ctx context.Context, id string) (tratamientoCatalogo, int, error) {
+	var t tratamientoCatalogo
+	if strings.TrimSpace(id) == "" { return t, http.StatusBadRequest, errors.New("tratamientoId es obligatorio") }
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(s.catalogoURL, "/")+"/tratamientos/"+url.PathEscape(id), nil)
+	if err != nil { return t, http.StatusServiceUnavailable, err }
+	resp, err := s.httpClient.Do(req)
+	if err != nil { return t, http.StatusServiceUnavailable, err }
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound { return t, http.StatusUnprocessableEntity, errors.New("el tratamiento no existe en Catálogo") }
+	if resp.StatusCode != http.StatusOK { return t, http.StatusServiceUnavailable, errors.New("Catálogo no está disponible") }
+	if err := json.NewDecoder(resp.Body).Decode(&t); err != nil || t.ID == "" || t.DuracionMinutos < 1 || t.DuracionMinutos > 480 {
+		return t, http.StatusServiceUnavailable, errors.New("Catálogo devolvió un tratamiento inválido")
+	}
+	return t, http.StatusOK, nil
 }
 
 var permisosPorOperacion = map[string]map[string]bool{
@@ -72,7 +98,9 @@ func main() {
 	defer client.Disconnect(context.Background())
 	if err := client.Ping(ctx, nil); err != nil { log.Fatal("no se pudo conectar con MongoDB") }
 	db := client.Database("reservas_db")
-	s := &servidorReservas{agendas: db.Collection("agendas_semanales"), turnos: db.Collection("turnos")}
+	catalogoURL := strings.TrimSpace(os.Getenv("CATALOGO_URL"))
+	if catalogoURL == "" { catalogoURL = "http://catalogo-profesionales:8081" }
+	s := &servidorReservas{agendas: db.Collection("agendas_semanales"), turnos: db.Collection("turnos"), catalogoURL: catalogoURL, httpClient: &http.Client{Timeout: 3*time.Second}}
 	_, err = s.agendas.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key:"profesionalId",Value:1},{Key:"diaSemana",Value:1}}, Options: options.Index().SetUnique(true).SetName("uq_agenda_profesional_dia")})
 	if err != nil { log.Fatal("no se pudo crear índice de agenda") }
 	_, err = s.turnos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key:"profesionalId",Value:1},{Key:"inicio",Value:1}}, Options: options.Index().SetName("ix_turnos_profesional_inicio")})
@@ -177,9 +205,20 @@ func (s *servidorReservas) guardarAgenda(c *gin.Context) {
 }
 
 func (s *servidorReservas) disponibilidad(c *gin.Context) {
-	prof:=strings.TrimSpace(c.Query("profesionalId")); fecha,err:=time.Parse("2006-01-02",c.Query("fecha")); dur,errDur:=parsePositiveInt(c.Query("duracionMinutos"))
-	if prof=="" || err!=nil || errDur!=nil || dur<5 || dur>480 { c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"PARAMETROS_INVALIDOS","message":"Usá profesionalId, fecha (YYYY-MM-DD) y duracionMinutos entre 5 y 480."}}); return }
+	prof:=strings.TrimSpace(c.Query("profesionalId")); fecha,err:=time.Parse("2006-01-02",c.Query("fecha"))
+	if prof=="" || err!=nil { c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"PARAMETROS_INVALIDOS","message":"Usá profesionalId y fecha (YYYY-MM-DD)."}}); return }
 	ctx,cancel:=context.WithTimeout(c.Request.Context(),5*time.Second); defer cancel()
+	dur := 0
+	if tratamientoID := strings.TrimSpace(c.Query("tratamientoId")); tratamientoID != "" {
+		tratamiento, status, catErr := s.obtenerTratamiento(ctx, tratamientoID)
+		if catErr != nil { c.JSON(status, gin.H{"error":gin.H{"code":"TRATAMIENTO_NO_VALIDO","message":catErr.Error()}}); return }
+		dur = tratamiento.DuracionMinutos
+	} else {
+		// Compatibilidad temporal: los clientes nuevos deben enviar tratamientoId.
+		dur, err = parsePositiveInt(c.Query("duracionMinutos"))
+		if err != nil { dur = 0 }
+	}
+	if dur < 5 || dur > 480 { c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"PARAMETROS_INVALIDOS","message":"Enviá tratamientoId (preferido) o duracionMinutos entre 5 y 480."}}); return }
 	var agenda agendaSemanal
 	if err:=s.agendas.FindOne(ctx,bson.D{{Key:"profesionalId",Value:prof},{Key:"diaSemana",Value:int(fecha.Weekday())},{Key:"activo",Value:true}}).Decode(&agenda); err!=nil {
 		if errors.Is(err,mongo.ErrNoDocuments) { c.JSON(http.StatusOK,gin.H{"profesionalId":prof,"fecha":c.Query("fecha"),"horarios":[]string{}}); return }
@@ -203,22 +242,25 @@ func parsePositiveInt(v string) (int,error) { var n int; _,err:=fmtSscanf(v,"%d"
 
 func (s *servidorReservas) crearTurno(c *gin.Context) {
 	u:=c.MustGet("identidad").(identidad)
-	var req struct { ProfesionalID string `json:"profesionalId" binding:"required"`; TratamientoID string `json:"tratamientoId" binding:"required"`; Inicio string `json:"inicio" binding:"required"`; DuracionMinutos int `json:"duracionMinutos" binding:"required"` }
-	if err:=c.ShouldBindJSON(&req); err!=nil || req.DuracionMinutos<5 || req.DuracionMinutos>480 { c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"TURNO_INVALIDO","message":"Indicá profesional, tratamiento, inicio RFC3339 y duración entre 5 y 480 minutos."}}); return }
-	start,err:=time.Parse(time.RFC3339,req.Inicio); if err!=nil || !start.After(time.Now()) { c.JSON(http.StatusBadRequest,gin.H{"error":"el inicio debe ser una fecha futura RFC3339"}); return }
-	end:=start.Add(time.Duration(req.DuracionMinutos)*time.Minute)
-	s.mu.Lock(); defer s.mu.Unlock()
+	var req struct { ProfesionalID string `json:"profesionalId" binding:"required"`; TratamientoID string `json:"tratamientoId" binding:"required"`; Inicio string `json:"inicio" binding:"required"` }
+	if err:=c.ShouldBindJSON(&req); err!=nil { c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"TURNO_INVALIDO","message":"Indicá profesionalId, tratamientoId e inicio RFC3339."}}); return }
 	ctx,cancel:=context.WithTimeout(c.Request.Context(),5*time.Second); defer cancel()
+	tratamiento, status, catErr := s.obtenerTratamiento(ctx, req.TratamientoID)
+	if catErr != nil { c.JSON(status, gin.H{"error":gin.H{"code":"TRATAMIENTO_NO_VALIDO","message":catErr.Error()}}); return }
+	start,err:=time.Parse(time.RFC3339,req.Inicio); if err!=nil || !start.After(time.Now()) { c.JSON(http.StatusBadRequest,gin.H{"error":"el inicio debe ser una fecha futura RFC3339"}); return }
+	duracionMinutos := tratamiento.DuracionMinutos
+	end:=start.Add(time.Duration(duracionMinutos)*time.Minute)
+	s.mu.Lock(); defer s.mu.Unlock()
 	var agenda agendaSemanal
 	if err:=s.agendas.FindOne(ctx,bson.D{{Key:"profesionalId",Value:req.ProfesionalID},{Key:"diaSemana",Value:int(start.Weekday())},{Key:"activo",Value:true}}).Decode(&agenda); err!=nil { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"FUERA_DE_AGENDA","message":"El profesional no atiende ese día."}}); return }
 	from,_:=parseHora(agenda.HoraInicio); to,_:=parseHora(agenda.HoraFin)
 	minute:=start.Hour()*60+start.Minute()
-	if minute<from || minute+req.DuracionMinutos>to || start.Second()!=0 || start.Nanosecond()!=0 { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"FUERA_DE_AGENDA","message":"El horario queda fuera de la agenda del profesional."}}); return }
+	if minute<from || minute+duracionMinutos>to || start.Second()!=0 || start.Nanosecond()!=0 { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"FUERA_DE_AGENDA","message":"El horario queda fuera de la agenda del profesional."}}); return }
 	var overlap turno
 	err=s.turnos.FindOne(ctx,bson.D{{Key:"profesionalId",Value:req.ProfesionalID},{Key:"estado",Value:"confirmado"},{Key:"inicio",Value:bson.D{{Key:"$lt",Value:end}}},{Key:"fin",Value:bson.D{{Key:"$gt",Value:start}}}}).Decode(&overlap)
 	if err==nil { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"HORARIO_OCUPADO","message":"Ese horario ya está reservado."}}); return }
 	if !errors.Is(err,mongo.ErrNoDocuments) { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo verificar el horario"}); return }
-	doc:=turno{ID:bson.NewObjectID().Hex(),ClienteID:u.ID,ProfesionalID:req.ProfesionalID,TratamientoID:req.TratamientoID,Inicio:start.UTC(),Fin:end.UTC(),Estado:"confirmado",CreadoEn:time.Now().UTC()}
+	doc:=turno{ID:bson.NewObjectID().Hex(),ClienteID:u.ID,ProfesionalID:req.ProfesionalID,TratamientoID:tratamiento.ID,Inicio:start.UTC(),Fin:end.UTC(),Estado:"confirmado",CreadoEn:time.Now().UTC()}
 	if _,err:=s.turnos.InsertOne(ctx,doc); err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo crear el turno"}); return }
 	c.JSON(http.StatusCreated,gin.H{"turno":doc})
 }
