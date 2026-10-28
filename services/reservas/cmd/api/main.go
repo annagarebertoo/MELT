@@ -56,6 +56,7 @@ type servidorReservas struct {
 	bloqueos *mongo.Collection
 	carritos *mongo.Collection
 	catalogoURL string
+	pagosURL string
 	httpClient *http.Client
 }
 
@@ -124,7 +125,7 @@ func main() {
 	db := client.Database("reservas_db")
 	catalogoURL := strings.TrimSpace(os.Getenv("CATALOGO_URL"))
 	if catalogoURL == "" { catalogoURL = "http://catalogo-profesionales:8081" }
-	s := &servidorReservas{agendas: db.Collection("agendas_semanales"), turnos: db.Collection("turnos"), bloqueos: db.Collection("bloqueos_turnos"), carritos: db.Collection("carritos_bloqueos"), catalogoURL: catalogoURL, httpClient: &http.Client{Timeout: 3*time.Second}}
+	s := &servidorReservas{agendas: db.Collection("agendas_semanales"), turnos: db.Collection("turnos"), bloqueos: db.Collection("bloqueos_turnos"), carritos: db.Collection("carritos_bloqueos"), catalogoURL: catalogoURL, pagosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("PAGOS_URL")), "/"), httpClient: &http.Client{Timeout: 3*time.Second}}
 	_, err = s.agendas.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key:"profesionalId",Value:1},{Key:"diaSemana",Value:1}}, Options: options.Index().SetUnique(true).SetName("uq_agenda_profesional_dia")})
 	if err != nil { log.Fatal("no se pudo crear índice de agenda") }
 	_, err = s.turnos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key:"profesionalId",Value:1},{Key:"inicio",Value:1}}, Options: options.Index().SetName("ix_turnos_profesional_inicio")})
@@ -351,6 +352,135 @@ func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 	if err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo cancelar el turno"}); return }
 	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key:"turnoId",Value:id}})
 	c.Status(http.StatusNoContent)
+}
+
+
+type bloqueoCarrito struct {
+	ID string `bson:"_id" json:"id"`
+	ClienteID string `bson:"clienteId" json:"clienteId"`
+	ProfesionalID string `bson:"profesionalId" json:"profesionalId"`
+	TratamientoID string `bson:"tratamientoId" json:"tratamientoId"`
+	Inicio time.Time `bson:"inicio" json:"inicio"`
+	Fin time.Time `bson:"fin" json:"fin"`
+	Precio float64 `bson:"precio" json:"precio"`
+	Moneda string `bson:"moneda" json:"moneda"`
+	Sena float64 `bson:"sena" json:"sena"`
+	Estado string `bson:"estado" json:"estado"`
+	ExpiraEn time.Time `bson:"expiraEn" json:"expiraEn"`
+	TurnoID string `bson:"turnoId,omitempty" json:"turnoId,omitempty"`
+	PagoID string `bson:"pagoId,omitempty" json:"pagoId,omitempty"`
+}
+
+type solicitudCarrito struct {
+	ProfesionalID string `json:"profesionalId" binding:"required"`
+	TratamientoID string `json:"tratamientoId" binding:"required"`
+	Inicio string `json:"inicio" binding:"required"`
+}
+
+type confirmarCarritoRequest struct {
+	PagoID string `json:"pagoId" binding:"required"`
+}
+
+type verificacionPagoRequest struct {
+	PagoID string `json:"pagoId"`
+	Importe float64 `json:"importe"`
+	Moneda string `json:"moneda"`
+	Referencia string `json:"referencia"`
+}
+
+type verificacionPagoResponse struct {
+	Aprobado bool `json:"aprobado"`
+	PagoID string `json:"pagoId"`
+}
+
+func importeSena(precio float64) float64 {
+	return math.Round(precio*0.30*100) / 100
+}
+
+func (s *servidorReservas) verificarPago(ctx context.Context, pagoID string, importe float64, moneda, referencia string) error {
+	if s.pagosURL == "" { return errors.New("el proveedor de pagos no está configurado; la reserva no puede confirmarse") }
+	payload, _ := json.Marshal(verificacionPagoRequest{PagoID:pagoID, Importe:importe, Moneda:moneda, Referencia:referencia})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.pagosURL+"/payments/verify", strings.NewReader(string(payload)))
+	if err != nil { return err }
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", referencia)
+	resp, err := s.httpClient.Do(req)
+	if err != nil { return err }
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK { return errors.New("el proveedor de pagos no pudo verificar la seña") }
+	var result verificacionPagoResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil { return err }
+	if !result.Aprobado || result.PagoID != pagoID { return errors.New("la seña no figura como aprobada") }
+	return nil
+}
+
+func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
+	u := c.MustGet("identidad").(identidad)
+	var req solicitudCarrito
+	if err := c.ShouldBindJSON(&req); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":gin.H{"code":"CARRITO_INVALIDO","message":"Indicá profesionalId, tratamientoId e inicio RFC3339."}}); return }
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second); defer cancel()
+	t, status, err := s.obtenerTratamiento(ctx, req.TratamientoID)
+	if err != nil { c.JSON(status, gin.H{"error":gin.H{"code":"TRATAMIENTO_NO_VALIDO","message":err.Error()}}); return }
+	if !tratamientoCompatible(t, req.ProfesionalID) { c.JSON(http.StatusUnprocessableEntity, gin.H{"error":gin.H{"code":"PROFESIONAL_NO_APTO","message":"El profesional no está habilitado para este tratamiento."}}); return }
+	if t.Precio < 0 || (t.Moneda != "" && t.Moneda != "ARS") { c.JSON(http.StatusUnprocessableEntity, gin.H{"error":gin.H{"code":"PRECIO_INVALIDO","message":"El tratamiento no tiene un precio válido en ARS."}}); return }
+	start, err := time.Parse(time.RFC3339, req.Inicio)
+	if err != nil || !start.After(time.Now()) || start.Second()!=0 || start.Nanosecond()!=0 || start.Minute()%15!=0 { c.JSON(http.StatusBadRequest, gin.H{"error":gin.H{"code":"INTERVALO_INVALIDO","message":"El inicio debe ser futuro, RFC3339 y coincidir con un intervalo de 15 minutos."}}); return }
+	end := start.Add(time.Duration(t.DuracionMinutos)*time.Minute)
+	var agenda agendaSemanal
+	if err := s.agendas.FindOne(ctx, bson.D{{Key:"profesionalId",Value:req.ProfesionalID},{Key:"diaSemana",Value:int(start.Weekday())},{Key:"activo",Value:true}}).Decode(&agenda); err != nil { c.JSON(http.StatusConflict, gin.H{"error":gin.H{"code":"FUERA_DE_AGENDA","message":"El profesional no atiende ese día."}}); return }
+	from,_ := parseHora(agenda.HoraInicio); to,_ := parseHora(agenda.HoraFin)
+	if start.Hour()*60+start.Minute()<from || start.Hour()*60+start.Minute()+t.DuracionMinutos>to { c.JSON(http.StatusConflict, gin.H{"error":gin.H{"code":"FUERA_DE_AGENDA","message":"El horario queda fuera de la agenda del profesional."}}); return }
+	now := time.Now().UTC()
+	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key:"expiraEn",Value:bson.D{{Key:"$lte",Value:now}}}})
+	var overlap turno
+	err = s.turnos.FindOne(ctx,bson.D{{Key:"profesionalId",Value:req.ProfesionalID},{Key:"estado",Value:"confirmado"},{Key:"inicio",Value:bson.D{{Key:"$lt",Value:end}}},{Key:"fin",Value:bson.D{{Key:"$gt",Value:start}}}}).Decode(&overlap)
+	if err == nil { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"HORARIO_OCUPADO","message":"Ese horario ya está reservado."}}); return }
+	if !errors.Is(err,mongo.ErrNoDocuments) { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo verificar el horario"}); return }
+	id := bson.NewObjectID().Hex()
+	expira := now.Add(10*time.Minute)
+	doc := bloqueoCarrito{ID:id,ClienteID:u.ID,ProfesionalID:req.ProfesionalID,TratamientoID:t.ID,Inicio:start.UTC(),Fin:end.UTC(),Precio:t.Precio,Moneda:"ARS",Sena:importeSena(t.Precio),Estado:"pendiente_pago",ExpiraEn:expira}
+	bloqueos := make([]interface{},0,t.DuracionMinutos)
+	for minuto:=start.UTC().Unix()/60; minuto<end.UTC().Unix()/60; minuto++ { bloqueos=append(bloqueos,bloqueoTurno{ProfesionalID:req.ProfesionalID,Minuto:minuto,TurnoID:id,ExpiraEn:&expira}) }
+	if _,err:=s.bloqueos.InsertMany(ctx,bloqueos); err!=nil {
+		_,_ = s.bloqueos.DeleteMany(context.Background(),bson.D{{Key:"turnoId",Value:id}})
+		if mongo.IsDuplicateKeyError(err) { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"HORARIO_OCUPADO","message":"Ese horario ya está reservado o bloqueado por otro carrito."}}); return }
+		c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo bloquear el horario"}); return
+	}
+	if _,err:=s.carritos.InsertOne(ctx,doc); err!=nil { _,_ = s.bloqueos.DeleteMany(context.Background(),bson.D{{Key:"turnoId",Value:id}}); c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo guardar el carrito"}); return }
+	c.JSON(http.StatusCreated,gin.H{"bloqueo":doc,"seña":{"porcentaje":30,"importe":doc.Sena,"moneda":doc.Moneda},"mensaje":"El horario queda bloqueado por 10 minutos. Para confirmar, aboná la seña y enviá el pago aprobado."})
+}
+
+func (s *servidorReservas) confirmarBloqueoCarrito(c *gin.Context) {
+	u:=c.MustGet("identidad").(identidad)
+	id:=strings.TrimSpace(c.Param("id"))
+	var req confirmarCarritoRequest
+	if err:=c.ShouldBindJSON(&req); err!=nil || strings.TrimSpace(req.PagoID)=="" { c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"PAGO_INVALIDO","message":"Indicá pagoId del proveedor de pagos."}}); return }
+	ctx,cancel:=context.WithTimeout(c.Request.Context(),8*time.Second); defer cancel()
+	var cart bloqueoCarrito
+	if err:=s.carritos.FindOne(ctx,bson.D{{Key:"_id",Value:id}}).Decode(&cart); err!=nil {
+		if errors.Is(err,mongo.ErrNoDocuments) { c.JSON(http.StatusGone,gin.H{"error":gin.H{"code":"BLOQUEO_VENCIDO","message":"El bloqueo venció o no existe. Volvé a elegir el horario."}}); return }
+		c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo consultar el carrito"}); return
+	}
+	if cart.ClienteID!=u.ID { c.JSON(http.StatusForbidden,gin.H{"error":"el carrito pertenece a otro cliente"}); return }
+	if cart.Estado!="pendiente_pago" || !cart.ExpiraEn.After(time.Now()) { c.JSON(http.StatusGone,gin.H{"error":gin.H{"code":"BLOQUEO_VENCIDO","message":"El bloqueo venció; iniciá una nueva reserva."}}); return }
+	if err:=s.verificarPago(ctx,req.PagoID,cart.Sena,cart.Moneda,id); err!=nil { c.JSON(http.StatusPaymentRequired,gin.H{"error":gin.H{"code":"SENA_NO_APROBADA","message":err.Error()}}); return }
+	// La reserva sólo se confirma si el proveedor valida el pago por el importe exacto.
+	now:=time.Now().UTC()
+	doc:=turno{ID:bson.NewObjectID().Hex(),ClienteID:cart.ClienteID,ProfesionalID:cart.ProfesionalID,TratamientoID:cart.TratamientoID,Inicio:cart.Inicio,Fin:cart.Fin,Estado:"confirmado",CreadoEn:now,PrecioTratamiento:cart.Precio,Sena:cart.Sena,PagoID:req.PagoID,EstadoPago:"aprobado"}
+	res,err:=s.carritos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id},{Key:"estado",Value:"pendiente_pago"},{Key:"expiraEn",Value:bson.D{{Key:"$gt",Value:now}}}},bson.D{{Key:"$set",Value:bson.D{{Key:"estado",Value:"confirmando"},{Key:"pagoId",Value:req.PagoID}}}})
+	if err!=nil || res.MatchedCount!=1 { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"CARRITO_PROCESADO","message":"El carrito venció o ya está siendo confirmado."}}); return }
+	if _,err=s.turnos.InsertOne(ctx,doc); err!=nil {
+		_,_ = s.carritos.UpdateOne(context.Background(),bson.D{{Key:"_id",Value:id}},bson.D{{Key:"$set",Value:bson.D{{Key:"estado",Value:"pendiente_pago"}}},{Key:"$unset",Value:bson.D{{Key:"pagoId",Value:""}}}})
+		c.JSON(http.StatusServiceUnavailable,gin.H{"error":"se verificó el pago pero no se pudo confirmar el turno; contactá soporte con el identificador del pago"}); return
+	}
+	_,err=s.bloqueos.UpdateMany(ctx,bson.D{{Key:"turnoId",Value:id}},bson.D{{Key:"$set",Value:bson.D{{Key:"turnoId",Value:doc.ID}}},{Key:"$unset",Value:bson.D{{Key:"expiraEn",Value:""}}}})
+	if err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"turno creado pero no se pudo consolidar el bloqueo; requiere recuperación operativa"}); return }
+	_,_ = s.carritos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id}},bson.D{{Key:"$set",Value:bson.D{{Key:"estado",Value:"confirmado"},{Key:"turnoId",Value:doc.ID}}}})
+	c.JSON(http.StatusCreated,gin.H{"turno":doc,"pago":{"estado":"aprobado","importe":cart.Sena,"moneda":cart.Moneda}})
+}
+
+func (s *servidorReservas) confirmarTurnoDesdeCarrito(c *gin.Context) {
+	c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"CARRITO_REQUERIDO","message":"Primero bloqueá el horario con POST /carrito/bloqueos y luego confirmalo con el pago aprobado en POST /carrito/bloqueos/{id}/confirmar."}})
 }
 
 func slotNoSuperpuesto(start,end,otherStart,otherEnd time.Time) bool { return !start.Before(otherEnd) || !end.After(otherStart) }
