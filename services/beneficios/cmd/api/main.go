@@ -117,7 +117,54 @@ func crearRouter(servidor *Servidor) *gin.Engine {
 	})
 
 	router.POST("/registro-externo", servidor.registrarExterno)
+	router.GET("/mis-puntos", servidor.requiereCliente(), servidor.misPuntos)
 	return router
+}
+
+// requiereCliente solo acepta identidad propagada por el gateway después de
+// validar el Bearer token contra auth. Este servicio no publica un puerto al host.
+func (s *Servidor) requiereCliente() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := strings.TrimSpace(c.GetHeader("X-Auth-User-ID"))
+		email := strings.ToLower(strings.TrimSpace(c.GetHeader("X-Auth-User-Email")))
+		roles := strings.Split(c.GetHeader("X-Auth-User-Roles"), ",")
+		if id == "" || email == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "IDENTIDAD_REQUERIDA", "message": "Iniciá sesión para consultar tus puntos."}})
+			return
+		}
+		for _, rol := range roles {
+			if strings.TrimSpace(rol) == "cliente" {
+				c.Set("authUserID", id)
+				c.Set("authUserEmail", email)
+				c.Next()
+				return
+			}
+		}
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "PERMISOS_INSUFICIENTES", "message": "Esta operación es exclusiva para clientes."}})
+	}
+}
+
+// misPuntos consulta el saldo ya registrado para el email de la identidad verificada.
+// Los registros del gimnasio todavía no tienen vínculo persistente por ID de usuario.
+func (s *Servidor) misPuntos(c *gin.Context) {
+	if s == nil || s.registros == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "BENEFICIOS_NO_DISPONIBLE", "message": "El servicio de beneficios no está disponible."}})
+		return
+	}
+	email, _ := c.Get("authUserEmail")
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	var registro RegistroExterno
+	err := s.registros.FindOne(ctx, bson.D{{Key: "email", Value: email}}).Decode(&registro)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		c.JSON(http.StatusOK, gin.H{"usuarioId": c.GetString("authUserID"), "saldoPuntos": 0, "movimientos": []RegistroExterno{}})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "BENEFICIOS_NO_DISPONIBLE", "message": "No se pudo consultar el saldo."}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"usuarioId": c.GetString("authUserID"), "saldoPuntos": registro.SaldoPuntos, "movimientos": []RegistroExterno{registro}})
 }
 
 func (s *Servidor) registrarExterno(c *gin.Context) {

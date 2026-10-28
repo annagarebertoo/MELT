@@ -94,7 +94,7 @@ Los tests unitarios del catálogo cubren el endpoint de salud mediante una depen
 
 ## Alcance y limitaciones actuales
 
-El catálogo persiste tratamientos en MongoDB, ofrece búsqueda textual simple, filtro por categoría/precio máximo, paginación y ordenamiento. La creación mediante POST está implementada en la ruta compatible indicada arriba; la API pública contractual v1 expone solo lectura. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados en Compose, pero todavía no están integrados en los flujos de negocio. Reservas y Beneficios continúan siendo esqueletos HTTP. El registro de clientes, el enlace de registro referido por el Grupo 1 (Gimnasio), la asignación de puntos de regalo por referido, el frontend, autenticación, eventos de dominio, cache hit/miss, métricas de negocio, pruebas de carga y contrato externo desplegado siguen pendientes.
+El catálogo persiste tratamientos en MongoDB, ofrece búsqueda textual simple, filtro por categoría/precio máximo, paginación y ordenamiento. La creación mediante POST está implementada en la ruta compatible indicada arriba; la API pública contractual v1 expone solo lectura. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados en Compose, pero todavía no están integrados en los flujos de negocio. Reservas y Beneficios continúan siendo esqueletos HTTP. El frontend, la integración de la identidad con Reservas y Beneficios, los flujos completos de negocio, los eventos de dominio, cache hit/miss, métricas de negocio, pruebas de carga y el contrato externo desplegado siguen pendientes. La autenticación inicial ya está implementada en esta rama; ver la sección siguiente.
 
 
 ## Registro externo del gimnasio y puntos de regalo
@@ -125,6 +125,57 @@ curl -X POST http://localhost:8080/api/v1/beneficios/registro-externo \
   }'
 ```
 
-La primera solicitud devuelve `201`; repetir la misma `solicitudId` con el mismo email devuelve `200` sin sumar el regalo otra vez. Un email ya registrado con otra solicitud devuelve `409`. La ruta requiere configuración: si faltan las variables, devuelve `503` y no inventa puntos.
+La primera solicitud devuelve `201`; repetir la misma `solicitudId` con el mismo email devuelve `200` sin sumar el regalo otra vez. Un email ya registrado con otra solicitud devuelve `409`. La ruta requiere configuración: si faltan las variables, devuelve `503` y no inventa puntos. Esta ruta de integración del gimnasio se autentica con `X-Partner-Key`, por lo que queda exceptuada de la sesión Bearer de clientes.
 
-**Alcance importante:** este endpoint guarda el registro externo y el saldo inicial de puntos en la base de Beneficios. No reemplaza una integración con un servicio de usuarios/autenticación, que todavía no existe en este repositorio. Antes de usarlo con el Grupo 1 hay que acordar los nombres reales de planes/membresías y las cantidades de puntos, configurar las credenciales por fuera del código y desplegar una URL accesible para ambos grupos.
+**Alcance importante:** este endpoint guarda el registro externo y el saldo inicial de puntos en la base de Beneficios. No está conectado todavía con el servicio `auth` para vincular la identidad de ese registro con una cuenta MELT. Antes de usarlo con el Grupo 1 hay que acordar los nombres reales de planes/membresías y las cantidades de puntos, configurar las credenciales por fuera del código y desplegar una URL accesible para ambos grupos.
+
+
+## Autenticación y cuentas
+
+Antes de iniciar Compose, configurá el secreto JWT fuera del repositorio. En PowerShell podés usar:
+
+```powershell
+$env:AUTH_JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+docker compose config
+docker compose up --build -d
+docker compose ps
+```
+
+En Bash, podés generar una clave con `openssl rand -base64 48` y exportarla en `AUTH_JWT_SECRET`. No compartas ni subas la clave generada. Para crear el primer superadministrador, definí también `AUTH_ADMIN_EMAIL` y `AUTH_ADMIN_PASSWORD` en el entorno; la contraseña inicial debe tener al menos 12 caracteres.
+
+El servicio `auth` se publica por el gateway en `http://localhost:8080/api/v1/auth`. Para levantarlo, definí una clave JWT de al menos 32 caracteres en `AUTH_JWT_SECRET`. No uses una clave real en archivos versionados. Si la cuenta de superadministrador ya existe, el arranque no modifica sus datos.
+
+Endpoints iniciales:
+
+- `POST /api/v1/auth/registro`: alta pública de cliente; nunca acepta roles enviados por el usuario.
+- `POST /api/v1/auth/login`: inicia sesión y devuelve un token Bearer de corta duración.
+- `GET /api/v1/auth/me`: devuelve la cuenta actual; requiere `Authorization: Bearer <token>`.
+- `POST /api/v1/auth/usuarios`: crea usuarios internos con uno o más roles; requiere rol `administrador` o `superadministrador`.
+
+Roles definidos: `cliente`, `profesional`, `recepcion`, `administrador` y `superadministrador`. El email es único y normalizado a minúsculas; las contraseñas se guardan con bcrypt. El token vence según `AUTH_TOKEN_TTL_MINUTES` (15 minutos por defecto). NGINX limita los intentos de login a 10 por minuto (con una ráfaga de 5) y los registros a 5 por minuto (con una ráfaga de 3) por IP.
+
+Ejemplo de registro de cliente:
+
+```sh
+curl -X POST http://localhost:8080/api/v1/auth/registro \
+  -H "Content-Type: application/json" \
+  -d '{"nombre":"Cliente de prueba","email":"cliente@example.com","password":"una-clave-segura"}'
+```
+
+Ejemplo de inicio de sesión:
+
+```sh
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"cliente@example.com","password":"una-clave-segura"}'
+```
+
+**Límites de esta primera versión:** el token es stateless, por lo que cerrar sesión en el frontend no revoca un token ya emitido; vence automáticamente. Todavía no hay recuperación de contraseña por email ni verificación de email. NGINX verifica la sesión para las rutas privadas de Reservas y Beneficios y propaga el ID, email y roles devueltos por Auth; las cabeceras que manda el cliente se sobrescriben en esas rutas.
+
+- `GET /api/v1/reservas/me`: endpoint de integración que devuelve la identidad verificada propagada por el gateway. El servicio Reservas aún no tiene operaciones de turnos; cada operación nueva deberá aplicar `requiereIdentidad` y roles por actor, además de comprobar propiedad del recurso.
+- `GET /api/v1/beneficios/mis-puntos`: requiere sesión y rol `cliente`; consulta el saldo del registro de Beneficios asociado al email verificado. Si no hay registro, devuelve saldo cero.
+- `POST /api/v1/beneficios/registro-externo`: conserva la autenticación independiente mediante `X-Partner-Key` para el sistema externo del gimnasio.
+
+El registro externo del gimnasio todavía no tiene una vinculación persistente con el ID de cuenta MELT; la consulta inicial de puntos usa el email normalizado. Antes de producción hay que reemplazar esta vinculación transitoria por una asociación explícita de identidad. Solo el superadministrador puede asignar roles administrativos; las operaciones reales de turnos y el resto de operaciones de puntos/canjes siguen pendientes de implementación.
+
+Para ejecutar la prueba de integración de login, cabeceras falsificadas, rutas privadas y permisos por rol en un entorno con Docker Compose levantado, usá `bash scripts/smoke-auth-gateway.sh`. GitHub Actions ejecuta esta misma prueba en el job `gateway-integration`.

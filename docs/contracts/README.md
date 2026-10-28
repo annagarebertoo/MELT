@@ -11,7 +11,8 @@ La API de consulta está versionada como `v1`. La carga administrativa de tratam
 Versión actual: `v1`
 
 Contrato OpenAPI del catálogo: `tratamientos-v1.openapi.yaml`  
-Contrato OpenAPI del registro externo: `registro-externo-v1.openapi.yaml`
+Contrato OpenAPI del registro externo: `registro-externo-v1.openapi.yaml`  
+Contrato OpenAPI de autenticación: `autenticacion-v1.openapi.yaml`
 
 La versión del documento OpenAPI es `1.0.0` (OpenAPI `3.0.3`). La URL base contractual es `/api/v1`; en el entorno local se utiliza **`http://localhost:8080/api/v1`**. La URL de Internet sigue pendiente: localhost no permite el acceso desde otro grupo. Antes de la integración real, el Grupo 5 debe publicar el gateway en una dirección accesible por el Grupo 1 y comunicar esa URL.
 
@@ -128,3 +129,12 @@ Body de ejemplo (reemplazar los valores por los del gimnasio):
 ```
 
 La combinación `plan|membresia` debe existir en la configuración `PUNTOS_POR_PLAN_MEMBRESIA`. El consumidor también debe enviar `X-Partner-Key`. La respuesta `201` confirma el registro y el regalo asociado; repetir la misma `solicitudId` devuelve `200` con el registro existente. Email duplicado con otra solicitud devuelve `409`; código inválido devuelve `403`; combinación de plan/membresía no configurada devuelve `422`. Si falta configurar el código, la clave del consumidor o la tabla de puntos, devuelve `503` en lugar de aplicar una regla inventada.
+
+
+## Autenticación y cuentas
+
+El servicio de autenticación se publica a través del gateway en `/api/v1/auth`. Su contrato versionado está en `autenticacion-v1.openapi.yaml` e incluye registro público de clientes, login con token Bearer, consulta de la cuenta actual y creación protegida de cuentas internas. Los roles permitidos son `cliente`, `profesional`, `recepcion`, `administrador` y `superadministrador`.
+
+El registro público siempre asigna el rol `cliente`; no permite que una persona se otorgue permisos internos. La creación de cuentas internas requiere sesión administrativa, y solo el superadministrador puede asignar roles administrativos. Las credenciales sensibles se configuran mediante variables de entorno, no en el repositorio.
+
+La autenticación todavía debe integrarse en cada endpoint de negocio que requiera sesión (por ejemplo, reservas, agenda, puntos y administración) cuando esos flujos estén implementados. La publicación de los endpoints de autenticación no significa que todas las rutas del sistema ya estén protegidas.

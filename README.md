@@ -18,7 +18,9 @@ Facilitar la organización de la agenda del centro, brindar a los clientes un me
 
 - **Cliente:** consulta tratamientos y profesionales, solicita o cancela turnos y consulta sus puntos y beneficios.
 - **Profesional:** consulta su agenda y registra la realización de los tratamientos que le corresponden.
+- **Recepción:** gestiona reservas y disponibilidad según los permisos que se definan.
 - **Administrador:** administra el catálogo, los profesionales, la disponibilidad, los turnos y las reglas del programa de puntos.
+- **Superadministrador:** administra cuentas y asigna roles administrativos.
 
 ## Funcionalidades previstas
 
@@ -49,10 +51,11 @@ La confirmación de una reserva y la acreditación de puntos deberán contemplar
 
 ## Arquitectura propuesta
 
-El sistema se diseñará con un **frontend web**, un **API Gateway** y, como mínimo, **tres microservicios** con responsabilidades diferenciadas:
+El sistema cuenta con un **frontend web**, un **API Gateway** y microservicios con responsabilidades diferenciadas (el mínimo de la consigna es tres; se incorporó además autenticación):
 
 | Componente | Responsabilidad preliminar |
 | --- | --- |
+| Autenticación | Registro e inicio de sesión, identidad de la cuenta y autorización por roles. | 
 | Catálogo y Profesionales | Tratamientos, categorías, profesionales, precios, duraciones, palabras clave y puntos configurados. |
 | Reservas | Agenda, disponibilidad efectiva, creación, cancelación y finalización de turnos. |
 | Beneficios | Saldos, movimientos de puntos, canjes, aplicaciones y restituciones. |
@@ -82,11 +85,26 @@ Se prevé utilizar **comunicación síncrona** para las consultas y validaciones
 
 La arquitectura interna de los microservicios combinará al menos dos estilos trabajados en la materia; su elección y justificación se documentarán en los ADR correspondientes.
 
+## Autenticación
+
+El servicio de autenticación se publica por el gateway en `/api/v1/auth`. Permite registrar clientes, iniciar sesión y consultar la cuenta actual. Las cuentas internas se crean con permisos administrativos; el registro público no permite elegir roles. Ver [guía local](docs/LOCAL-DEV.md) y [contrato OpenAPI](docs/contracts/autenticacion-v1.openapi.yaml).
+
+La autenticación ya tiene una primera implementación, pero la autorización debe integrarse en cada endpoint de negocio protegido cuando esos flujos estén implementados. La recuperación de contraseña y la verificación de email quedan pendientes.
+
 ## Ejecución local
 
-**Pendiente de implementación.** Se prevé ofrecer un procedimiento único de arranque mediante Docker Compose, que permita iniciar los servicios y sus dependencias sin configuraciones manuales específicas de cada integrante.
+El entorno local se inicia con Docker Compose. Antes de arrancar, configurá una clave JWT por fuera del repositorio.
 
-Cuando esté disponible, esta sección incluirá los requisitos previos, las variables de entorno de ejemplo, el comando de inicio, las direcciones de acceso y las verificaciones de funcionamiento. Los secretos no se almacenarán en el repositorio.
+En PowerShell:
+
+```powershell
+$env:AUTH_JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+docker compose config
+docker compose up --build -d
+docker compose ps
+```
+
+La guía completa, las variables opcionales del administrador inicial y los ejemplos de registro/login están en [docs/LOCAL-DEV.md](docs/LOCAL-DEV.md). No guardes la clave generada ni contraseñas reales en el repositorio.
 
 ## Despliegue
 

@@ -10,7 +10,7 @@
 
 MELT es una aplicación web para un centro de estética de una sola sucursal. Ofrece catálogo público, reservas autenticadas, agenda profesional, administración y beneficios basados en puntos. La reserva con validación de disponibilidad es la operación central; su confirmación, la realización del tratamiento y el pago presencial son hechos diferentes.
 
-Se propone una arquitectura de tres microservicios y un API Gateway. La separación responde a capacidades de negocio con reglas y datos propios y al objetivo del proyecto de desarrollar un sistema distribuido. Permite asignar responsabilidades claras, pero introduce comunicaciones remotas y coordinación que el equipo deberá comprender y verificar. No se justifica por una escala de producción que todavía no se ha medido.
+La arquitectura exige al menos tres microservicios y un API Gateway. En la implementación se incorporó además el servicio técnico `auth` para cuentas y sesiones. La separación responde a capacidades de negocio con reglas y datos propios y al objetivo del proyecto de desarrollar un sistema distribuido. Permite asignar responsabilidades claras, pero introduce comunicaciones remotas y coordinación que el equipo deberá comprender y verificar. No se justifica por una escala de producción que todavía no se ha medido.
 
 Los objetivos son evitar turnos superpuestos y operaciones duplicadas, preservar los datos de cada servicio y permitir evolución gradual. El alcance funcional se encuentra en [SPEC.md](../SPEC.md) y la presentación general en [README.md](../README.md).
 
@@ -137,7 +137,7 @@ La persistencia se registrará como versión inicial de D3. MongoDB no determina
 | Ejecución local | Docker y Docker Compose | Futuro procedimiento único y automatizado de arranque. |
 | Observabilidad | Prometheus y Grafana | Métricas y tableros para comprender el estado del sistema. |
 
-Estas herramientas no están implementadas y sus versiones no están fijadas. No se incorpora un proveedor de identidad como decisión cerrada: la autenticación y autorización deberán seleccionarse y justificarse antes de implementar las operaciones privadas.
+Estas herramientas no están implementadas y sus versiones no están fijadas. La autenticación inicial está implementada en el servicio `auth`; la protección de cada endpoint de negocio se incorpora a medida que se desarrollan sus flujos.
 
 La arquitectura interna deberá utilizar al menos dos estilos diferentes en servicios distintos. Como candidatos se conservan capas para Catálogo y arquitectura hexagonal para Reservas y Beneficios. Su elección y justificación se desarrollarán en D2; los frameworks no sustituyen esa decisión.
 
@@ -255,7 +255,7 @@ Estos ADR deben ser archivos independientes con alternativas y consecuencias. Su
 
 ### 11.2. Aspectos pendientes
 
-- Mecanismo de autenticación y autorización y detalle de permisos.
+- Integración de autenticación/autorización en los endpoints de Reservas y Beneficios a medida que se implementen; recuperación y verificación de email.
 - Modalidad exacta de canje y restitución, vigencia de puntos y beneficios y modificaciones del catálogo con reservas existentes.
 - Control concreto de concurrencia y coordinación entre Reservas y Beneficios.
 - Publicación confiable, idempotencia y recuperación; evaluación de Outbox y compensaciones.
@@ -313,3 +313,14 @@ Las decisiones siguientes actualizan el diseño inicial y deben prevalecer sobre
 
 - Confirmación y cancelación realizadas por el profesional generan eventos identificados para enviar correo al cliente. Los correos se procesan asíncronamente con un intento inicial y hasta 3 reintentos automáticos con esperas crecientes; los fallos persistentes pasan a una cola de errores para revisión y posible reenvío manual. El estado del envío queda registrado y el proveedor de correo no forma parte de la transacción de agenda. Si la aceptación del proveedor y su respuesta quedan inciertas, se requiere revisión porque el consumidor no puede garantizar por sí solo que nunca haya duplicados.
 - La finalización del tratamiento genera el evento que habilita la acreditación de puntos una sola vez. Ni el carrito, ni la confirmación, ni el pago de la seña generan puntos. Beneficios registra cada acreditación con identificador único y restricción de unicidad en una operación transaccional para que los reintentos no dupliquen el saldo.
+
+
+## Actualización: servicio de autenticación
+
+Se incorpora el microservicio `auth`, publicado detrás del API Gateway bajo `/api/v1/auth`. Es responsable de las cuentas, la verificación de credenciales, la emisión de tokens Bearer y la autorización de operaciones de administración de cuentas. Mantiene la colección `usuarios` en la base lógica `usuarios_db` de MongoDB, con índice único por email. Las contraseñas se guardan como hashes bcrypt; los tokens HS256 tienen vencimiento y se validan en los endpoints protegidos.
+
+Los roles definidos son `cliente`, `profesional`, `recepcion`, `administrador` y `superadministrador`. El registro público asigna exclusivamente el rol cliente. La creación de cuentas internas exige un token administrativo; la asignación de roles administrativos queda reservada al superadministrador. La autorización de creación de usuarios consulta los roles actuales en la base, para no depender únicamente de los roles que tenía el token al emitirse. NGINX realiza una verificación interna de sesión antes de enrutar las rutas privadas de Reservas y Beneficios; el alta externa del gimnasio conserva su autenticación independiente mediante clave de partner.
+
+El contrato está en [`docs/contracts/autenticacion-v1.openapi.yaml`](contracts/autenticacion-v1.openapi.yaml), y la ejecución local en [`docs/LOCAL-DEV.md`](LOCAL-DEV.md). `AUTH_JWT_SECRET` y las credenciales opcionales del superadministrador inicial se inyectan por entorno; no deben guardarse en el repositorio.
+
+**Límites conocidos:** no hay recuperación de contraseña ni verificación de email; los tokens emitidos no tienen revocación inmediata; y los endpoints de negocio de Reservas y Beneficios todavía deben aplicar autenticación/autorización cuando se implementen. El endpoint de alta externa de Beneficios usa una clave de integración independiente, no una sesión de cliente.
