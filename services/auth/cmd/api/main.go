@@ -344,6 +344,11 @@ func (s *authServer) verificarSesion(c *gin.Context) {
 		c.Status(http.StatusUnauthorized)
 		return
 	}
+	// NGINX usa estos headers de la subsolicitud interna para propagar
+	// identidad verificada. El gateway sobrescribe cualquier valor enviado
+	// por el cliente antes de reenviar la petición al servicio de negocio.
+	c.Header("X-Auth-User-ID", usuario.ID)
+	c.Header("X-Auth-User-Roles", strings.Join(usuario.Roles, ","))
 	c.Status(http.StatusNoContent)
 }
 
