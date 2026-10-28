@@ -95,16 +95,12 @@ func requierePermiso(operacion string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		usuario, ok := c.Get("identidad")
 		if !ok {
-			// También valida que los headers estén completos. En producción,
-			// el gateway es quien los escribe después de verificar el JWT.
-			identidadVerificada := identidadDesdeHeaders(c)
-			if identidadVerificada.ID == "" || identidadVerificada.Email == "" || len(identidadVerificada.Roles) == 0 {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-					"error": gin.H{"code": "IDENTIDAD_REQUERIDA", "message": "Iniciá sesión para continuar."},
-				})
-				return
-			}
-			usuario = identidadVerificada
+			// RequiereIdentidad debe ejecutarse antes: nunca confiar únicamente
+			// en cabeceras, aunque parezcan completas.
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": gin.H{"code": "IDENTIDAD_REQUERIDA", "message": "Iniciá sesión para continuar."},
+			})
+			return
 		}
 		identidadActual, ok := usuario.(identidad)
 		if !ok {
