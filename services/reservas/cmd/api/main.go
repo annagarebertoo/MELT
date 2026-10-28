@@ -126,7 +126,7 @@ func main() {
 	db := client.Database("reservas_db")
 	catalogoURL := strings.TrimSpace(os.Getenv("CATALOGO_URL"))
 	if catalogoURL == "" { catalogoURL = "http://catalogo-profesionales:8081" }
-	s := &servidorReservas{agendas: db.Collection("agendas_semanales"), turnos: db.Collection("turnos"), bloqueos: db.Collection("bloqueos_turnos"), carritos: db.Collection("carritos_bloqueos"), catalogoURL: catalogoURL, pagosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("PAGOS_URL")), "/"), httpClient: &http.Client{Timeout: 3*time.Second}}
+	s := &servidorReservas{agendas: db.Collection("agendas_semanales"), turnos: db.Collection("turnos"), bloqueos: db.Collection("bloqueos_turnos"), carritos: db.Collection("carritos_bloqueos"), catalogoURL: catalogoURL, pagosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("PAGOS_URL")), "/"), httpClient: &http.Client{Timeout: 7*time.Second}}
 	_, err = s.agendas.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key:"profesionalId",Value:1},{Key:"diaSemana",Value:1}}, Options: options.Index().SetUnique(true).SetName("uq_agenda_profesional_dia")})
 	if err != nil { log.Fatal("no se pudo crear índice de agenda") }
 	_, err = s.turnos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key:"profesionalId",Value:1},{Key:"inicio",Value:1}}, Options: options.Index().SetName("ix_turnos_profesional_inicio")})
