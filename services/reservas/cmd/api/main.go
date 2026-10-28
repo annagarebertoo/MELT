@@ -374,7 +374,7 @@ func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key:"turnoId",Value:id}})
 	if devolucion>0 {
 		if err:=s.devolverSena(ctx,t.PagoID,devolucion,"refund-turno-"+id); err!=nil { c.JSON(http.StatusAccepted,gin.H{"turnoId":id,"estado":"cancelado","devolucion":gin.H{"importe":devolucion,"moneda":"ARS","estado":"pendiente","mensaje":"La cancelación quedó registrada; la devolución requiere reintento operativo."}}); return }
-		_,_ = s.turnos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id},{Key:"estado","cancelado"},{Key:"estadoDevolucion","pendiente"}},bson.D{{Key:"$set",Value:bson.D{{Key:"estadoDevolucion",Value:"devuelta"}}}})
+		_,_ = s.turnos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id},{Key:"estado",Value:"cancelado"},{Key:"estadoDevolucion",Value:"pendiente"}},bson.D{{Key:"$set",Value:bson.D{{Key:"estadoDevolucion",Value:"devuelta"}}}})
 		estadoDevolucion="devuelta"
 	}
 	c.JSON(http.StatusOK,gin.H{"turnoId":id,"estado":"cancelado","devolucion":gin.H{"importe":devolucion,"moneda":"ARS","estado":estadoDevolucion,"regla":"100% si se cancela con 24 horas o más; sin devolución con menos de 24 horas"}})
