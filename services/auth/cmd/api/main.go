@@ -154,6 +154,28 @@ func (s *authServer) crearUsuario(c *gin.Context) {
 			return
 		}
 	}
+	cl, ok := c.Get("claims")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code":"TOKEN_INVALIDO","message":"Iniciá sesión para continuar."}})
+		return
+	}
+	claimsActuales, ok := cl.(*claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code":"TOKEN_INVALIDO","message":"Iniciá sesión para continuar."}})
+		return
+	}
+	esSuperadmin := false
+	for _, rol := range claimsActuales.Roles {
+		if rol == "superadministrador" { esSuperadmin = true }
+	}
+	if !esSuperadmin {
+		for _, rol := range req.Roles {
+			if rol == "administrador" || rol == "superadministrador" {
+				c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code":"PERMISOS_INSUFICIENTES","message":"Solo un superadministrador puede asignar roles administrativos."}})
+				return
+			}
+		}
+	}
 	usuario, err := s.nuevoUsuario(c, req.Nombre, req.Email, req.Password, req.Roles)
 	if err != nil { return }
 	c.JSON(http.StatusCreated, gin.H{"usuario": usuario})
