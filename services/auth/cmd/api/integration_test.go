@@ -44,12 +44,16 @@ func TestIntegracionRegistroLoginYMeConMongo(t *testing.T) {
 
 	body := []byte(`{"nombre":"Cliente Integración","email":"Cliente.Integracion@example.com","password":"clave-segura-123"}`)
 	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/registro", bytes.NewReader(body)))
+	registroReq := httptest.NewRequest(http.MethodPost, "/registro", bytes.NewReader(body))
+	registroReq.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, registroReq)
 	if recorder.Code != http.StatusCreated { t.Fatalf("registro: se esperaba 201 y se obtuvo %d: %s", recorder.Code, recorder.Body.String()) }
 
 	recorder = httptest.NewRecorder()
 	loginBody := []byte(`{"email":"cliente.integracion@example.com","password":"clave-segura-123"}`)
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(loginBody)))
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(loginBody))
+	loginReq.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, loginReq)
 	if recorder.Code != http.StatusOK { t.Fatalf("login: se esperaba 200 y se obtuvo %d: %s", recorder.Code, recorder.Body.String()) }
 	var login map[string]any
 	if err := json.Unmarshal(recorder.Body.Bytes(), &login); err != nil { t.Fatal(err) }
@@ -64,6 +68,8 @@ func TestIntegracionRegistroLoginYMeConMongo(t *testing.T) {
 	if bytes.Contains(recorder.Body.Bytes(), []byte("passwordHash")) { t.Fatal("la respuesta no debe exponer passwordHash") }
 
 	recorder = httptest.NewRecorder()
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/registro", bytes.NewReader(body)))
+	registroDuplicadoReq := httptest.NewRequest(http.MethodPost, "/registro", bytes.NewReader(body))
+	registroDuplicadoReq.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, registroDuplicadoReq)
 	if recorder.Code != http.StatusConflict { t.Fatalf("email duplicado: se esperaba 409 y se obtuvo %d", recorder.Code) }
 }
