@@ -10,7 +10,7 @@ import (
 )
 
 type Tratamiento struct {
-	ID              int      `json:"id"`
+	ID              string   `json:"id"`
 	Nombre          string   `json:"nombre"`
 	Categoria       string   `json:"categoria"`
 	Descripcion     string   `json:"descripcion"`
@@ -18,6 +18,7 @@ type Tratamiento struct {
 	Moneda          string   `json:"moneda"`
 	DuracionMinutos int      `json:"duracionMinutos"`
 	Imagenes        []string `json:"imagenes"`
+	Keywords        []string `json:"keywords"`
 }
 
 type Pagination struct {
@@ -43,7 +44,7 @@ type ErrorResponse struct {
 
 var tratamientos = []Tratamiento{
 	{
-		ID:              1,
+		ID:              "trat-001",
 		Nombre:          "Limpieza facial profunda",
 		Categoria:       "Facial",
 		Descripcion:     "Limpieza profunda de la piel.",
@@ -53,9 +54,10 @@ var tratamientos = []Tratamiento{
 		Imagenes: []string{
 			"https://melt.example.com/images/limpieza-facial.jpg",
 		},
+		Keywords: []string{"limpieza", "limpieza profunda", "higiene facial", "rostro"},
 	},
 	{
-		ID:              2,
+		ID:              "trat-002",
 		Nombre:          "Limpieza facial express",
 		Categoria:       "Facial",
 		Descripcion:     "Tratamiento facial de limpieza rápida.",
@@ -65,9 +67,10 @@ var tratamientos = []Tratamiento{
 		Imagenes: []string{
 			"https://melt.example.com/images/limpieza-express.jpg",
 		},
+		Keywords: []string{"limpieza", "express", "facial", "rostro"},
 	},
 	{
-		ID:              3,
+		ID:              "trat-003",
 		Nombre:          "Masaje relajante",
 		Categoria:       "Corporal",
 		Descripcion:     "Masaje corporal para relajación.",
@@ -77,9 +80,10 @@ var tratamientos = []Tratamiento{
 		Imagenes: []string{
 			"https://melt.example.com/images/masaje-relajante.jpg",
 		},
+		Keywords: []string{"masaje", "relajante", "corporal", "relajación"},
 	},
 	{
-		ID:              4,
+		ID:              "trat-004",
 		Nombre:          "Depilación definitiva",
 		Categoria:       "Depilación",
 		Descripcion:     "Tratamiento de depilación definitiva.",
@@ -89,9 +93,10 @@ var tratamientos = []Tratamiento{
 		Imagenes: []string{
 			"https://melt.example.com/images/depilacion-definitiva.jpg",
 		},
+		Keywords: []string{"depilación", "definitiva", "láser"},
 	},
 	{
-		ID:              5,
+		ID:              "trat-005",
 		Nombre:          "Manicura clásica",
 		Categoria:       "Manos y uñas",
 		Descripcion:     "Cuidado y esmaltado de uñas.",
@@ -101,6 +106,7 @@ var tratamientos = []Tratamiento{
 		Imagenes: []string{
 			"https://melt.example.com/images/manicura.jpg",
 		},
+		Keywords: []string{"manicura", "uñas", "esmaltado", "manos"},
 	},
 }
 
@@ -172,7 +178,7 @@ func tratamientosHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resultados := filtrarTratamientos(q, categoria, precioMaxStr, precioMax)
+	resultados := filtrarTratamientos(q, categoria, precioMaxStr != "", precioMax)
 
 	ordenarTratamientos(resultados, sortField, order)
 
@@ -183,10 +189,6 @@ func tratamientosHandler(w http.ResponseWriter, r *http.Request) {
 		totalPages = (total + limit - 1) / limit
 	}
 
-	if page > totalPages && total > 0 {
-		writeError(w, http.StatusBadRequest, "INVALID_PARAMETER", "La página solicitada no existe")
-		return
-	}
 
 	inicio := (page - 1) * limit
 	fin := inicio + limit
@@ -222,9 +224,9 @@ func tratamientoPorIDHandler(w http.ResponseWriter, r *http.Request) {
 
 	idStr := strings.TrimPrefix(r.URL.Path, "/api/v1/tratamientos/")
 
-	id, err := strconv.Atoi(idStr)
-	if err != nil || id < 1 {
-		writeError(w, http.StatusBadRequest, "INVALID_PARAMETER", "El identificador debe ser un número entero positivo")
+	id := strings.TrimSpace(idStr)
+	if id == "" || strings.Contains(id, "/") {
+		writeError(w, http.StatusBadRequest, "INVALID_PARAMETER", "El identificador del tratamiento es obligatorio.")
 		return
 	}
 
@@ -243,7 +245,7 @@ func tratamientoPorIDHandler(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func filtrarTratamientos(q, categoria, precioMaxStr string, precioMax float64) []Tratamiento {
+func filtrarTratamientos(q, categoria string, hasMaxPrice bool, precioMax float64) []Tratamiento {
 	var resultados []Tratamiento
 
 	for _, tratamiento := range tratamientos {
@@ -252,16 +254,25 @@ func filtrarTratamientos(q, categoria, precioMaxStr string, precioMax float64) [
 			nombre := strings.ToLower(tratamiento.Nombre)
 			busqueda := strings.ToLower(q)
 
-			if !strings.Contains(nombre, busqueda) {
+			coincide := strings.Contains(nombre, busqueda)
+			if !coincide {
+				for _, keyword := range tratamiento.Keywords {
+					if strings.Contains(strings.ToLower(keyword), busqueda) {
+						coincide = true
+						break
+					}
+				}
+			}
+			if !coincide {
 				continue
 			}
 		}
 
-		if categoria != "" && tratamiento.Categoria != categoria {
+		if categoria != "" && !strings.EqualFold(tratamiento.Categoria, categoria) {
 			continue
 		}
 
-		if precioMaxStr != "" && tratamiento.Precio > precioMax {
+		if hasMaxPrice && tratamiento.Precio > precioMax {
 			continue
 		}
 
@@ -286,9 +297,11 @@ func ordenarTratamientos(resultados []Tratamiento, sortField, order string) {
 		nombreJ := strings.ToLower(resultados[j].Nombre)
 
 		if order == "desc" {
+			if nombreI == nombreJ { return resultados[i].ID > resultados[j].ID }
 			return nombreI > nombreJ
 		}
 
+		if nombreI == nombreJ { return resultados[i].ID < resultados[j].ID }
 		return nombreI < nombreJ
 	})
 }
