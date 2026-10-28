@@ -25,6 +25,9 @@ func TestCargarPuntosRechazaJSONInvalidoYNegativos(t *testing.T) {
 	if _, err := cargarPuntos(`{"basico|mensual":-1}`); err == nil {
 		t.Fatal("se esperaba error para puntos negativos")
 	}
+	if _, err := cargarPuntos(`{"Basico|Mensual":100,"basico|mensual":200}`); err == nil {
+		t.Fatal("se esperaba error para claves repetidas")
+	}
 }
 
 func TestRutaRegistroExternoRegistrada(t *testing.T) {
