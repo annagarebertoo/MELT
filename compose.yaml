@@ -45,6 +45,23 @@ services:
       context: ./services/reservas
     environment:
       PORT: "8082"
+      MONGODB_URI: mongodb://mongodb:27017
+      PAGOS_URL: ${PAGOS_URL:-http://pagos:8085}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      pagos:
+        condition: service_started
+    restart: unless-stopped
+
+  pagos:
+    build:
+      context: ./services/pagos
+    environment:
+      PORT: "8085"
+      MP_ENV: "test"
+      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
+      MP_BASE_URL: ${MP_BASE_URL:-https://api.mercadopago.com}
     restart: unless-stopped
 
   auth:

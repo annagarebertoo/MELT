@@ -151,3 +151,35 @@ docker compose ps
 ```
 
 El estado de resiliencia y el procedimiento para registrar evidencia real se encuentran en [docs/POSTMORTEM.md](docs/POSTMORTEM.md). No se deben interpretar las configuraciones declaradas como pruebas ejecutadas: las integraciones de búsqueda, caché, mensajería y métricas de negocio siguen pendientes.
+
+
+## Pagos de reservas con Mercado Pago (modo pruebas)
+
+El servicio `pagos` adapta la API de Mercado Pago al contrato interno que consume `reservas`. En el entorno local, Compose configura `PAGOS_URL=http://pagos:8085`. El adaptador sólo arranca con `MP_ENV=test`; no se debe cambiar a producción como parte de esta configuración.
+
+1. En el panel de desarrolladores de Mercado Pago, abrí tu aplicación y copiá el **Access Token de prueba** (no una credencial de producción).
+2. Creá un archivo `.env` en la raíz del repositorio (no lo subas a Git) con:
+
+   ```dotenv
+   MP_ENV=test
+   MP_ACCESS_TOKEN=PEGAR_ACCESS_TOKEN_DE_PRUEBA
+   MP_BASE_URL=https://api.mercadopago.com
+   ```
+
+3. Levantá o reconstruí los servicios:
+
+   ```bash
+   docker compose up -d --build pagos reservas
+   ```
+
+4. Comprobá el adaptador en `http://localhost:8085/health` sólo si publicás el puerto localmente; por defecto, `pagos` es interno a la red de Compose y no expone un puerto en el host.
+
+### Contrato interno
+
+- `POST /payments/verify`: consulta `GET /v1/payments/{id}` a Mercado Pago y sólo marca aprobado si coinciden estado `approved`, ID, importe, moneda `ARS` y `external_reference` con el ID del carrito.
+- `POST /payments/refunds`: crea una devolución parcial mediante `POST /v1/payments/{id}/refunds`, enviando el importe y el encabezado `X-Idempotency-Key` para evitar duplicados.
+- `GET /health`: chequeo de disponibilidad del adaptador.
+
+El pago que se verifica debe haberse creado en Mercado Pago con el importe exacto de la seña (30 %), moneda ARS y `external_reference` igual al ID del carrito generado por `POST /carrito/bloqueos`. El adaptador no crea el checkout ni inventa pagos; verifica pagos reales de prueba ya creados en la cuenta de pruebas.
+
+No guardes el Access Token en el repositorio, en el frontend ni en logs. Usá cuentas y credenciales de prueba de Mercado Pago; nunca uses credenciales productivas en esta configuración.
