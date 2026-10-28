@@ -51,6 +51,12 @@ services:
       context: ./services/beneficios
     environment:
       PORT: "8083"
+      MONGODB_URI: mongodb://mongodb:27017
+      CODIGO_GIMNASIO: ${CODIGO_GIMNASIO:-}
+      PUNTOS_POR_PLAN_MEMBRESIA: ${PUNTOS_POR_PLAN_MEMBRESIA:-}
+    depends_on:
+      mongodb:
+        condition: service_healthy
     restart: unless-stopped
 
   mongodb:
