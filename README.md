@@ -51,7 +51,7 @@ La confirmación de una reserva y la acreditación de puntos deberán contemplar
 
 ## Arquitectura propuesta
 
-El sistema se diseñará con un **frontend web**, un **API Gateway** y, como mínimo, **tres microservicios** con responsabilidades diferenciadas:
+El sistema cuenta con un **frontend web**, un **API Gateway** y microservicios con responsabilidades diferenciadas (el mínimo de la consigna es tres; se incorporó además autenticación):
 
 | Componente | Responsabilidad preliminar |
 | --- | --- |
