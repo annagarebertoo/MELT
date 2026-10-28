@@ -168,7 +168,10 @@ func (s *Servidor) registrarExterno(c *gin.Context) {
 	var existente RegistroExterno
 	err := s.registros.FindOne(ctx, bson.D{{Key: "solicitudId", Value: req.SolicitudID}}).Decode(&existente)
 	if err == nil {
-		if !strings.EqualFold(existente.Email, req.Email) {
+		if !strings.EqualFold(existente.Email, req.Email) ||
+			existente.Nombre != req.Nombre ||
+			existente.Plan != req.Plan ||
+			existente.Membresia != req.Membresia {
 			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "SOLICITUD_YA_PROCESADA", "message": "La solicitud ya fue procesada con otros datos."}})
 			return
 		}
@@ -215,23 +218,25 @@ func (s *Servidor) registrarExterno(c *gin.Context) {
 }
 
 func cargarPuntos(raw string) (map[string]int, error) {
-	puntos := map[string]int{}
+	config := map[string]int{}
 	if strings.TrimSpace(raw) == "" {
-		return puntos, nil
+		return config, nil
 	}
-	if err := json.Unmarshal([]byte(raw), &puntos); err != nil {
+	var original map[string]int
+	if err := json.Unmarshal([]byte(raw), &original); err != nil {
 		return nil, err
 	}
-	for clave, valor := range puntos {
-		if normalizarClave(clave) == "" || valor < 0 {
+	for clave, valor := range original {
+		normalizada := normalizarClave(clave)
+		if normalizada == "" || valor < 0 {
 			return nil, errors.New("configuración de puntos inválida")
 		}
-		puntos[normalizarClave(clave)] = valor
-		if clave != normalizarClave(clave) {
-			delete(puntos, clave)
+		if _, existe := config[normalizada]; existe {
+			return nil, errors.New("hay claves de plan/membresía repetidas")
 		}
+		config[normalizada] = valor
 	}
-	return puntos, nil
+	return config, nil
 }
 
 func normalizarClave(valor string) string {
