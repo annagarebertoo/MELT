@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - docs/correcciones-reglas-negocio
+      - 'feature/**'
   pull_request:
 
 permissions:
