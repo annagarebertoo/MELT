@@ -152,6 +152,7 @@ func (s *servidorReservas) router() *gin.Engine {
 	r.POST("/carrito/bloqueos/:id/confirmar", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.confirmarBloqueoCarrito)
 	r.POST("/turnos", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.confirmarTurnoDesdeCarrito)
 	r.DELETE("/turnos/:id", requiereIdentidad(), requierePermiso("reservas.cancelar-turno"), s.cancelarTurno)
+	r.POST("/turnos/:id/devolucion/reintentar", requiereIdentidad(), requierePermiso("reservas.cancelar-turno"), s.reintentarDevolucion)
 	return r
 }
 
@@ -515,6 +516,20 @@ func (s *servidorReservas) confirmarBloqueoCarrito(c *gin.Context) {
 
 func (s *servidorReservas) confirmarTurnoDesdeCarrito(c *gin.Context) {
 	c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"CARRITO_REQUERIDO","message":"Primero bloqueá el horario con POST /carrito/bloqueos y luego confirmalo con el pago aprobado en POST /carrito/bloqueos/{id}/confirmar."}})
+}
+
+func (s *servidorReservas) reintentarDevolucion(c *gin.Context) {
+	u:=c.MustGet("identidad").(identidad)
+	id:=strings.TrimSpace(c.Param("id"))
+	ctx,cancel:=context.WithTimeout(c.Request.Context(),8*time.Second); defer cancel()
+	var t turno
+	if err:=s.turnos.FindOne(ctx,bson.D{{Key:"_id",Value:id}}).Decode(&t); err!=nil { c.JSON(http.StatusNotFound,gin.H{"error":"turno no encontrado"}); return }
+	if t.ClienteID!=u.ID && !tieneRol(u,"recepcion","administrador","superadministrador") { c.JSON(http.StatusForbidden,gin.H{"error":"no tenés permiso para gestionar esta devolución"}); return }
+	if t.Estado!="cancelado" || t.EstadoDevolucion!="pendiente" || t.ImporteDevolucion<=0 || t.PagoID=="" { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"DEVOLUCION_NO_PENDIENTE","message":"El turno no tiene una devolución pendiente."}}); return }
+	if err:=s.devolverSena(ctx,t.PagoID,t.ImporteDevolucion,"refund-turno-"+id); err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":gin.H{"code":"DEVOLUCION_PENDIENTE","message":"El proveedor todavía no confirmó la devolución; se puede reintentar."}}); return }
+	_,err:=s.turnos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id},{Key:"estadoDevolucion",Value:"pendiente"}},bson.D{{Key:"$set",Value:bson.D{{Key:"estadoDevolucion",Value:"devuelta"}}}})
+	if err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"la devolución fue enviada pero no se pudo actualizar su estado"}); return }
+	c.JSON(http.StatusOK,gin.H{"turnoId":id,"devolucion":gin.H{"importe":t.ImporteDevolucion,"moneda":"ARS","estado":"devuelta"}})
 }
 
 func slotNoSuperpuesto(start,end,otherStart,otherEnd time.Time) bool { return !start.Before(otherEnd) || !end.After(otherStart) }
