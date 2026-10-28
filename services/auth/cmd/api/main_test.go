@@ -21,7 +21,9 @@ func TestTokenRechazaFirmaModificada(t *testing.T) {
 	s := &authServer{jwtSecret: []byte("clave-de-prueba-de-al-menos-32-caracteres"), tokenTTL: time.Minute}
 	token, err := s.emitirToken(Usuario{ID:"usuario-1", Email:"cliente@example.com", Roles:[]string{"cliente"}})
 	if err != nil { t.Fatal(err) }
-	modificado := token[:len(token)-1] + "x"
+	parts := []byte(token)
+	parts[len(parts)-1] = 'A'
+	modificado := string(parts)
 	if _, err := s.validarToken(modificado); err == nil {
 		t.Fatal("se esperaba rechazar el token modificado")
 	}
