@@ -12,6 +12,7 @@ services:
       - catalogo-profesionales
       - reservas
       - beneficios
+      - auth
       - jaeger
     restart: unless-stopped
 
@@ -44,6 +45,19 @@ services:
       context: ./services/reservas
     environment:
       PORT: "8082"
+    restart: unless-stopped
+
+  auth:
+    build:
+      context: ./services/auth
+    environment:
+      PORT: "8084"
+      MONGODB_URI: mongodb://mongodb:27017
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Defini AUTH_JWT_SECRET en tu entorno}
+      AUTH_TOKEN_TTL_MINUTES: ${AUTH_TOKEN_TTL_MINUTES:-15}
+    depends_on:
+      mongodb:
+        condition: service_healthy
     restart: unless-stopped
 
   beneficios:
