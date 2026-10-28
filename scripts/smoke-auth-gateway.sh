@@ -21,7 +21,9 @@ wait_for_gateway() {
 }
 
 http_code() {
-  curl --silent --output "$2" --write-out '%{http_code}' "${@:3}"
+  local output="$1"
+  shift
+  curl --silent --output "$output" --write-out '%{http_code}' "$@"
 }
 
 wait_for_gateway
