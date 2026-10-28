@@ -52,3 +52,22 @@ jobs:
         run: go test -race ./...
       - name: Compilar servicio
         run: go build ./...
+
+  gateway-integration:
+    runs-on: ubuntu-latest
+    env:
+      AUTH_JWT_SECRET: ci-integration-secret-at-least-32-characters-long
+      AUTH_ADMIN_EMAIL: admin.integracion@melt.test
+      AUTH_ADMIN_PASSWORD: Integration-Admin-123!
+    steps:
+      - uses: actions/checkout@v4
+      - name: Levantar gateway y servicios necesarios
+        run: docker compose up --build -d gateway
+      - name: Probar login, sesión, gateway y permisos por rol
+        run: bash scripts/smoke-auth-gateway.sh
+      - name: Diagnóstico si falla la integración
+        if: failure()
+        run: docker compose logs --no-color gateway auth reservas beneficios mongodb
+      - name: Detener entorno
+        if: always()
+        run: docker compose down -v
