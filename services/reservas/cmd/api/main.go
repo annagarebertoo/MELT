@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -336,6 +337,20 @@ func (s *servidorReservas) listarTurnos(c *gin.Context) {
 	c.JSON(http.StatusOK,gin.H{"turnos":out})
 }
 
+func (s *servidorReservas) devolverSena(ctx context.Context, pagoID string, importe float64, idempotencyKey string) error {
+	if s.pagosURL=="" { return errors.New("proveedor de pagos no configurado") }
+	payload,_:=json.Marshal(gin.H{"pagoId":pagoID,"importe":importe,"moneda":"ARS","motivo":"cancelacion_turno"})
+	req,err:=http.NewRequestWithContext(ctx,http.MethodPost,s.pagosURL+"/payments/refunds",strings.NewReader(string(payload)))
+	if err!=nil { return err }
+	req.Header.Set("Content-Type","application/json")
+	req.Header.Set("Idempotency-Key",idempotencyKey)
+	resp,err:=s.httpClient.Do(req)
+	if err!=nil { return err }
+	defer resp.Body.Close()
+	if resp.StatusCode!=http.StatusOK && resp.StatusCode!=http.StatusCreated && resp.StatusCode!=http.StatusAccepted { return errors.New("el proveedor no confirmó la devolución") }
+	return nil
+}
+
 func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 	u:=c.MustGet("identidad").(identidad); id:=strings.TrimSpace(c.Param("id"))
 	ctx,cancel:=context.WithTimeout(c.Request.Context(),5*time.Second); defer cancel()
@@ -348,10 +363,21 @@ func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 	staff:=tieneRol(u,"recepcion","administrador","superadministrador")
 	if !own && !staff { c.JSON(http.StatusForbidden,gin.H{"error":gin.H{"code":"PERMISOS_INSUFICIENTES","message":"Solo podés cancelar tus propios turnos."}}); return }
 	if t.Estado!="confirmado" { c.JSON(http.StatusConflict,gin.H{"error":"el turno ya no está confirmado"}); return }
-	_,err:=s.turnos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id},{Key:"estado",Value:"confirmado"}},bson.D{{Key:"$set",Value:bson.D{{Key:"estado",Value:"cancelado"}}}})
+	agora:=time.Now().UTC()
+	if t.Inicio.Before(ahora) { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"TURNO_INICIADO","message":"No se puede cancelar un turno que ya comenzó."}}); return }
+	devolucion:=0.0
+	estadoDevolucion:="no_corresponde"
+	if t.PagoID!="" && t.Inicio.Sub(ahora)>=24*time.Hour { devolucion=t.Sena; estadoDevolucion="pendiente" }
+	res,err:=s.turnos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id},{Key:"estado",Value:"confirmado"}},bson.D{{Key:"$set",Value:bson.D{{Key:"estado",Value:"cancelado"},{Key:"importeDevolucion",Value:devolucion},{Key:"estadoDevolucion",Value:estadoDevolucion}}}})
 	if err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo cancelar el turno"}); return }
+	if res.MatchedCount!=1 { c.JSON(http.StatusConflict,gin.H{"error":"el turno ya no está confirmado"}); return }
 	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key:"turnoId",Value:id}})
-	c.Status(http.StatusNoContent)
+	if devolucion>0 {
+		if err:=s.devolverSena(ctx,t.PagoID,devolucion,"refund-turno-"+id); err!=nil { c.JSON(http.StatusAccepted,gin.H{"turnoId":id,"estado":"cancelado","devolucion":gin.H{"importe":devolucion,"moneda":"ARS","estado":"pendiente","mensaje":"La cancelación quedó registrada; la devolución requiere reintento operativo."}}); return }
+		_,_ = s.turnos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id},{Key:"estado","cancelado"},{Key:"estadoDevolucion","pendiente"}},bson.D{{Key:"$set",Value:bson.D{{Key:"estadoDevolucion",Value:"devuelta"}}}})
+		estadoDevolucion="devuelta"
+	}
+	c.JSON(http.StatusOK,gin.H{"turnoId":id,"estado":"cancelado","devolucion":gin.H{"importe":devolucion,"moneda":"ARS","estado":estadoDevolucion,"regla":"100% si se cancela con 24 horas o más; sin devolución con menos de 24 horas"}})
 }
 
 
