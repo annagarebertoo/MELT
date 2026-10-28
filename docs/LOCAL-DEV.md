@@ -128,3 +128,35 @@ curl -X POST http://localhost:8080/api/v1/beneficios/registro-externo \
 La primera solicitud devuelve `201`; repetir la misma `solicitudId` con el mismo email devuelve `200` sin sumar el regalo otra vez. Un email ya registrado con otra solicitud devuelve `409`. La ruta requiere configuración: si faltan las variables, devuelve `503` y no inventa puntos.
 
 **Alcance importante:** este endpoint guarda el registro externo y el saldo inicial de puntos en la base de Beneficios. No reemplaza una integración con un servicio de usuarios/autenticación, que todavía no existe en este repositorio. Antes de usarlo con el Grupo 1 hay que acordar los nombres reales de planes/membresías y las cantidades de puntos, configurar las credenciales por fuera del código y desplegar una URL accesible para ambos grupos.
+
+
+## Autenticación y cuentas
+
+El servicio `auth` se publica por el gateway en `http://localhost:8080/api/v1/auth`. Para levantarlo, definí una clave JWT de al menos 32 caracteres en `AUTH_JWT_SECRET`. No uses una clave real en archivos versionados. Opcionalmente, configurá `AUTH_ADMIN_EMAIL` y `AUTH_ADMIN_PASSWORD` para crear el primer superadministrador; la contraseña inicial debe tener al menos 12 caracteres. Si la cuenta ya existe, el arranque no la modifica.
+
+Endpoints iniciales:
+
+- `POST /api/v1/auth/registro`: alta pública de cliente; nunca acepta roles enviados por el usuario.
+- `POST /api/v1/auth/login`: inicia sesión y devuelve un token Bearer de corta duración.
+- `GET /api/v1/auth/me`: devuelve la cuenta actual; requiere `Authorization: Bearer <token>`.
+- `POST /api/v1/auth/usuarios`: crea usuarios internos con uno o más roles; requiere rol `administrador` o `superadministrador`.
+
+Roles definidos: `cliente`, `profesional`, `recepcion`, `administrador` y `superadministrador`. El email es único y normalizado a minúsculas; las contraseñas se guardan con bcrypt. El token vence según `AUTH_TOKEN_TTL_MINUTES` (15 minutos por defecto).
+
+Ejemplo de registro de cliente:
+
+```sh
+curl -X POST http://localhost:8080/api/v1/auth/registro \
+  -H "Content-Type: application/json" \
+  -d '{"nombre":"Cliente de prueba","email":"cliente@example.com","password":"una-clave-segura"}'
+```
+
+Ejemplo de inicio de sesión:
+
+```sh
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"cliente@example.com","password":"una-clave-segura"}'
+```
+
+**Límites de esta primera versión:** el token es stateless, por lo que cerrar sesión en el frontend no revoca un token ya emitido; vence automáticamente. Todavía no hay recuperación de contraseña por email, verificación de email ni conexión automática de la identidad a Reservas y Beneficios. Los permisos de las rutas de negocio se deben incorporar a cada servicio antes de habilitarlo en producción. El endpoint de creación de usuarios internos está protegido por rol, pero las reglas de qué rol puede asignar cada administrador requieren endurecerse antes de producción.
