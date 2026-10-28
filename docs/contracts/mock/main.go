@@ -284,25 +284,24 @@ func filtrarTratamientos(q, categoria string, hasMaxPrice bool, precioMax float6
 
 func ordenarTratamientos(resultados []Tratamiento, sortField, order string) {
 	sort.Slice(resultados, func(i, j int) bool {
-		if sortField == "precio" {
-			if resultados[i].Precio != resultados[j].Precio {
-				if order == "desc" {
-					return resultados[i].Precio > resultados[j].Precio
-				}
-				return resultados[i].Precio < resultados[j].Precio
+		a, b := resultados[i], resultados[j]
+		if sortField == "precio" && a.Precio != b.Precio {
+			if order == "desc" {
+				return a.Precio > b.Precio
 			}
+			return a.Precio < b.Precio
 		}
-
-		nombreI := strings.ToLower(resultados[i].Nombre)
-		nombreJ := strings.ToLower(resultados[j].Nombre)
-
+		if sortField == "precio" {
+			return a.ID < b.ID
+		}
+		nombreA, nombreB := strings.ToLower(a.Nombre), strings.ToLower(b.Nombre)
+		if nombreA == nombreB {
+			return a.ID < b.ID
+		}
 		if order == "desc" {
-			if nombreI == nombreJ { return resultados[i].ID > resultados[j].ID }
-			return nombreI > nombreJ
+			return nombreA > nombreB
 		}
-
-		if nombreI == nombreJ { return resultados[i].ID < resultados[j].ID }
-		return nombreI < nombreJ
+		return nombreA < nombreB
 	})
 }
 
