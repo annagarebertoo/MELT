@@ -365,7 +365,7 @@ func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 	staff:=tieneRol(u,"recepcion","administrador","superadministrador")
 	if !own && !staff { c.JSON(http.StatusForbidden,gin.H{"error":gin.H{"code":"PERMISOS_INSUFICIENTES","message":"Solo podés cancelar tus propios turnos."}}); return }
 	if t.Estado!="confirmado" { c.JSON(http.StatusConflict,gin.H{"error":"el turno ya no está confirmado"}); return }
-	agora:=time.Now().UTC()
+	ahora:=time.Now().UTC()
 	if t.Inicio.Before(ahora) { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"TURNO_INICIADO","message":"No se puede cancelar un turno que ya comenzó."}}); return }
 	devolucion:=0.0
 	estadoDevolucion:="no_corresponde"
@@ -482,7 +482,7 @@ func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo bloquear el horario"}); return
 	}
 	if _,err:=s.carritos.InsertOne(ctx,doc); err!=nil { _,_ = s.bloqueos.DeleteMany(context.Background(),bson.D{{Key:"turnoId",Value:id}}); c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo guardar el carrito"}); return }
-	c.JSON(http.StatusCreated,gin.H{"bloqueo":doc,"seña":{"porcentaje":30,"importe":doc.Sena,"moneda":doc.Moneda},"mensaje":"El horario queda bloqueado por 10 minutos. Para confirmar, aboná la seña y enviá el pago aprobado."})
+	c.JSON(http.StatusCreated,gin.H{"bloqueo":doc,"seña":gin.H{"porcentaje":30,"importe":doc.Sena,"moneda":doc.Moneda},"mensaje":"El horario queda bloqueado por 10 minutos. Para confirmar, aboná la seña y enviá el pago aprobado."})
 }
 
 func (s *servidorReservas) liberarBloqueoCarrito(c *gin.Context) {
@@ -523,7 +523,7 @@ func (s *servidorReservas) confirmarBloqueoCarrito(c *gin.Context) {
 	_,err=s.bloqueos.UpdateMany(ctx,bson.D{{Key:"turnoId",Value:id}},bson.D{{Key:"$set",Value:bson.D{{Key:"turnoId",Value:doc.ID}}},{Key:"$unset",Value:bson.D{{Key:"expiraEn",Value:""}}}})
 	if err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"turno creado pero no se pudo consolidar el bloqueo; requiere recuperación operativa"}); return }
 	_,_ = s.carritos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id}},bson.D{{Key:"$set",Value:bson.D{{Key:"estado",Value:"confirmado"},{Key:"turnoId",Value:doc.ID}}}})
-	c.JSON(http.StatusCreated,gin.H{"turno":doc,"pago":{"estado":"aprobado","importe":cart.Sena,"moneda":cart.Moneda}})
+	c.JSON(http.StatusCreated,gin.H{"turno":doc,"pago":gin.H{"estado":"aprobado","importe":cart.Sena,"moneda":cart.Moneda}})
 }
 
 func (s *servidorReservas) confirmarTurnoDesdeCarrito(c *gin.Context) {
