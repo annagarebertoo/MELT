@@ -118,3 +118,24 @@ func TestPrecioValido(t *testing.T) {
 		})
 	}
 }
+
+func TestCategoriaValida(t *testing.T) {
+	tests := []struct {
+		categoria string
+		want      bool
+	}{
+		{"Facial", true},
+		{"corporal", true},
+		{"Depilación", true},
+		{"Manos y uñas", true},
+		{"Capilar", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.categoria, func(t *testing.T) {
+			if got := categoriaValida(tt.categoria); got != tt.want {
+				t.Fatalf("categoriaValida(%q) = %v; esperado %v", tt.categoria, got, tt.want)
+			}
+		})
+	}
+}
