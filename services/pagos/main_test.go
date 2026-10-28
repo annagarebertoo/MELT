@@ -86,7 +86,7 @@ func TestRefundSendsIdempotencyKeyAndPartialAmount(t *testing.T) {
 	req.Header.Set("Idempotency-Key", "refund-turno-1")
 	rec := httptest.NewRecorder()
 	s.handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusAccepted {
+	if rec.Code != http.StatusCreated {
 		t.Fatalf("got status %d: %s", rec.Code, rec.Body.String())
 	}
 }
