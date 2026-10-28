@@ -170,4 +170,12 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
   -d '{"email":"cliente@example.com","password":"una-clave-segura"}'
 ```
 
-**Límites de esta primera versión:** el token es stateless, por lo que cerrar sesión en el frontend no revoca un token ya emitido; vence automáticamente. Todavía no hay recuperación de contraseña por email, verificación de email ni conexión automática de la identidad a Reservas y Beneficios. Los permisos de las rutas de negocio se deben incorporar a cada servicio antes de habilitarlo en producción. Solo el superadministrador puede asignar roles administrativos; la autorización fina por operación y recurso sigue pendiente de integrar en los servicios de negocio.
+**Límites de esta primera versión:** el token es stateless, por lo que cerrar sesión en el frontend no revoca un token ya emitido; vence automáticamente. Todavía no hay recuperación de contraseña por email ni verificación de email. NGINX verifica la sesión para las rutas privadas de Reservas y Beneficios y propaga el ID, email y roles devueltos por Auth; las cabeceras que manda el cliente se sobrescriben en esas rutas.
+
+- `GET /api/v1/reservas/me`: endpoint de integración que devuelve la identidad verificada propagada por el gateway. El servicio Reservas aún no tiene operaciones de turnos; cada operación nueva deberá aplicar `requiereIdentidad` y roles por actor, además de comprobar propiedad del recurso.
+- `GET /api/v1/beneficios/mis-puntos`: requiere sesión y rol `cliente`; consulta el saldo del registro de Beneficios asociado al email verificado. Si no hay registro, devuelve saldo cero.
+- `POST /api/v1/beneficios/registro-externo`: conserva la autenticación independiente mediante `X-Partner-Key` para el sistema externo del gimnasio.
+
+El registro externo del gimnasio todavía no tiene una vinculación persistente con el ID de cuenta MELT; la consulta inicial de puntos usa el email normalizado. Antes de producción hay que reemplazar esta vinculación transitoria por una asociación explícita de identidad. Solo el superadministrador puede asignar roles administrativos; las operaciones reales de turnos y el resto de operaciones de puntos/canjes siguen pendientes de implementación.
+
+Para ejecutar la prueba de integración de login, cabeceras falsificadas, rutas privadas y permisos por rol en un entorno con Docker Compose levantado, usá `bash scripts/smoke-auth-gateway.sh`. GitHub Actions ejecuta esta misma prueba en el job `gateway-integration`.
