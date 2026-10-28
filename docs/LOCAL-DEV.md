@@ -179,3 +179,22 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 El registro externo del gimnasio todavía no tiene una vinculación persistente con el ID de cuenta MELT; la consulta inicial de puntos usa el email normalizado. Antes de producción hay que reemplazar esta vinculación transitoria por una asociación explícita de identidad. Solo el superadministrador puede asignar roles administrativos; las operaciones reales de turnos y el resto de operaciones de puntos/canjes siguen pendientes de implementación.
 
 Para ejecutar la prueba de integración de login, cabeceras falsificadas, rutas privadas y permisos por rol en un entorno con Docker Compose levantado, usá `bash scripts/smoke-auth-gateway.sh`. GitHub Actions ejecuta esta misma prueba en el job `gateway-integration`.
+
+
+### Política de permisos de Reservas
+
+El gateway protege todo `/api/v1/reservas/`: exige un Bearer válido mediante `auth_request`, verifica que la cuenta siga activa y sobrescribe las cabeceras de identidad con los datos devueltos por Auth. El servicio Reservas vuelve a exigir identidad en sus rutas privadas con `requiereIdentidad`; no se debe confiar en cabeceras enviadas directamente por el cliente fuera del gateway.
+
+El middleware `requierePermiso` aplica autorización por operación y deniega por defecto las operaciones que no tengan política:
+
+| Operación | Roles permitidos |
+|---|---|
+| `reservas.consultar-propias` | cliente |
+| `reservas.crear` | cliente |
+| `reservas.cancelar-propia` | cliente |
+| `reservas.consultar-agenda` | profesional, recepción, administrador, superadministrador |
+| `reservas.gestionar-agenda` | profesional, recepción, administrador, superadministrador |
+| `reservas.consultar-todas` | recepción, administrador, superadministrador |
+| `reservas.gestionar-turnos` | recepción, administrador, superadministrador |
+
+Cuando se implementen los handlers, encadenar ambos middlewares en este orden: `requiereIdentidad(), requierePermiso("clave.de.operacion")`. La autorización por rol no reemplaza la autorización por recurso: consultar, cancelar o modificar una reserva propia debe comparar el ID autenticado con el propietario de la reserva. Las rutas reales de turnos aún no están implementadas; por eso esta política y sus tests preparan el control de acceso, pero no implican que crear/cancelar reservas ya funcione.
