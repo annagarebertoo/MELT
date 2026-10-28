@@ -35,6 +35,7 @@ docker compose down -v
 | Salud del gateway | http://localhost:8080/health |
 | Listado público de tratamientos (contrato v1) | http://localhost:8080/api/v1/tratamientos |
 | Detalle público de tratamiento (contrato v1) | http://localhost:8080/api/v1/tratamientos/{id} |
+| Registro externo con puntos del gimnasio | http://localhost:8080/api/v1/beneficios/registro-externo |
 | Listado mediante alias compatible | http://localhost:8080/api/v1/catalogo/tratamientos |
 | Búsqueda | http://localhost:8080/api/v1/catalogo/tratamientos?q=facial |
 | Filtro por categoría | http://localhost:8080/api/v1/catalogo/tratamientos?categoria=Facial |
@@ -94,3 +95,36 @@ Los tests unitarios del catálogo cubren el endpoint de salud mediante una depen
 ## Alcance y limitaciones actuales
 
 El catálogo persiste tratamientos en MongoDB, ofrece búsqueda textual simple, filtro por categoría/precio máximo, paginación y ordenamiento. La creación mediante POST está implementada en la ruta compatible indicada arriba; la API pública contractual v1 expone solo lectura. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados en Compose, pero todavía no están integrados en los flujos de negocio. Reservas y Beneficios continúan siendo esqueletos HTTP. El registro de clientes, el enlace de registro referido por el Grupo 1 (Gimnasio), la asignación de puntos de regalo por referido, el frontend, autenticación, eventos de dominio, cache hit/miss, métricas de negocio, pruebas de carga y contrato externo desplegado siguen pendientes.
+
+
+## Registro externo del gimnasio y puntos de regalo
+
+El endpoint vive en Beneficios, no en Catálogo. Para habilitarlo, configurá estas variables en el entorno antes de levantar Compose (no subas claves reales al repositorio):
+
+- `CODIGO_GIMNASIO`: código de referido que debe venir en el body.
+- `CLAVE_API_GIMNASIO`: clave privada que el backend del gimnasio envía en el header `X-Partner-Key`.
+- `PUNTOS_POR_PLAN_MEMBRESIA`: JSON con la cantidad de puntos por combinación de plan y membresía. Ejemplo de formato, con nombres y valores ilustrativos que hay que reemplazar por los acordados con el Grupo 1:
+
+```json
+{"basico|mensual":100,"premium|anual":500}
+```
+
+Ejemplo de llamada:
+
+```sh
+curl -X POST http://localhost:8080/api/v1/beneficios/registro-externo \
+  -H "Content-Type: application/json" \
+  -H "X-Partner-Key: $CLAVE_API_GIMNASIO" \
+  -d '{
+    "solicitudId": "gym-req-0001",
+    "nombre": "Cliente de prueba",
+    "email": "cliente@example.com",
+    "codigoReferido": "CODIGO_CONFIGURADO",
+    "plan": "basico",
+    "membresia": "mensual"
+  }'
+```
+
+La primera solicitud devuelve `201`; repetir la misma `solicitudId` con el mismo email devuelve `200` sin sumar el regalo otra vez. Un email ya registrado con otra solicitud devuelve `409`. La ruta requiere configuración: si faltan las variables, devuelve `503` y no inventa puntos.
+
+**Alcance importante:** este endpoint guarda el registro externo y el saldo inicial de puntos en la base de Beneficios. No reemplaza una integración con un servicio de usuarios/autenticación, que todavía no existe en este repositorio. Antes de usarlo con el Grupo 1 hay que acordar los nombres reales de planes/membresías y las cantidades de puntos, configurar las credenciales por fuera del código y desplegar una URL accesible para ambos grupos.
