@@ -1,8 +1,10 @@
 # MELT — Arquitectura inicial
 
+> **Revisión de Entrega 2 — 23/10/2026:** este documento conserva el diseño inicial y sus enmiendas. Algunas frases históricas sobre archivos inexistentes o tecnologías todavía sin configurar quedaron desactualizadas. El estado comprobado y las limitaciones actuales se registran en la [matriz de cierre](ENTREGA-2.md) y en las revisiones de D1, D2, D6, D7, D10, D12 y D13. Los diagramas muestran diseño previsto, no la implementación completa; no deben usarse como evidencia funcional.
+
 **Versión:** 0.2 — Propuesta inicial para revisión del equipo.  
 **Entrega:** 1 — 9 de octubre de 2026.  
-**Estado:** Diseño y documentación. No hay servicios, infraestructura, pruebas, contratos, mocks ni despliegues implementados en el repositorio actual.
+**Estado:** Documentación más implementación parcial. El catálogo ya tiene una API inicial con MongoDB y hay una configuración de entorno local; los demás flujos y las pruebas de integración continúan pendientes. Ver [guía local](LOCAL-DEV.md).
 
 ## 1. Introducción y objetivos arquitectónicos
 
@@ -54,11 +56,13 @@ flowchart TB
             catalogo["Catálogo y Profesionales<br/>Consulta y administración del catálogo<br/>Go y Gin"]
             reservas["Reservas<br/>Agenda y ciclo de los turnos<br/>Go y Gin"]
             beneficios["Beneficios<br/>Puntos, canjes y restituciones<br/>Go y Gin"]
-            mongo[("MongoDB<br/>Base privada de Catálogo")]
+            mongo1[("MongoDB<br/>catalogo_db")]
+             mongo2[("MongoDB<br/>profesionales_db")]
             pgres[("PostgreSQL<br/>Base privada de Reservas")]
             pgbenef[("PostgreSQL<br/>Base privada de Beneficios")]
 
-            catalogo -->|"Lee y escribe"| mongo
+            catalogo -->|"Lee y escribe tratamientos"| mongo1
+            catalogo -->|"Lee y escribe profesionales"| mongo2
             reservas -->|"Lee y escribe"| pgres
             beneficios -->|"Lee y escribe"| pgbenef
         end
@@ -86,7 +90,7 @@ El frontend se comunica con el backend a través del gateway. El consumidor exte
 | :--- | :--- |
 | RabbitMQ | Mensajería para eventos y efectos posteriores, como puntos y notificaciones. |
 | OpenSearch | Búsqueda de tratamientos administrada por Catálogo. |
-| Redis | Caché de un flujo relevante de consulta del catálogo. |
+| Memcached | Caché de un flujo relevante de consulta del catálogo. |
 | Prometheus y Grafana | Métricas y tableros del sistema. |
 
 Estos componentes forman parte de la evolución prevista y no están configurados. La autenticación y autorización son necesarias; su mecanismo concreto permanece abierto.
@@ -109,13 +113,13 @@ Los límites deberán formalizarse en D1 y podrán evolucionar mediante ADR si a
 
 | Servicio | Datos propios | Persistencia propuesta y motivo |
 | :--- | :--- | :--- |
-| Catálogo y Profesionales | Categorías, tratamientos, referencias de imágenes, precios, duraciones, puntos configurados, profesionales y aptitudes. | MongoDB: lectura y actualización de documentos del catálogo con información descriptiva e imágenes asociadas. |
+| Catálogo y Profesionales | Categorías, tratamientos, palabras clave, referencias de imágenes, precios, duraciones, puntos configurados, profesionales y aptitudes. | Dos bases lógicas MongoDB: `catalogo_db` para tratamientos/categorías y `profesionales_db` para profesionales/aptitudes. La separación lógica es obligatoria aunque compartan una instancia física en desarrollo. |
 | Reservas | Horarios, excepciones, turnos, intervalos, estados, realizaciones y referencias a beneficios aplicados. | PostgreSQL: relaciones y transacciones para proteger la agenda y las transiciones del turno. |
 | Beneficios | Saldos, movimientos de puntos, beneficios, canjes, aplicaciones y restituciones. | PostgreSQL: cambios consistentes de saldo y movimientos, con control de duplicación. |
 
 Se proponen dos tipos de almacenamiento primario, relacional y no relacional. Cada servicio tendrá datos y credenciales privados. Reservas y Beneficios podrán compartir una instancia de PostgreSQL en desarrollo, pero utilizarán bases separadas: no compartirán tablas ni consultarán directamente datos ajenos.
 
-Las referencias entre servicios se transmitirán mediante identificadores por API o eventos. OpenSearch y Redis contendrán copias derivadas, no serán autoridad sobre agenda, saldo o validaciones comerciales. El alojamiento de imágenes, los esquemas, migraciones e índices se definirán posteriormente.
+Las referencias entre servicios se transmitirán mediante identificadores por API o eventos. OpenSearch y Memcached contendrán copias derivadas, no serán autoridad sobre agenda, saldo o validaciones comerciales. El alojamiento de imágenes, los esquemas, migraciones e índices se definirán posteriormente.
 
 La persistencia se registrará como versión inicial de D3. MongoDB no determina por sí solo cómo publicar cambios de forma confiable; ese mecanismo y sus requisitos de configuración se evaluarán con el diseño de comunicación.
 
@@ -129,7 +133,7 @@ La persistencia se registrará como versión inicial de D3. MongoDB no determina
 | Persistencia | MongoDB y PostgreSQL | Documentos del catálogo y operaciones transaccionales de agenda y puntos. |
 | Mensajería | RabbitMQ | Comunicación asíncrona mediante publicación y consumo de eventos. |
 | Búsqueda | OpenSearch | Búsqueda textual con filtros, paginación y ordenamiento. |
-| Caché | Redis | Copias temporales de lecturas relevantes del catálogo. |
+| Caché | Memcached | Copias temporales de lecturas relevantes del catálogo. |
 | Ejecución local | Docker y Docker Compose | Futuro procedimiento único y automatizado de arranque. |
 | Observabilidad | Prometheus y Grafana | Métricas y tableros para comprender el estado del sistema. |
 
@@ -156,7 +160,7 @@ El gateway enruta las solicitudes y aplica políticas de entrada; no concentra r
 
 Las operaciones remotas necesitarán tiempos de espera, tratamiento de errores y respuestas ausentes o tardías, y una política de reintentos. Una respuesta perdida no prueba que el efecto no ocurrió. La repetición deberá preservar una única operación de negocio.
 
-La mensajería deberá publicar y consumir eventos de dominio, evitar efectos duplicados y tratar mensajes fallidos. Se proponen hechos como turno confirmado, tratamiento completado y turno cancelado; sus esquemas, reintentos y recuperación están pendientes.
+La mensajería deberá publicar y consumir eventos de dominio, evitar efectos duplicados y tratar mensajes fallidos. Se proponen hechos como turno confirmado, tratamiento completado y turno cancelado. Para correos se define un intento inicial y hasta 3 reintentos automáticos con esperas crecientes; luego el mensaje pasa a una cola de errores para revisión y posible reenvío manual. Los esquemas definitivos, la configuración de colas y la operación de recuperación se detallarán durante la implementación.
 
 Transactional Outbox se conserva como **patrón candidato** para evitar perder efectos entre la persistencia y la publicación. No se impone en todos los servicios ni se fija su implementación en esta entrega. Se evaluará con los mecanismos de idempotencia y recuperación cuando se diseñen los flujos.
 
@@ -244,7 +248,7 @@ El frontend y la configuración ejecutable de Docker Compose se incorporarán du
 | :--- | :--- | :--- |
 | D1 — Límites | Tres capacidades de negocio, sus relaciones y propiedad exclusiva de datos. | `docs/adr/ADR-001-limites-servicios.md` |
 | D8 — Contrato propio | API de tratamientos, consumidor, datos públicos, versionado y compatibilidad. | `docs/adr/ADR-008-contrato-propio.md` |
-| D3 inicial — Persistencia | MongoDB para Catálogo y PostgreSQL para Reservas y Beneficios; motivos, patrones de acceso y límites. | `docs/adr/ADR-003-persistencia.md` |
+| D3 — Persistencia actualizada | Bases lógicas MongoDB separadas para Catálogo y Profesionales; PostgreSQL para Reservas y Beneficios; Memcached como caché. | `docs/adr/ADR-003-persistencia.md` |
 | D5 inicial — Comunicación | Validaciones síncronas y eventos asíncronos; garantías y cuestiones abiertas. | `docs/adr/ADR-005-comunicacion.md` |
 
 Estos ADR deben ser archivos independientes con alternativas y consecuencias. Su descripción aquí no reemplaza los registros. La estructura real de servicios, el contrato y el mock siguen pendientes, por lo que la primera entrega todavía no está completa.
@@ -274,7 +278,7 @@ Los requisitos del sistema completo se conservan como compromisos de desarrollo.
 ### 12.1. Compromisos técnicos pendientes de diseño y verificación
 
 - **Búsqueda:** filtros relevantes, paginación y ordenamiento; actualización ante cambios del catálogo y retraso máximo tolerable definido. OpenSearch es la propuesta, sin imponer ahora el mecanismo de reconstrucción.
-- **Caché:** al menos una lectura relevante, con justificación por necesidad observable y métricas de impacto. Redis es candidato; vigencia e invalidación se diseñarán y medirán posteriormente.
+- **Caché:** al menos una lectura relevante, con justificación por necesidad observable y métricas de impacto. Memcached es la tecnología seleccionada; vigencia e invalidación se diseñarán y medirán posteriormente.
 - **Balanceo:** al menos un servicio en dos o más instancias, con reconocimiento de indisponibilidad y evidencia de distribución. Reservas es candidato; la configuración de NGINX y la demostración quedan para su etapa.
 - **Resiliencia:** identificar dependencias y comportamiento ante lentitud o falla; seleccionar al menos un mecanismo de protección y demostrarlo mediante una caída controlada. Tiempos, reintentos, circuit breakers y recuperación se evaluarán sin fijar una combinación prematura.
 - **Observabilidad:** logs estructurados, métricas y tableros que permitan comprender una operación. La instrumentación, trazas, alertas y almacenamiento se definirán en las etapas correspondientes.
@@ -282,3 +286,30 @@ Los requisitos del sistema completo se conservan como compromisos de desarrollo.
 - **Operación:** arranque local único y automatizado, capacidad propia accesible durante la evaluación y `docs/POSTMORTEM.md` para la caída provocada. El repositorio público y la versión final en la rama principal deberán verificarse al preparar la entrega correspondiente.
 
 La principal limitación de esta propuesta es la coordinación entre datos privados de servicios distintos. La simplificación posterga su solución detallada, pero mantiene las garantías funcionales de reserva, acreditación, canje y restitución. No se compromete una arquitectura de alta disponibilidad completa ni una escala de producción todavía desconocida.
+
+
+## 12. Actualización de decisiones de diseño
+
+Las decisiones siguientes actualizan el diseño inicial y deben prevalecer sobre menciones anteriores que indiquen Redis o una única base de datos MongoDB para Catálogo y Profesionales. Estas capacidades están diseñadas, no necesariamente implementadas.
+
+### Persistencia documental
+
+- `catalogo_db` en MongoDB es propiedad lógica de Catálogo y contiene tratamientos, categorías, precios, duración, imágenes, puntos configurados y el arreglo `keywords`.
+- `profesionales_db` en MongoDB es propiedad lógica del componente responsable de profesionales y contiene perfiles, aptitudes y asociaciones con tratamientos. No se comparten colecciones entre dominios.
+- Reservas y Beneficios mantienen sus bases PostgreSQL propias.
+
+### Búsqueda y caché
+
+- OpenSearch indexa nombre, descripción, categoría y `keywords` del tratamiento. Los cambios del catálogo deben propagarse al índice de forma asíncrona; el retraso es consistencia eventual y debe observarse.
+- Memcached reemplaza a Redis para cachear consultas frecuentes del catálogo. Las claves deben considerar filtros y paginación; las modificaciones del catálogo deben invalidar o versionar las entradas afectadas. Se medirán hits, misses, latencia y errores.
+
+### Reserva con carrito, compatibilidad y seña
+
+- Al agregar un horario al carrito se crea un bloqueo temporal de 10 minutos, con titular y vencimiento. El bloqueo se libera al confirmar, quitar el elemento o vencer el plazo; no puede permanecer indefinidamente por la desconexión del cliente.
+- Reservas valida superposición de agenda del profesional e incompatibilidad de tratamientos del mismo cliente. Las reglas de incompatibilidad son explícitas por combinación de tratamientos/categorías y pueden incluir intervalos de separación. La operación de bloqueo debe ser atómica para prevenir carreras.
+- La seña equivale al 30 % del precio vigente del tratamiento y debe pagarse para confirmar la reserva. Si el cliente cancela con 24 horas o más de anticipación, se devuelve el 100 %; con menos de 24 horas o ante inasistencia, no se devuelve. La cancelación tardía libera el horario. El resultado exitoso del pago debe quedar registrado antes de confirmar. El proveedor/modalidad y el procedimiento operativo de devolución siguen pendientes; los pagos y devoluciones requieren idempotencia y trazabilidad.
+
+### Eventos y correo
+
+- Confirmación y cancelación realizadas por el profesional generan eventos identificados para enviar correo al cliente. Los correos se procesan asíncronamente con un intento inicial y hasta 3 reintentos automáticos con esperas crecientes; los fallos persistentes pasan a una cola de errores para revisión y posible reenvío manual. El estado del envío queda registrado y el proveedor de correo no forma parte de la transacción de agenda. Si la aceptación del proveedor y su respuesta quedan inciertas, se requiere revisión porque el consumidor no puede garantizar por sí solo que nunca haya duplicados.
+- La finalización del tratamiento genera el evento que habilita la acreditación de puntos una sola vez. Ni el carrito, ni la confirmación, ni el pago de la seña generan puntos. Beneficios registra cada acreditación con identificador único y restricción de unicidad en una operación transaccional para que los reintentos no dupliquen el saldo.

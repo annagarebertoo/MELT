@@ -1,0 +1,38 @@
+name: Go CI
+
+on:
+  push:
+    branches:
+      - main
+      - docs/correcciones-reglas-negocio
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - services/catalogo-profesionales
+          - services/reservas
+          - services/beneficios
+    defaults:
+      run:
+        working-directory: ${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.service }}/go.mod
+          cache: true
+          cache-dependency-path: ${{ matrix.service }}/go.sum
+      - name: Descargar dependencias
+        run: go mod download
+      - name: Ejecutar pruebas
+        run: go test -race ./...
+      - name: Compilar servicio
+        run: go build ./...

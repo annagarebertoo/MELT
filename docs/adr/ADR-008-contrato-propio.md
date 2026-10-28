@@ -79,3 +79,17 @@ El contrato OpenAPI y el mock se elaborarán por separado; este ADR no los imple
 - Mock ejecutable coherente con el contrato.
 - Condiciones de acceso (si se requiere API key u otro mecanismo en etapas posteriores).
 - Publicación de la capacidad real en un entorno accesible cuando exista implementación.
+
+## Actualización y validación — Entrega 2 (23/10/2026)
+
+Se mantiene la decisión de ofrecer consultas GET de tratamientos en **`/api/v1/tratamientos`** y **`/api/v1/tratamientos/{id}`**. El contrato vigente es OpenAPI 3.0.3, documento `1.0.0`, API `v1`, con identificadores de texto, imágenes, duración y keywords. El contrato y el mock ya existen; el mock histórico conserva diferencias documentadas y no prueba conformidad de la API real.
+
+La auditoría confirmó que NGINX solo publicaba la ruta con `/catalogo/`. Se agregó un alias de lectura hacia el mismo upstream, sin cambiar Catálogo ni los esquemas. La ruta anterior se conserva para los clientes existentes. Es un cambio compatible con v1: no requiere una nueva versión de API ni modifica el OpenAPI vigente.
+
+**URL base local:** `http://localhost:8080/api/v1`. **URL pública de Internet:** pendiente de publicación; no se considera accesible para otros grupos por funcionar en localhost. Las consultas locales no requieren autenticación; las condiciones del despliegue compartido deben acordarse antes de su publicación.
+
+Se ejecutaron 28 casos de contrato con esquemas de respuesta, parámetros, errores y comparación entre ambas rutas; se comprobaron MongoDB real, dos réplicas, correlación y trazas. Pasaron las regresiones D3, D5 y D11. Solo se recargó NGINX con autorización; no se modificaron datos ni se reiniciaron contenedores.
+
+Las limitaciones incluyen una muestra de un documento, entradas límite todavía divergentes, mock desactualizado y errores de dependencia sin prueba de caída. El procedimiento, la estrategia de compatibilidad y los pendientes se detallan en la [documentación de consumo](../contracts/README.md), con [evidencia D8](../evidence/d8-2026-10-23.json).
+
+Quedan pendientes la URL accesible y su continuidad operativa, las condiciones de acceso definitivas y la integración efectiva del grupo consumidor. La capacidad queda operativa y validada localmente para el alcance comprobado, sin afirmar cumplimiento completo de la publicación e integración entre grupos.

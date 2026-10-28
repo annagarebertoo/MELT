@@ -70,7 +70,7 @@ MELT publicará una capacidad para otro grupo y consumirá una capacidad externa
 
 ### 3.2. Funcionalidades fuera de alcance
 
-Quedan fuera de esta versión la gestión de múltiples sucursales, pagos en línea, facturación, inventario de insumos, historias clínicas, gestión salarial y una aplicación móvil nativa.
+Quedan fuera de esta versión la gestión de múltiples sucursales, el pago en línea del saldo total del tratamiento, facturación, inventario de insumos, historias clínicas, gestión salarial y una aplicación móvil nativa. La seña sí está incluida en el alcance: equivale al 30 % del precio del tratamiento, con devolución total si se cancela con al menos 24 horas de anticipación y sin devolución ante cancelación tardía o inasistencia. La modalidad/proveedor de pago y el procedimiento operativo de devolución quedan pendientes de definición.
 
 Las decisiones técnicas de implementación se documentarán en `docs/ARCHITECTURE.md`.
 
@@ -95,14 +95,14 @@ El catálogo es público. Para reservar, el cliente debe iniciar sesión o regis
 | **RF-01** | Explorar el catálogo sin iniciar sesión, organizado inicialmente en Facial, Corporal, Depilación y Manos y uñas. Mostrar nombre, imagen, precio y acceso al detalle de cada tratamiento; el detalle incluye descripción, duración, precio, imágenes, puntos otorgados y profesionales asociados. | Datos principales definidos; filtros: PD-02. |
 | **RF-02** | Buscar tratamientos con filtros relevantes para el dominio, paginación y al menos un criterio de ordenamiento. Los resultados deberán reflejar los cambios del catálogo dentro del retraso máximo que se acuerde. | Filtros y orden: PD-02; retraso: PD-11. |
 | **RF-03** | Consultar profesionales, los tratamientos que pueden atender y los horarios disponibles para realizar la selección previa a una reserva. | Disponibilidad: PD-03. |
-| **RF-04** | Reservar con sesión iniciada: seleccionar tratamiento y profesional, consultar un calendario, elegir fecha y horario disponible y, opcionalmente, aplicar un beneficio. Confirmar automáticamente al validar aptitud, disponibilidad, ausencia de superposición y el beneficio seleccionado. Mostrar el resumen del turno. | Intervalos: PD-03; beneficios: PD-08. |
+| **RF-04** | Reservar con sesión iniciada: seleccionar tratamiento y profesional, consultar un calendario, elegir fecha y horario disponible y, opcionalmente, aplicar un beneficio. Al agregarlo al carrito se bloquea temporalmente el horario durante 10 minutos. La confirmación requiere validar aptitud, disponibilidad, compatibilidad, pago exitoso de la seña y el beneficio seleccionado. Mostrar el resumen del turno. | Intervalos: PD-03; beneficios: PD-08; seña: RN-20; bloqueo: RN-19. |
 | **RF-05** | Permitir al cliente consultar próximos turnos y el historial de tratamientos realizados desde su perfil; permitir al profesional consultar su agenda y los detalles de sus turnos. | Permisos: PD-01, RN-13. |
-| **RF-06** | Permitir al cliente cancelar desde su perfil hasta 24 horas antes del inicio del turno. Registrar la cancelación válida y restituir automáticamente los puntos o el beneficio utilizado, sin duplicar restituciones. | Condiciones adicionales: PD-05; aplicación: PD-08. |
+| **RF-06** | Permitir al cliente cancelar desde su perfil. Si cancela con 24 horas o más de anticipación, corresponde la devolución del 100 % de la seña; si cancela con menos de 24 horas, no corresponde devolución. La cancelación libera el horario y la restitución de puntos o beneficios aplicados se resuelve según las reglas del programa, sin duplicados. | Facultades administrativas y excepciones: PD-05; aplicación de beneficios: PD-08; política de seña: RN-20. |
 | **RF-07** | Permitir al profesional correspondiente registrar un tratamiento como completado, vinculándolo con el turno e iniciando la acreditación de puntos. | Transiciones y facultades excepcionales: PD-06. |
 | **RF-08** | Acreditar la cantidad fija de puntos configurada para el tratamiento cuando el profesional registra su finalización, nunca al reservar y sin duplicar acreditaciones. | Vigencia de cambios: PD-09. |
 | **RF-09** | Mostrar en el perfil del cliente sus puntos disponibles, beneficios e historial. | Trazabilidad: RN-12, PD-13. |
 | **RF-10** | Permitir canjear puntos por descuentos o tratamientos gratuitos y aplicar un beneficio disponible durante la reserva. Informar el beneficio aplicado y el importe restante, que se paga presencialmente. | Costos y condiciones: PD-08. |
-| **RF-11** | Enviar por correo electrónico la confirmación de la reserva, con el resumen del turno; notificar otros eventos relevantes según se acuerde. | Otros eventos y recuperación: PD-10. |
+| **RF-11** | Enviar por correo electrónico al cliente la confirmación de la reserva y notificaciones cuando el profesional confirme o cancele un turno. Los envíos se procesan de forma asíncrona y recuperable: intento inicial más hasta 3 reintentos, con espera creciente; los fallos persistentes se envían a una cola de errores para revisión. | Proveedor de correo y operación de recuperación manual: PD-10. |
 | **RF-12** | Permitir al administrador gestionar tratamientos, categorías, profesionales y su asociación con tratamientos. | Cambios con reservas existentes: PD-04. |
 | **RF-13** | Permitir al administrador gestionar disponibilidad y turnos, con las validaciones de negocio correspondientes. | Operaciones y cambios: PD-04, PD-06. |
 | **RF-14** | Permitir al administrador configurar la cantidad fija de puntos de cada tratamiento y gestionar beneficios y recompensas. | Condiciones: PD-08; vigencia: PD-09. |
@@ -125,7 +125,7 @@ El catálogo es público. Para reservar, el cliente debe iniciar sesión o regis
 
 - **RN-06 — Puntos por realización efectiva.** Cada tratamiento tiene una cantidad fija de puntos configurable por el administrador. Se acredita cuando el profesional registra el tratamiento como completado; reservar o cancelar sin realización no acredita puntos.
 
-- **RN-07 — Cancelación y restitución.** El cliente puede cancelar desde su perfil hasta 24 horas antes del inicio del turno. Una cancelación válida libera el intervalo y restituye automáticamente los puntos o el beneficio utilizado. Repetirla no duplica la restitución.
+- **RN-07 — Cancelación y restitución.** El cliente puede cancelar desde su perfil antes del inicio del turno. La cancelación libera el intervalo. Si cancela con 24 horas o más de anticipación, corresponde la devolución del 100 % de la seña; si cancela con menos de 24 horas, no se devuelve la seña. La restitución de puntos o beneficios aplicados se realiza conforme a las reglas del programa. Repetir la cancelación no duplica devoluciones ni restituciones. La inasistencia no genera devolución de la seña.
 
 - **RN-08 — Acreditación sin duplicados.** El registro repetido o el procesamiento repetido de la finalización de un mismo tratamiento no podrá generar acreditaciones adicionales por ese mismo hecho.
 
@@ -162,7 +162,7 @@ Modelo propuesto, pendiente de aprobación en PD-06:
 | Origen | Acción y actor | Condición | Destino |
 | :--- | :--- | :--- | :--- |
 | Sin turno confirmado | Solicitar reserva — cliente; alcance administrativo por precisar | Aptitud, disponibilidad y ausencia de conflicto validadas | Confirmado |
-| Confirmado | Cancelar — cliente; facultades administrativas por precisar | Solicitud hasta 24 horas antes del inicio | Cancelado |
+| Confirmado | Cancelar — cliente; facultades administrativas por precisar | Solicitud válida antes del inicio; la devolución de la seña depende de la anticipación establecida en RN-20 | Cancelado |
 | Confirmado | Registrar finalización — profesional correspondiente | Tratamiento efectivamente realizado | Completado |
 
 El rechazo no crea un turno confirmado. Los estados adicionales y las correcciones excepcionales quedan pendientes (PD-06).
@@ -210,11 +210,11 @@ Se propone distinguir **disponible**, **aplicado** y **restituido**. Una aplicac
 ### 8.2. Cancelación
 
 1. El cliente consulta sus próximos turnos desde su perfil y solicita cancelar uno.
-2. MELT verifica titularidad, estado y que resten al menos 24 horas para su inicio.
+2. MELT verifica titularidad y estado del turno, y calcula la anticipación respecto del inicio para aplicar la política de devolución de la seña.
 3. Acepta la cancelación y libera el intervalo.
 4. Si había un beneficio aplicado, restituye automáticamente los puntos o el beneficio utilizado e informa el resultado.
 
-Fuera del plazo, se rechaza la cancelación del cliente y se conserva el turno. Repetir una cancelación válida no duplica la restitución. Si esta falla, queda pendiente de recuperación; el turno sigue cancelado. Las facultades administrativas y correcciones excepcionales permanecen pendientes (PD-05 y PD-06).
+Si la cancelación ocurre con menos de 24 horas de anticipación, se acepta y libera el turno, pero la seña no se devuelve. Repetir una cancelación válida no duplica devoluciones ni restituciones. Si la restitución de puntos o beneficios falla, queda pendiente de recuperación; el turno sigue cancelado. Las facultades administrativas y correcciones excepcionales permanecen pendientes (PD-05 y PD-06).
 
 ### 8.3. Finalización del tratamiento y acreditación
 
@@ -249,7 +249,7 @@ Los criterios se verificarán durante la implementación. Los marcados como **pr
 | **CA-04** | RF-04; RN-02 | Seleccionar un profesional que no puede realizar el tratamiento provoca un rechazo con motivo y no crea un turno confirmado. |
 | **CA-05** | RF-04; RN-03, RN-04 | Un intervalo fuera de la disponibilidad o superpuesto con un turno confirmado del mismo profesional no puede confirmarse. Debe comprobarse una superposición parcial además de la coincidencia total. Duración y casos de intervalos contiguos dependen de PD-03. |
 | **CA-06** | RF-04, RF-15; RN-04, RN-05 | Ante dos solicitudes simultáneas válidas salvo por competir por intervalos incompatibles del mismo profesional, se confirma una sola. Repetir la misma intención no incrementa el número de reservas. |
-| **CA-07** | RF-06; RN-07 | Una solicitud del titular con al menos 24 horas de anticipación cancela el turno y libera el intervalo; con menos de 24 horas se rechaza. Si se aplicó un beneficio, se restituye automáticamente el beneficio o los puntos utilizados. Repetir la operación no duplica la restitución. |
+| **CA-07** | RF-06; RN-07; RN-20 | Una solicitud válida del titular cancela el turno y libera el intervalo. Con 24 horas o más de anticipación se devuelve el 100 % de la seña; con menos de 24 horas no se devuelve. La inasistencia tampoco genera devolución. La restitución de puntos o beneficios aplicados no se duplica. |
 | **CA-08** | RF-07, RF-08; RN-06, RN-08 | El registro de finalización por el profesional inicia la acreditación de los puntos fijos del tratamiento. Repetirlo o reprocesarlo produce una única acreditación. Reservar o cancelar sin realización no acredita puntos. |
 | **CA-09** | RF-05, RF-07; RN-10, RN-13 | **Propuesto:** un cliente no consulta turnos ajenos ni registra finalizaciones; un profesional no completa turnos de otro profesional; un turno cancelado no puede completarse por el flujo ordinario. |
 | **CA-10** | RF-08, RF-09; RN-12, RN-14 | **Propuesto:** si falla la acreditación tras registrar la realización, el turno sigue completado y la acreditación pendiente puede identificarse. Al recuperarla, existe un único movimiento asociado y el saldo refleja una sola acreditación. |
@@ -279,7 +279,7 @@ Se conservan los identificadores originales. Las decisiones resueltas se registr
 | ID | Estado y decisión |
 | :--- | :--- |
 | **PD-03** | Parcialmente resuelta: selección por calendario, fecha y horario y confirmación automática. Pendientes: duración concreta, límites de intervalos, horarios, excepciones, anticipación y restricciones por cliente o recursos. |
-| **PD-05** | Resuelta para el cliente: cancelación hasta 24 horas antes, liberación de horario y restitución automática. Pendientes: facultades administrativas y tratamiento de excepciones. |
+| **PD-05** | Resuelta para el cliente: cancelación antes del inicio, liberación del horario y política de seña según RN-20. Pendientes: facultades administrativas y tratamiento de excepciones. |
 | **PD-06** | Pendiente: aprobar estados y transiciones de turnos, RN-10 y estados de beneficios; decidir sobre inasistencias, reprogramación y correcciones. El profesional registra los tratamientos completados; cualquier facultad excepcional del administrador requiere confirmación. |
 
 ### 10.3. Puntos y beneficios
@@ -294,8 +294,54 @@ Se conservan los identificadores originales. Las decisiones resueltas se registr
 
 | ID | Estado y decisión |
 | :--- | :--- |
-| **PD-10** | Resuelta la confirmación por correo electrónico. Pendientes: otros eventos y destinatarios, recuperación de envíos fallidos y aprobación de RN-14 junto con PD-13. |
+| **PD-10** | Resueltas las notificaciones al cliente por confirmación/cancelación del profesional y la estrategia inicial de recuperación: intento inicial, hasta 3 reintentos con espera creciente y cola de errores para revisión. Pendientes: proveedor de correo, procedimiento operativo de reenvío manual, otros eventos/destinatarios y aprobación de RN-14 junto con PD-13. |
 | **PD-12** | Resuelta la capacidad propia: API de consulta de tratamientos con filtros, descripción y precios. Pendientes: contrato versionado, mock, condiciones de consumo y capacidad externa con su flujo y conducta ante fallas. |
 | **PD-13** | Acordada la prevención de reservas, acreditaciones, canjes y restituciones duplicadas. Pendientes: aprobación de RN-12 y RN-15, estados de procesamiento, reconocimiento de una misma intención y responsables de recuperación. |
 
 No se fijan precios, cantidades de puntos ni horarios comerciales en esta versión. El diseño detallado de las pantallas permanece abierto para el desarrollo del frontend.
+
+
+## 12. Decisiones funcionales incorporadas — revisión de alcance
+
+Esta sección consolida las correcciones acordadas por el equipo. Continúa siendo una especificación de diseño: no implica que estas funciones estén implementadas.
+
+### 12.1. Puntos y notificaciones
+
+- **RN-16 — Acreditación posterior a la realización.** Los puntos se acreditan únicamente después de que el profesional registra el tratamiento como completado. La reserva, el bloqueo temporal del carrito y el pago de la seña no acreditan puntos. Cada acreditación se vincula a un identificador único de tratamiento/evento y se registra transaccionalmente con una restricción de unicidad, para que repetir o recibir varias veces el mismo evento no duplique puntos. Los fallos se reintentan; si no se resuelven, la operación queda identificada para revisión sin perder el registro de finalización.
+- **RN-17 — Correos por acciones del profesional.** Cuando el profesional confirma un turno o lo cancela, MELT genera un evento identificado de forma única para enviar un correo al cliente con el estado actualizado y los datos relevantes del turno. El envío es asíncrono y no revierte la operación de negocio si falla. Se realiza un intento inicial y hasta 3 reintentos automáticos con esperas crecientes. Si persiste el fallo, el mensaje pasa a una cola de errores (dead-letter) para revisión y eventual reenvío manual. Se registra el estado de procesamiento para no volver a tratar como nuevo un evento ya resuelto. Si el proveedor acepta el correo pero se pierde la respuesta, el resultado puede ser incierto y debe revisarse, ya que no puede garantizarse ausencia absoluta de duplicados solo desde el consumidor.
+
+### 12.2. Compatibilidad de tratamientos
+
+- **RN-18 — Incompatibilidad por profesional y por cliente.** Antes de confirmar o bloquear un horario, el sistema evalúa las reglas de compatibilidad configuradas para los tratamientos involucrados. Debe impedirse una combinación incompatible tanto cuando afecte la agenda de un mismo profesional como cuando dos tratamientos del mismo cliente se solapen y sean incompatibles entre sí. No se prohíben automáticamente todos los tratamientos de una misma categoría: la incompatibilidad se define mediante reglas explícitas entre tratamientos/categorías y, cuando corresponda, intervalos de separación.
+- La validación debe contemplar reservas confirmadas y bloqueos temporales activos. Los controles concurrentes deben impedir que dos solicitudes incompatibles se acepten simultáneamente.
+
+### 12.3. Carrito y bloqueo temporal
+
+- **RN-19 — Bloqueo temporal de 10 minutos.** Al incorporar al carrito una selección que requiere un horario concreto, MELT crea un bloqueo temporal de ese intervalo por 10 minutos. El bloqueo evita que otra solicitud confirme o bloquee un turno incompatible mientras está vigente.
+- El bloqueo tiene identificador, titular y vencimiento explícito. Al confirmar la reserva, se transforma/libera de forma atómica según el flujo definido; al quitar el turno del carrito, abandonar la operación o vencer los 10 minutos, el intervalo se libera. Una reserva no confirmada nunca debe quedar bloqueada indefinidamente.
+- La creación y confirmación del bloqueo deben ser seguras ante concurrencia y repetición. La expiración no puede depender exclusivamente de que el cliente vuelva a abrir la página.
+
+### 12.4. Seña
+
+- **RN-20 — Seña requerida para reservar.** Para confirmar una reserva, el cliente debe abonar una seña equivalente al **30 % del precio del tratamiento**, calculada sobre el precio vigente mostrado en el resumen antes de confirmar. La reserva solo queda confirmada cuando se registra el resultado exitoso del pago; un pago pendiente o fallido no confirma el turno.
+- **RN-20.1 — Devolución por cancelación.** Si el cliente cancela con **24 horas o más de anticipación** respecto del inicio del turno, se devuelve el **100 % de la seña**. Si cancela con menos de 24 horas de anticipación, la seña no se devuelve. La cancelación tardía libera el turno igualmente.
+- **RN-20.2 — Inasistencia.** Si el cliente no asiste al turno, la seña no se devuelve.
+- La seña es distinta del saldo restante del tratamiento y de los puntos del programa. El importe se informa antes de pagar. El proveedor o modalidad de pago, el procedimiento operativo de devolución y el tratamiento de cambios de turno quedan pendientes de definición; pagos y devoluciones deben ser trazables e idempotentes.
+
+### 12.5. Búsqueda, datos y caché
+
+- **RN-21 — Palabras clave del tratamiento.** Cada tratamiento incluye un arreglo `keywords` con términos relacionados, sinónimos y expresiones de búsqueda. La búsqueda indexa estos términos además del nombre y los campos ya definidos; los filtros, paginación y ordenamiento del contrato público deben mantenerse consistentes con el índice.
+- **Decisión de persistencia:** se separa la persistencia documental en dos bases lógicas MongoDB: una para Catálogo y otra para Profesionales. Cada servicio conserva la propiedad de sus datos; compartir una instancia física puede evaluarse para el entorno local, pero las bases y permisos lógicos se mantienen separados.
+- **Decisión de caché:** se reemplaza Redis por Memcached para la caché de lecturas del catálogo. La caché no es fuente de verdad; se documentarán TTL, invalidación, métricas de hit/miss y comportamiento ante indisponibilidad.
+
+### 12.6. Criterios de aceptación adicionales
+
+- **CA-16:** los puntos no se acreditan al reservar ni al pagar la seña; se acreditan una sola vez al registrar la finalización.
+- **CA-17:** la confirmación o cancelación de un turno por el profesional genera un correo al cliente. Una falla temporal del correo no revierte el cambio y el envío pendiente puede recuperarse.
+- **CA-18:** se rechazan combinaciones incompatibles tanto para un profesional como para un cliente, incluso ante solicitudes concurrentes.
+- **CA-19:** un horario incorporado al carrito queda bloqueado durante un máximo de 10 minutos y se libera al confirmar, quitarlo o vencer el bloqueo.
+- **CA-20:** no se confirma una reserva si la seña del 30 % no tiene pago exitoso registrado; con cancelación a 24 horas o más se devuelve el 100 %, con menos de 24 horas o ante inasistencia no se devuelve. Los pagos y devoluciones no se procesan dos veces ante reintentos.
+- **CA-21:** una búsqueda por términos asociados encuentra tratamientos por sus `keywords` y respeta filtros, paginación y orden.
+- **CA-22:** cada acreditación de puntos está vinculada a un identificador único y repetir el mismo evento no altera el saldo por segunda vez; si el procesamiento falla de forma persistente, queda registrado para revisión.
+- **CA-23:** los correos se procesan con un intento inicial y hasta 3 reintentos automáticos; los fallos persistentes quedan registrados en una cola de errores para revisión, sin revertir el estado del turno.
+

@@ -1,0 +1,309 @@
+{
+  "captured_at_utc": "2026-10-23T17:33:51.486728+00:00",
+  "read_only": true,
+  "base_commit": "0940e43092988dcf21f0fd540cb76cbd74617db8",
+  "source_files": {
+    "services/beneficios/cmd/api/main.go": {
+      "sha256": "e45620db32ce21e406c3e55565d9d54dd1fb5e04697aea3991b33860c1e1b8ef",
+      "direct_mongo_collection_dependency": false,
+      "database_names": [],
+      "search_cache_client_mentions": []
+    },
+    "services/catalogo-profesionales/cmd/api/main.go": {
+      "sha256": "c0f03b0022b2f2ea83a72ddd20ee26d96190463ddeaa54ad5e93ce9a2cf71860",
+      "direct_mongo_collection_dependency": true,
+      "database_names": [
+        "catalogo_db"
+      ],
+      "search_cache_client_mentions": []
+    },
+    "services/catalogo-profesionales/cmd/api/observability.go": {
+      "sha256": "cb0153e2f1802b4208d115700a61e0e7a8376557336351604d8e4eaa2b49ff0c",
+      "direct_mongo_collection_dependency": false,
+      "database_names": [],
+      "search_cache_client_mentions": []
+    },
+    "services/reservas/cmd/api/main.go": {
+      "sha256": "89670049b83ecb77c0637c3a26a919ec382ebb9a6e2060a254651aee7badaa05",
+      "direct_mongo_collection_dependency": false,
+      "database_names": [],
+      "search_cache_client_mentions": []
+    }
+  },
+  "containers": [
+    {
+      "Name": "melt-beneficios-1",
+      "Service": "beneficios",
+      "State": "running",
+      "Health": "",
+      "ID": "4c6ee5bf0094"
+    },
+    {
+      "Name": "melt-catalogo-profesionales-1",
+      "Service": "catalogo-profesionales",
+      "State": "running",
+      "Health": "",
+      "ID": "6ab9b7fac2b2"
+    },
+    {
+      "Name": "melt-catalogo-profesionales-2",
+      "Service": "catalogo-profesionales",
+      "State": "running",
+      "Health": "",
+      "ID": "d218caf44cf9"
+    },
+    {
+      "Name": "melt-gateway-1",
+      "Service": "gateway",
+      "State": "running",
+      "Health": "",
+      "ID": "a3f637857cd0"
+    },
+    {
+      "Name": "melt-jaeger-1",
+      "Service": "jaeger",
+      "State": "running",
+      "Health": "",
+      "ID": "cf36f004c456"
+    },
+    {
+      "Name": "melt-mongodb-1",
+      "Service": "mongodb",
+      "State": "running",
+      "Health": "healthy",
+      "ID": "7587a82fef22"
+    },
+    {
+      "Name": "melt-reservas-1",
+      "Service": "reservas",
+      "State": "running",
+      "Health": "",
+      "ID": "5af55d47c214"
+    }
+  ],
+  "declared_services": [
+    "beneficios",
+    "catalogo-profesionales",
+    "gateway",
+    "grafana",
+    "jaeger",
+    "memcached",
+    "mongodb",
+    "opensearch",
+    "postgres",
+    "prometheus",
+    "rabbitmq",
+    "reservas"
+  ],
+  "requests": [
+    {
+      "request_id": "sofia-cierre-38c97d35ea7840009dd3e1b97b89802f",
+      "status": 200,
+      "upstream": "172.19.0.4:8081",
+      "instance": "d218caf44cf9",
+      "trace_id": "d93802cba46fbd805969ba71d20a72db"
+    },
+    {
+      "request_id": "sofia-cierre-d7d97c6e2f0c4449aee1c37441d76f51",
+      "status": 200,
+      "upstream": "172.19.0.3:8081",
+      "instance": "6ab9b7fac2b2",
+      "trace_id": "a0a667df25fa090706245dc4b4647f2a"
+    },
+    {
+      "request_id": "sofia-cierre-4ff222ec244d4139a58731d05c1fcc3b",
+      "status": 200,
+      "upstream": "172.19.0.4:8081",
+      "instance": "d218caf44cf9",
+      "trace_id": "6f971b78f48a962e0115a531782b50e9"
+    },
+    {
+      "request_id": "sofia-cierre-caa9cb484e7f43c49588a1be2edb02b6",
+      "status": 200,
+      "upstream": "172.19.0.3:8081",
+      "instance": "6ab9b7fac2b2",
+      "trace_id": "6e2527ae12c8950e8a317e4fee4bc010"
+    },
+    {
+      "request_id": "sofia-cierre-5b0a157ad52c41a4b016c6f06dd4c58b",
+      "status": 200,
+      "upstream": "172.19.0.4:8081",
+      "instance": "d218caf44cf9",
+      "trace_id": "8da1a27fcb22a9ffce8480e7105dd812"
+    },
+    {
+      "request_id": "sofia-cierre-99e699a8c6d84aa1b6e9ccaa226ac9a0",
+      "status": 200,
+      "upstream": "172.19.0.3:8081",
+      "instance": "6ab9b7fac2b2",
+      "trace_id": "879093700aca821f87455cae8505a5b5"
+    },
+    {
+      "request_id": "sofia-cierre-3cc52bc76cfb4fe287a9740fe95b8b3e",
+      "status": 200,
+      "upstream": "172.19.0.4:8081",
+      "instance": "d218caf44cf9",
+      "trace_id": "9c7aa6f07ae727a16c06eee929fa77e1"
+    },
+    {
+      "request_id": "sofia-cierre-61fa8e8b4e5347549954623e19ee46f5",
+      "status": 200,
+      "upstream": "172.19.0.3:8081",
+      "instance": "6ab9b7fac2b2",
+      "trace_id": "ffc98ef448033c21489e33ec43c3f512"
+    },
+    {
+      "request_id": "sofia-cierre-989b12c243ef4b5aab1b39f21c4d04a1",
+      "status": 200,
+      "upstream": "172.19.0.4:8081",
+      "instance": "d218caf44cf9",
+      "trace_id": "da8be4e261405094ac36992c2f4c20dc"
+    },
+    {
+      "request_id": "sofia-cierre-5a464db691c24d62b068406830cb9d73",
+      "status": 200,
+      "upstream": "172.19.0.3:8081",
+      "instance": "6ab9b7fac2b2",
+      "trace_id": "287a0fca20806c15ee0328edc1d2fd8f"
+    },
+    {
+      "request_id": "sofia-cierre-ef521710a5e6447f973e99e16d9be3f3",
+      "status": 200,
+      "upstream": "172.19.0.4:8081",
+      "instance": "d218caf44cf9",
+      "trace_id": "2077fff0b1561e9d5ecb586531771b20"
+    },
+    {
+      "request_id": "sofia-cierre-dbd920677de5460f8ffde8b3b9902aae",
+      "status": 200,
+      "upstream": "172.19.0.3:8081",
+      "instance": "6ab9b7fac2b2",
+      "trace_id": "50acf569703718e5a1ecd1d7cfea9dd3"
+    }
+  ],
+  "replicas": [
+    {
+      "name": "melt-catalogo-profesionales-1",
+      "instance": "6ab9b7fac2b2",
+      "health": "ok",
+      "memory_limit_bytes": 0,
+      "nano_cpus_limit": 0
+    },
+    {
+      "name": "melt-catalogo-profesionales-2",
+      "instance": "d218caf44cf9",
+      "health": "ok",
+      "memory_limit_bytes": 0,
+      "nano_cpus_limit": 0
+    }
+  ],
+  "branch": "feature/sofia-adr-entrega-2",
+  "nginx": {
+    "configuration_test": "passed",
+    "timeouts": [
+      "proxy_connect_timeout 2s;",
+      "proxy_send_timeout 5s;",
+      "proxy_read_timeout 5s;"
+    ],
+    "explicit_retry_or_active_health_directives": [],
+    "failure_injection_performed": false
+  },
+  "distribution": {
+    "d218caf44cf9": 6,
+    "6ab9b7fac2b2": 6
+  },
+  "both_replicas_observed": true,
+  "resource_observation": {
+    "docker_host": {
+      "cpus": 16,
+      "memory_bytes": 7956668416
+    },
+    "stats_single_snapshot": [
+      {
+        "BlockIO": "1.06MB / 0B",
+        "CPUPerc": "0.00%",
+        "Container": "4c6ee5bf0094",
+        "ID": "4c6ee5bf0094",
+        "MemPerc": "0.03%",
+        "MemUsage": "2.121MiB / 7.41GiB",
+        "Name": "melt-beneficios-1",
+        "NetIO": "4.25kB / 1.19kB",
+        "PIDs": "5"
+      },
+      {
+        "BlockIO": "369kB / 0B",
+        "CPUPerc": "0.04%",
+        "Container": "6ab9b7fac2b2",
+        "ID": "6ab9b7fac2b2",
+        "MemPerc": "0.09%",
+        "MemUsage": "6.938MiB / 7.41GiB",
+        "Name": "melt-catalogo-profesionales-1",
+        "NetIO": "390kB / 334kB",
+        "PIDs": "14"
+      },
+      {
+        "BlockIO": "393kB / 0B",
+        "CPUPerc": "0.06%",
+        "Container": "d218caf44cf9",
+        "ID": "d218caf44cf9",
+        "MemPerc": "0.09%",
+        "MemUsage": "7.066MiB / 7.41GiB",
+        "Name": "melt-catalogo-profesionales-2",
+        "NetIO": "386kB / 330kB",
+        "PIDs": "14"
+      },
+      {
+        "BlockIO": "15.3MB / 4.1kB",
+        "CPUPerc": "1.00%",
+        "Container": "a3f637857cd0",
+        "ID": "a3f637857cd0",
+        "MemPerc": "0.49%",
+        "MemUsage": "37.44MiB / 7.41GiB",
+        "Name": "melt-gateway-1",
+        "NetIO": "513kB / 684kB",
+        "PIDs": "321"
+      },
+      {
+        "BlockIO": "52.4MB / 0B",
+        "CPUPerc": "0.05%",
+        "Container": "cf36f004c456",
+        "ID": "cf36f004c456",
+        "MemPerc": "0.30%",
+        "MemUsage": "22.98MiB / 7.41GiB",
+        "Name": "melt-jaeger-1",
+        "NetIO": "665kB / 18.4MB",
+        "PIDs": "20"
+      },
+      {
+        "BlockIO": "149MB / 38.7MB",
+        "CPUPerc": "49.90%",
+        "Container": "7587a82fef22",
+        "ID": "7587a82fef22",
+        "MemPerc": "4.74%",
+        "MemUsage": "359.3MiB / 7.41GiB",
+        "Name": "melt-mongodb-1",
+        "NetIO": "602kB / 1.19MB",
+        "PIDs": "58"
+      },
+      {
+        "BlockIO": "1.06MB / 0B",
+        "CPUPerc": "0.00%",
+        "Container": "5af55d47c214",
+        "ID": "5af55d47c214",
+        "MemPerc": "0.03%",
+        "MemUsage": "2.109MiB / 7.41GiB",
+        "Name": "melt-reservas-1",
+        "NetIO": "4.29kB / 1.19kB",
+        "PIDs": "5"
+      }
+    ],
+    "load_test": false,
+    "bottleneck_measured": false,
+    "cost_estimate_available": false
+  },
+  "limitations": [
+    "Healthy-instance distribution only; failover and timeout expiry not tested.",
+    "Resource snapshot is not capacity, cost or cache/search effectiveness evidence.",
+    "No service lifecycle operations, persistent writes or provider calls performed."
+  ]
+}

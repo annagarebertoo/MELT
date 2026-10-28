@@ -2,7 +2,7 @@
 
 **Sistema web de gestión para un centro de estética**  
 **Materia:** Arquitectura de Software — 2026  
-**Estado:** Diseño inicial — Entrega 1 (9 de octubre de 2026)
+**Estado:** Implementación parcial en progreso — infraestructura local y catálogo inicial
 
 ## Descripción
 
@@ -27,8 +27,10 @@ Facilitar la organización de la agenda del centro, brindar a los clientes un me
 3. Reserva y cancelación de turnos, con validación de conflictos de agenda.
 4. Gestión de estados de turnos y registro de tratamientos completados.
 5. Acreditación de puntos y canje de beneficios según reglas del centro.
-6. Envío de notificaciones relacionadas con eventos relevantes de las reservas.
-7. Gestión administrativa del catálogo, la agenda y el programa de beneficios.
+6. Envío de correos electrónicos al confirmar o cancelar un turno por parte del profesional.
+7. Carrito de reserva con bloqueo temporal del horario durante 10 minutos y liberación automática al vencer.
+8. Gestión de seña obligatoria del 30 % del precio del tratamiento para confirmar la reserva; devolución del 100 % si se cancela con al menos 24 horas de anticipación, sin devolución por cancelación tardía o inasistencia.
+9. Gestión administrativa del catálogo, la agenda y el programa de beneficios.
 
 Las reglas detalladas y los criterios de aceptación se documentarán en [SPEC.md](SPEC.md).
 
@@ -37,12 +39,13 @@ Las reglas detalladas y los criterios de aceptación se documentarán en [SPEC.m
 1. El cliente busca un tratamiento y consulta su información.
 2. Selecciona un profesional y un horario disponible.
 3. Solicita la reserva.
-4. El sistema verifica que el profesional pueda atender el tratamiento y que el horario no se superponga con otra reserva confirmada.
-5. Si las validaciones son correctas, registra el turno y confirma la operación; de lo contrario, informa el motivo del rechazo.
-6. Se genera un evento de dominio para procesar efectos posteriores, como el envío de una notificación.
-7. Una vez realizado el tratamiento, el profesional registra su finalización y se inicia la acreditación de puntos correspondiente.
+4. El sistema valida que el profesional pueda atender el tratamiento, que no haya incompatibilidades con la agenda del profesional ni con otros turnos del cliente y que el horario siga disponible.
+5. Al agregar el horario al carrito, lo bloquea durante 10 minutos; si el cliente no confirma, lo libera automáticamente.
+6. Para confirmar, exige el pago exitoso de una seña equivalente al 30 % del precio del tratamiento y transforma el bloqueo en reserva. Si se cancela con 24 horas o más de anticipación, se devuelve el 100 % de la seña; con menos de 24 horas o ante inasistencia, no se devuelve.
+7. La confirmación o cancelación realizada por el profesional genera un evento para enviar un correo al cliente.
+8. Una vez realizado el tratamiento, el profesional registra su finalización y se inicia la acreditación de puntos correspondiente.
 
-La confirmación de una reserva y la acreditación de puntos deberán contemplar concurrencia, duplicación de solicitudes y fallas parciales.
+La confirmación de una reserva y la acreditación de puntos deberán contemplar concurrencia, duplicación de solicitudes y fallas parciales. Los puntos se registran con una clave única para evitar acreditaciones duplicadas. Los correos usan un intento inicial y hasta 3 reintentos automáticos con esperas crecientes; si siguen fallando, pasan a una cola de errores para revisión. Los bloqueos temporales del carrito también deberán respetar las reglas de incompatibilidad y expirar automáticamente.
 
 ## Arquitectura propuesta
 
@@ -50,14 +53,14 @@ El sistema se diseñará con un **frontend web**, un **API Gateway** y, como mí
 
 | Componente | Responsabilidad preliminar |
 | --- | --- |
-| Catálogo y Profesionales | Tratamientos, categorías, profesionales, precios, duraciones y puntos configurados. |
+| Catálogo y Profesionales | Tratamientos, categorías, profesionales, precios, duraciones, palabras clave y puntos configurados. |
 | Reservas | Agenda, disponibilidad efectiva, creación, cancelación y finalización de turnos. |
 | Beneficios | Saldos, movimientos de puntos, canjes, aplicaciones y restituciones. |
 | API Gateway | Punto de entrada del frontend y enrutamiento hacia los servicios. |
 
 Cada microservicio será propietario de sus datos. Los límites definitivos, la asignación de la agenda y las comunicaciones se detallarán en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) y en los registros de decisiones arquitectónicas.
 
-Se prevé utilizar **comunicación síncrona** para las consultas y validaciones que requieran una respuesta inmediata, y **mensajería asíncrona** para eventos y efectos posteriores. Se incorporarán un motor de búsqueda, caché, balanceo de carga, mecanismos de resiliencia y observabilidad.
+Se prevé utilizar **comunicación síncrona** para las consultas y validaciones que requieran una respuesta inmediata, y **mensajería asíncrona** para eventos y efectos posteriores. Se incorporarán un motor de búsqueda, caché, balanceo de carga, mecanismos de resiliencia y observabilidad. Las incompatibilidades se validarán para la agenda del profesional y para los turnos del mismo cliente.
 
 ## Tecnologías propuestas
 
@@ -71,7 +74,7 @@ Se prevé utilizar **comunicación síncrona** para las consultas y validaciones
 | Persistencia relacional | PostgreSQL |
 | Persistencia no relacional | MongoDB |
 | Mensajería asíncrona | RabbitMQ |
-| Caché | Redis |
+| Caché | Memcached |
 | Motor de búsqueda | OpenSearch |
 | Contenedores y ejecución local | Docker y Docker Compose |
 | Métricas y tableros | Prometheus y Grafana |
@@ -117,3 +120,16 @@ Los enlaces a documentos aún no creados comenzarán a funcionar cuando se incor
 ## Estado del proyecto
 
 Este documento corresponde a la **primera entrega de diseño**. La arquitectura, las tecnologías y las funcionalidades aquí descritas representan el alcance y las decisiones preliminares del equipo, no funcionalidades ya implementadas. Se actualizará durante el desarrollo para reflejar el estado real del sistema.
+
+
+## Desarrollo local
+
+El entorno de desarrollo y los endpoints iniciales están documentados en [docs/LOCAL-DEV.md](docs/LOCAL-DEV.md). Para levantar los componentes declarados:
+
+```sh
+docker compose config
+docker compose up --build -d
+docker compose ps
+```
+
+El estado de resiliencia y el procedimiento para registrar evidencia real se encuentran en [docs/POSTMORTEM.md](docs/POSTMORTEM.md). No se deben interpretar las configuraciones declaradas como pruebas ejecutadas: las integraciones de búsqueda, caché, mensajería y métricas de negocio siguen pendientes.

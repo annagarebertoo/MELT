@@ -2,31 +2,31 @@
 
 ## Descripción
 
-La API de Tratamientos permite consultar el catálogo público de tratamientos de MELT.
+La API pública de Tratamientos permite a otros componentes y grupos consultar el catálogo de tratamientos de MELT. Para la consigna de integración, el Grupo 1 (Gimnasio) es consumidor del catálogo del Grupo 5 (MELT).
 
-La capacidad está versionada como `v1` y está destinada al consumo de otros componentes o grupos que necesiten consultar tratamientos disponibles.
+La API de consulta está versionada como `v1`. La carga administrativa de tratamientos mediante POST existe en la ruta compatible de desarrollo, pero no forma parte del contrato público de solo lectura.
 
-## Versión
+## Versión y acceso
 
 Versión actual: `v1`
 
-Contrato OpenAPI:
+Contrato OpenAPI: `tratamientos-v1.openapi.yaml`
 
-`tratamientos-v1.openapi.yaml`
+La versión del documento OpenAPI es `1.0.0` (OpenAPI `3.0.3`). La URL base contractual es `/api/v1`; en el entorno local se utiliza **`http://localhost:8080/api/v1`**. La URL de Internet sigue pendiente: localhost no permite el acceso desde otro grupo. Antes de la integración real, el Grupo 5 debe publicar el gateway en una dirección accesible por el Grupo 1 y comunicar esa URL.
 
-## Endpoints
+Desde la actualización D8 del 23/10/2026, NGINX publica las rutas contractuales `/api/v1/tratamientos` y `/api/v1/tratamientos/{id}`, y conserva `/api/v1/catalogo/tratamientos` y su detalle como alias compatible. Ambos accesos GET consultan el mismo Catálogo y MongoDB, sin redirecciones ni cambios de esquema. El nuevo alias contractual es de solo lectura y NGINX bloquea POST en esa ruta.
+
+## Endpoints públicos
 
 ### Listar y buscar tratamientos
 
-GET /api/v1/tratamientos
+`GET /api/v1/tratamientos`
 
 Permite consultar tratamientos con filtros, paginación y ordenamiento.
 
-Parámetros disponibles:
-
 | Parámetro | Tipo | Descripción |
 |---|---|---|
-| `q` | string | Busca únicamente por el nombre del tratamiento |
+| `q` | string | Busca por nombre y palabras clave (`keywords`) asociadas al tratamiento |
 | `categoria` | string | Filtra por categoría |
 | `precioMax` | number | Filtra por precio máximo |
 | `page` | integer | Número de página. Por defecto: `1` |
@@ -34,110 +34,76 @@ Parámetros disponibles:
 | `sort` | string | Campo de ordenamiento: `nombre` o `precio` |
 | `order` | string | Orden: `asc` o `desc` |
 
-Categorías disponibles:
-
-- `Facial`
-- `Corporal`
-- `Depilación`
-- `Manos y uñas`
+Categorías disponibles: `Facial`, `Corporal`, `Depilación`, `Manos y uñas`.
 
 Ejemplo:
 
-GET /api/v1/tratamientos?q=limpieza&categoria=Facial&precioMax=20000&page=1&limit=10&sort=precio&order=asc
+`GET /api/v1/tratamientos?q=limpieza&categoria=Facial&precioMax=20000&page=1&limit=10&sort=precio&order=asc`
 
 ### Obtener un tratamiento
 
-GET /api/v1/tratamientos/{id}
+`GET /api/v1/tratamientos/{id}`
 
 Devuelve la información detallada de un tratamiento.
 
-Ejemplo:
+Ejemplo: `GET /api/v1/tratamientos/trat-002`.
 
-GET /api/v1/tratamientos/1
+## Modelo de respuesta
 
-## Respuesta
+Un tratamiento contiene identificador, nombre, categoría, descripción, precio, moneda, duración en minutos, imágenes y `keywords`.
 
-Un tratamiento contiene:
-
-- identificador
-- nombre
-- categoría
-- descripción
-- precio
-- moneda
-- duración en minutos
-- imágenes
-
-Ejemplo:
-
+```json
 {
-  "id": 1,
+  "id": "trat-002",
   "nombre": "Limpieza facial profunda",
   "categoria": "Facial",
-  "descripcion": "Limpieza profunda de la piel.",
-  "precio": 15000,
+  "descripcion": "Limpieza profunda e hidratación del rostro",
+  "precio": 28000,
   "moneda": "ARS",
   "duracionMinutos": 60,
-  "imagenes": [
-    "https://melt.example.com/images/limpieza-facial.jpg"
-  ]
+  "imagenes": [],
+  "keywords": ["limpieza", "facial", "hidratacion", "rostro"]
 }
+```
 
-## Paginación
-
-La respuesta del listado incluye información de paginación:
-
-{
-  "tratamientos": [],
-  "pagination": {
-    "page": 1,
-    "limit": 10,
-    "total": 25,
-    "totalPages": 3
-  }
-}
+El listado devuelve un objeto con `tratamientos` (arreglo) y `pagination`, que contiene `page`, `limit`, `total` y `totalPages`.
 
 ## Errores
 
-La API utiliza una estructura común para los errores:
+Los errores de la API pública usan la estructura:
 
+```json
 {
   "error": {
     "code": "INVALID_PARAMETER",
     "message": "El parámetro enviado no es válido."
   }
 }
-
-Códigos principales:
+```
 
 | HTTP | Código | Uso |
 |---|---|---|
 | `400` | `INVALID_PARAMETER` | Parámetros inválidos |
 | `404` | `TRATAMIENTO_NOT_FOUND` | Tratamiento inexistente |
-| `500` | `INTERNAL_ERROR` | Error interno del servidor |
+| `500` | `INTERNAL_ERROR` | Error interno |
+| `503` | `CATALOGO_NO_DISPONIBLE` | Catálogo temporalmente no disponible |
 
-## Acceso y uso
+La ruta POST de carga de tratamientos responde actualmente con algunos errores de formato diferentes (por ejemplo, cuerpo JSON inválido o ID duplicado). Esa operación no está cubierta por el contrato público OpenAPI v1.
 
-La capacidad corresponde a la consulta del catálogo público de tratamientos.
+## Alcance de la integración con Grupo 1 — Gimnasio
 
-Los endpoints definidos en esta versión utilizan operaciones `GET` y no requieren operaciones de escritura ni idempotencia adicional.
+La consigna del proyecto indica que el Grupo 1 consume del Grupo 5 dos capacidades: **catálogo** y **registro con puntos de regalo adaptado a planes y membresías del gimnasio**.
 
-Los datos expuestos son únicamente datos públicos del catálogo.
+- **Catálogo:** implementado para consulta pública mediante los dos endpoints GET documentados.
+- **Registro externo con puntos de regalo:** todavía no implementado. No debe interpretarse como parte de la API de Catálogo. Hace falta acordar y publicar una capacidad de registro de clientes que identifique que el alta provino del gimnasio, aplique la regla de puntos de regalo y distinga ese caso de un registro directo.
+- **Acceso compartido:** la URL local `localhost` solo sirve para pruebas en el entorno local de MELT. La integración entre grupos requiere desplegar el gateway en una URL accesible desde el entorno del Grupo 1.
+
+El diseño del registro referido debe definir un identificador/código de referido del gimnasio, los datos mínimos del registro, la regla de elegibilidad y cantidad de puntos, la adaptación a planes/membresías, la prevención de acreditaciones duplicadas y cómo se informan errores. Los registros directos no deben recibir el regalo de referido. La implementación deberá estar en el servicio responsable del registro/beneficios, no en el Catálogo.
 
 ## Mock
 
-El proyecto incluye un mock funcional en:
+El proyecto incluye un mock en `docs/contracts/mock/`. Sirve para pruebas aisladas, pero no sustituye la API real. El mock histórico tiene diferencias respecto del contrato actual (IDs numéricos, omisión de `keywords`, búsqueda solo por nombre y diferencias en paginación), por lo que no debe usarse como evidencia de conformidad.
 
-`docs/contracts/mock/`
+## Cambios de versión y compatibilidad
 
-El mock permite probar el contrato sin necesidad de una base de datos.
-
-Para conocer cómo ejecutarlo y probarlo, consultar:
-
-`docs/contracts/mock/README.md`
-
-## Cambios de versión
-
-La versión actual del contrato es `v1`.
-
-Los cambios incompatibles con esta versión deberán publicarse mediante una nueva versión de la API y comunicarse a los consumidores.
+La versión actual del contrato es `v1`. Los cambios incompatibles deberán publicarse mediante una nueva versión y comunicarse a los consumidores. Los IDs son cadenas de texto; los consumidores no deben convertirlos a números. El alias agregado es compatible con `v1` y no cambia el esquema de respuesta.
