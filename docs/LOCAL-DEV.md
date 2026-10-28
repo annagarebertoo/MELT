@@ -33,7 +33,9 @@ docker compose down -v
 |---|---|
 | API Gateway | http://localhost:8080 |
 | Salud del gateway | http://localhost:8080/health |
-| Listado de tratamientos | http://localhost:8080/api/v1/catalogo/tratamientos |
+| Listado público de tratamientos (contrato v1) | http://localhost:8080/api/v1/tratamientos |
+| Detalle público de tratamiento (contrato v1) | http://localhost:8080/api/v1/tratamientos/{id} |
+| Listado mediante alias compatible | http://localhost:8080/api/v1/catalogo/tratamientos |
 | Búsqueda | http://localhost:8080/api/v1/catalogo/tratamientos?q=facial |
 | Filtro por categoría | http://localhost:8080/api/v1/catalogo/tratamientos?categoria=Facial |
 | Paginación y ordenamiento | http://localhost:8080/api/v1/catalogo/tratamientos?page=1&limit=10&sort=precio&order=asc |
@@ -44,21 +46,32 @@ docker compose down -v
 
 Credenciales de desarrollo por defecto: RabbitMQ `guest/guest`; Grafana `admin/admin_dev_only`. Cambiarlas antes de cualquier entorno compartido. OpenSearch tiene la seguridad deshabilitada solo para desarrollo local.
 
-## Alta de un tratamiento
+## Alta de un tratamiento desde Postman
 
-```sh
-curl -i -X POST http://localhost:8080/api/v1/catalogo/tratamientos \
-  -H "Content-Type: application/json" \
-  -d '{
-    "id":"trat-001",
-    "nombre":"Limpieza facial",
-    "descripcion":"Limpieza profunda del rostro",
-    "categoria":"Facial",
-    "precio":25000,
-    "duracionMin":60,
-    "keywords":["limpieza","facial","rostro"]
-  }'
+La creación de tratamientos funciona en el servicio de Catálogo, a través de la ruta compatible `POST /api/v1/catalogo/tratamientos`. La ruta contractual `/api/v1/tratamientos` es pública y de solo lectura; el gateway bloquea POST en ese alias. No confundir el endpoint administrativo/local de carga con la API GET que consume otro grupo.
+
+- Método: `POST`
+- URL: `http://localhost:8080/api/v1/catalogo/tratamientos`
+- Header: `Content-Type: application/json`
+- Body: `raw` → `JSON`
+
+Ejemplo válido (cambiar el ID si ya existe; el campo es `duracionMinutos`, no `duracionMin`):
+
+```json
+{
+  "id": "trat-002",
+  "nombre": "Limpieza facial profunda",
+  "descripcion": "Limpieza profunda e hidratación del rostro",
+  "categoria": "Facial",
+  "precio": 28000,
+  "moneda": "ARS",
+  "duracionMinutos": 60,
+  "imagenes": [],
+  "keywords": ["limpieza", "facial", "hidratacion", "rostro"]
+}
 ```
+
+Resultado esperado: `201 Created` y el tratamiento creado en el cuerpo de la respuesta. Si se repite un ID existente, la API responde `409 Conflict`. Los campos obligatorios incluyen `id`, `nombre`, `descripcion`, `categoria`, `moneda: "ARS"`, `precio` no negativo y `duracionMinutos` positivo. Si no se envían `imagenes` o `keywords`, el servicio los inicializa como arreglos vacíos.
 
 ## Escalar el catálogo
 
@@ -80,4 +93,4 @@ Los tests unitarios del catálogo cubren el endpoint de salud mediante una depen
 
 ## Alcance y limitaciones actuales
 
-El catálogo persiste tratamientos en MongoDB, ofrece búsqueda textual simple, filtro por categoría/precio máximo, paginación y ordenamiento. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados en Compose, pero todavía no están integrados en los flujos de negocio. Reservas y Beneficios continúan siendo esqueletos HTTP. El frontend, autenticación, eventos de dominio, cache hit/miss, métricas de negocio, pruebas de carga y contrato externo desplegado siguen pendientes.
+El catálogo persiste tratamientos en MongoDB, ofrece búsqueda textual simple, filtro por categoría/precio máximo, paginación y ordenamiento. La creación mediante POST está implementada en la ruta compatible indicada arriba; la API pública contractual v1 expone solo lectura. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados en Compose, pero todavía no están integrados en los flujos de negocio. Reservas y Beneficios continúan siendo esqueletos HTTP. El registro de clientes, el enlace de registro referido por el Grupo 1 (Gimnasio), la asignación de puntos de regalo por referido, el frontend, autenticación, eventos de dominio, cache hit/miss, métricas de negocio, pruebas de carga y contrato externo desplegado siguen pendientes.
