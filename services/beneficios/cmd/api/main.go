@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"log"
@@ -42,6 +43,7 @@ type RegistroExterno struct {
 type Servidor struct {
 	registros          *mongo.Collection
 	codigoGimnasio     string
+	claveAPI           string
 	puntosPorMembresia map[string]int
 }
 
@@ -82,6 +84,7 @@ func main() {
 	servidor := &Servidor{
 		registros:          coleccion,
 		codigoGimnasio:     strings.TrimSpace(os.Getenv("CODIGO_GIMNASIO")),
+		claveAPI:           strings.TrimSpace(os.Getenv("CLAVE_API_GIMNASIO")),
 		puntosPorMembresia: puntos,
 	}
 	port := strings.TrimSpace(os.Getenv("PORT"))
@@ -120,8 +123,14 @@ func (s *Servidor) registrarExterno(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "BENEFICIOS_NO_DISPONIBLE", "message": "El servicio de beneficios no está disponible."}})
 		return
 	}
-	if s.codigoGimnasio == "" || len(s.puntosPorMembresia) == 0 {
+	if s.codigoGimnasio == "" || s.claveAPI == "" || len(s.puntosPorMembresia) == 0 {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "REGISTRO_EXTERNO_NO_CONFIGURADO", "message": "El registro externo todavía no está configurado."}})
+		return
+	}
+
+	claveEnviada := c.GetHeader("X-Partner-Key")
+	if claveEnviada == "" || subtle.ConstantTimeCompare([]byte(claveEnviada), []byte(s.claveAPI)) != 1 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "PARTNER_NO_AUTORIZADO", "message": "El consumidor no está autorizado para registrar altas externas."}})
 		return
 	}
 
