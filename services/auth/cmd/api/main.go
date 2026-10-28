@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -285,4 +284,3 @@ func (s *authServer) me(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"usuario":usuario})
 }
 
-func (s *authServer) String() string { return fmt.Sprintf("authServer(%s)", s.users.Name()) }
