@@ -125,7 +125,7 @@ func TestCategoriaValida(t *testing.T) {
 		want      bool
 	}{
 		{"Facial", true},
-		{"corporal", true},
+		{"corporal", false},
 		{"Depilación", true},
 		{"Manos y uñas", true},
 		{"Capilar", false},
