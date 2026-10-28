@@ -2,7 +2,10 @@ module github.com/annagarebertoo/MELT/services/beneficios
 
 go 1.26.1
 
-require github.com/gin-gonic/gin v1.12.0
+require (
+	github.com/gin-gonic/gin v1.12.0
+	go.mongodb.org/mongo-driver/v2 v2.9.2
+)
 
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
@@ -27,7 +30,6 @@ require (
 	github.com/quic-go/quic-go v0.59.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
-	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	golang.org/x/arch v0.22.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
