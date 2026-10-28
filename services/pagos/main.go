@@ -64,7 +64,7 @@ func (s *server) handler() http.Handler {
 
 func (s *server) verify(w http.ResponseWriter, r *http.Request) {
 	var req verifyRequest
-	if err := decodeJSON(r, &req); err != nil || strings.TrimSpace(req.PaymentID) == "" ||
+	if err := decodeJSON(r, &req); err != nil || !validPaymentID(req.PaymentID) ||
 		strings.TrimSpace(req.Reference) == "" || req.Amount <= 0 || req.Currency != "ARS" {
 		writeError(w, http.StatusBadRequest, "Solicitud de verificación inválida")
 		return
@@ -88,7 +88,7 @@ func (s *server) verify(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) refund(w http.ResponseWriter, r *http.Request) {
 	var req refundRequest
-	if err := decodeJSON(r, &req); err != nil || strings.TrimSpace(req.PaymentID) == "" ||
+	if err := decodeJSON(r, &req); err != nil || !validPaymentID(req.PaymentID) ||
 		req.Amount <= 0 || req.Currency != "ARS" {
 		writeError(w, http.StatusBadRequest, "Solicitud de devolución inválida")
 		return
@@ -105,7 +105,11 @@ func (s *server) refund(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "Mercado Pago no confirmó la devolución")
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]any{
+	if result["status"] != "approved" {
+		writeError(w, http.StatusBadGateway, "Mercado Pago recibió la solicitud, pero la devolución todavía no figura aprobada")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
 		"estado": "aceptada", "pagoId": req.PaymentID, "importe": req.Amount,
 		"moneda": req.Currency, "resultado": result,
 	})
@@ -146,6 +150,12 @@ func (s *server) request(r *http.Request, method, path string, body []byte, idem
 		return err
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func validPaymentID(id string) bool {
+	if id == "" { return false }
+	for _, ch := range id { if ch < 48 || ch > 57 { return false } }
+	return true
 }
 
 func decodeJSON(r *http.Request, out any) error {
