@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"net/http/httptest"
+	"github.com/gin-gonic/gin"
 	"time"
 )
 
@@ -61,6 +63,35 @@ func TestTokenVencidoSeRechaza(t *testing.T) {
 	if _, err := s.validarToken(strings.Join(parts, ".")); err == nil {
 		t.Fatal("se esperaba rechazar el token vencido")
 	}
+}
+
+func TestRutasDeAutenticacionRegistradas(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	s := &authServer{jwtSecret: []byte("clave-de-prueba-de-al-menos-32-caracteres"), tokenTTL: time.Minute}
+	router := s.router()
+	esperadas := map[string]bool{
+		"POST /registro": false,
+		"POST /login": false,
+		"GET /me": false,
+		"POST /usuarios": false,
+	}
+	for _, route := range router.Routes() {
+		key := route.Method + " " + route.Path
+		if _, ok := esperadas[key]; ok { esperadas[key] = true }
+	}
+	for route, encontrada := range esperadas {
+		if !encontrada { t.Errorf("no se registró la ruta %s", route) }
+	}
+}
+
+func TestMiddlewareRechazaTokenAusente(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	s := &authServer{jwtSecret: []byte("clave-de-prueba-de-al-menos-32-caracteres"), tokenTTL: time.Minute}
+	router := gin.New()
+	router.GET("/privado", s.requiereAuth(), func(c *gin.Context) { c.Status(200) })
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest("GET", "/privado", nil))
+	if recorder.Code != 401 { t.Fatalf("se esperaba 401 y se obtuvo %d", recorder.Code) }
 }
 
 func TestRolesValidos(t *testing.T) {
