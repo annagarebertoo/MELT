@@ -102,7 +102,7 @@ El diseño del registro referido debe definir un identificador/código de referi
 
 ## Mock
 
-El proyecto incluye un mock en `docs/contracts/mock/`. Sirve para pruebas aisladas, pero no sustituye la API real. El mock histórico tiene diferencias respecto del contrato actual (IDs numéricos, omisión de `keywords`, búsqueda solo por nombre y diferencias en paginación), por lo que no debe usarse como evidencia de conformidad.
+El proyecto incluye un mock en `docs/contracts/mock/` para pruebas locales sin MongoDB. Se alineó su modelo de respuesta con el contrato v1: IDs de texto, `keywords`, búsqueda por nombre y palabras clave, filtro de categoría sin distinguir mayúsculas/minúsculas y páginas sin resultados como arreglos vacíos. El mock utiliza datos fijos en memoria; no sustituye la validación de la API real ni es la URL de integración para el Grupo 1.
 
 ## Cambios de versión y compatibilidad
 
