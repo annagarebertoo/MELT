@@ -52,6 +52,8 @@ type servidorReservas struct {
 
 var permisosPorOperacion = map[string]map[string]bool{
 	"reservas.consultar-propias": {"cliente": true},
+	"reservas.consultar-mis-turnos": {"cliente": true, "profesional": true, "recepcion": true, "administrador": true, "superadministrador": true},
+	"reservas.cancelar-turno": {"cliente": true, "recepcion": true, "administrador": true, "superadministrador": true},
 	"reservas.crear": {"cliente": true},
 	"reservas.cancelar-propia": {"cliente": true},
 	"reservas.consultar-agenda": {"profesional": true, "recepcion": true, "administrador": true, "superadministrador": true},
@@ -85,9 +87,9 @@ func (s *servidorReservas) router() *gin.Engine {
 	r.GET("/me", requiereIdentidad(), func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"usuario": identidadDesdeHeaders(c)}) })
 	r.PUT("/agenda", requiereIdentidad("profesional","recepcion","administrador","superadministrador"), requierePermiso("reservas.gestionar-agenda"), s.guardarAgenda)
 	r.GET("/disponibilidad", requiereIdentidad("cliente","profesional","recepcion","administrador","superadministrador"), s.disponibilidad)
-	r.GET("/turnos", requiereIdentidad(), s.listarTurnos)
+	r.GET("/turnos", requiereIdentidad(), requierePermiso("reservas.consultar-mis-turnos"), s.listarTurnos)
 	r.POST("/turnos", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.crearTurno)
-	r.DELETE("/turnos/:id", requiereIdentidad(), s.cancelarTurno)
+	r.DELETE("/turnos/:id", requiereIdentidad(), requierePermiso("reservas.cancelar-turno"), s.cancelarTurno)
 	return r
 }
 
