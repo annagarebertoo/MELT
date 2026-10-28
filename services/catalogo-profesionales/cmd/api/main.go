@@ -306,7 +306,7 @@ func (s *Servidor) crearTratamiento(c *gin.Context) {
 
 	if tratamiento.ID == "" ||
 		tratamiento.Nombre == "" ||
-		tratamiento.Categoria == "" ||
+		!categoriaValida(tratamiento.Categoria) ||
 		tratamiento.Descripcion == "" ||
 		tratamiento.Moneda != "ARS" ||
 		!precioValido(tratamiento.Precio) ||
@@ -314,7 +314,7 @@ func (s *Servidor) crearTratamiento(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
 				"code":    "INVALID_PARAMETER",
-				"message": "ID, nombre, categoría, descripción y moneda ARS son obligatorios; el precio no puede ser negativo y la duración debe ser positiva.",
+				"message": "ID, nombre y descripción son obligatorios; categoría debe ser Facial, Corporal, Depilación o Manos y uñas; moneda debe ser ARS, el precio no puede ser negativo/no finito y la duración debe ser positiva.",
 			},
 		})
 		return
@@ -337,6 +337,15 @@ func (s *Servidor) crearTratamiento(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, tratamiento)
+}
+
+func categoriaValida(categoria string) bool {
+	switch strings.ToLower(strings.TrimSpace(categoria)) {
+	case "facial", "corporal", "depilación", "manos y uñas":
+		return true
+	default:
+		return false
+	}
 }
 
 func precioValido(precio float64) bool {
