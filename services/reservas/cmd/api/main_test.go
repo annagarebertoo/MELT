@@ -53,3 +53,36 @@ func TestMeDevuelveIdentidadDelGateway(t *testing.T) {
 		t.Fatalf("se esperaba 200 y se obtuvo %d: %s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestPermisosPorOperacion(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name       string
+		operacion  string
+		rol        string
+		wantStatus int
+	}{
+		{"cliente crea reserva", "reservas.crear", "cliente", http.StatusOK},
+		{"profesional no crea reserva de cliente", "reservas.crear", "profesional", http.StatusForbidden},
+		{"recepcion consulta todas", "reservas.consultar-todas", "recepcion", http.StatusOK},
+		{"cliente no consulta todas", "reservas.consultar-todas", "cliente", http.StatusForbidden},
+		{"operación sin política denegada", "reservas.operacion-desconocida", "administrador", http.StatusForbidden},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := gin.New()
+			router.GET("/operacion", requiereIdentidad(), requierePermiso(tt.operacion), func(c *gin.Context) {
+				c.Status(http.StatusOK)
+			})
+			req := httptest.NewRequest(http.MethodGet, "/operacion", nil)
+			req.Header.Set("X-Auth-User-ID", "user-1")
+			req.Header.Set("X-Auth-User-Email", "user@example.com")
+			req.Header.Set("X-Auth-User-Roles", tt.rol)
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, req)
+			if recorder.Code != tt.wantStatus {
+				t.Fatalf("se esperaba %d y se obtuvo %d: %s", tt.wantStatus, recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+}
