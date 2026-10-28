@@ -10,7 +10,8 @@ La API de consulta está versionada como `v1`. La carga administrativa de tratam
 
 Versión actual: `v1`
 
-Contrato OpenAPI: `tratamientos-v1.openapi.yaml`
+Contrato OpenAPI del catálogo: `tratamientos-v1.openapi.yaml`  
+Contrato OpenAPI del registro externo: `registro-externo-v1.openapi.yaml`
 
 La versión del documento OpenAPI es `1.0.0` (OpenAPI `3.0.3`). La URL base contractual es `/api/v1`; en el entorno local se utiliza **`http://localhost:8080/api/v1`**. La URL de Internet sigue pendiente: localhost no permite el acceso desde otro grupo. Antes de la integración real, el Grupo 5 debe publicar el gateway en una dirección accesible por el Grupo 1 y comunicar esa URL.
 
@@ -98,7 +99,7 @@ La consigna del proyecto indica que el Grupo 1 consume del Grupo 5 dos capacidad
 - **Registro externo con puntos de regalo:** implementado como `POST /api/v1/beneficios/registro-externo`. Registra el origen `gimnasio`, guarda el plan y la membresía y acredita el regalo configurado para esa combinación. No es parte de la API de Catálogo ni reemplaza la creación de cuenta/autenticación del cliente. Los registros directos no pasan por este endpoint y no reciben este regalo. La operación requiere configurar el código de referido, una clave privada para el consumidor (`X-Partner-Key`) y la tabla de puntos por plan/membresía.
 - **Acceso compartido:** la URL local `localhost` solo sirve para pruebas en el entorno local de MELT. La integración entre grupos requiere desplegar el gateway en una URL accesible desde el entorno del Grupo 1.
 
-El diseño del registro referido debe definir un identificador/código de referido del gimnasio, los datos mínimos del registro, la regla de elegibilidad y cantidad de puntos, la adaptación a planes/membresías, la prevención de acreditaciones duplicadas y cómo se informan errores. Los registros directos no deben recibir el regalo de referido. La implementación deberá estar en el servicio responsable del registro/beneficios, no en el Catálogo.
+Los valores concretos de planes, membresías y puntos quedan a cargo de la configuración acordada con el Grupo 1; no hay valores de negocio inventados en el código. El endpoint guarda el registro y el saldo inicial en Beneficios, pero todavía no está integrado con un servicio de usuarios/autenticación, que no existe en el repositorio.
 
 ## Mock
 
