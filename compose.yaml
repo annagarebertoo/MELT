@@ -53,6 +53,7 @@ services:
       PORT: "8083"
       MONGODB_URI: mongodb://mongodb:27017
       CODIGO_GIMNASIO: ${CODIGO_GIMNASIO:-}
+      CLAVE_API_GIMNASIO: ${CLAVE_API_GIMNASIO:-}
       PUNTOS_POR_PLAN_MEMBRESIA: ${PUNTOS_POR_PLAN_MEMBRESIA:-}
     depends_on:
       mongodb:
