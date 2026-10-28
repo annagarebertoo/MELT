@@ -367,7 +367,7 @@ func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 	if t.Inicio.Before(ahora) { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"TURNO_INICIADO","message":"No se puede cancelar un turno que ya comenzó."}}); return }
 	devolucion:=0.0
 	estadoDevolucion:="no_corresponde"
-	if t.PagoID!="" && t.Inicio.Sub(ahora)>=24*time.Hour { devolucion=t.Sena; estadoDevolucion="pendiente" }
+	if t.PagoID!="" { devolucion=importeDevolucion(t.Sena,t.Inicio,ahora); if devolucion>0 { estadoDevolucion="pendiente" } }
 	res,err:=s.turnos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id},{Key:"estado",Value:"confirmado"}},bson.D{{Key:"$set",Value:bson.D{{Key:"estado",Value:"cancelado"},{Key:"importeDevolucion",Value:devolucion},{Key:"estadoDevolucion",Value:estadoDevolucion}}}})
 	if err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo cancelar el turno"}); return }
 	if res.MatchedCount!=1 { c.JSON(http.StatusConflict,gin.H{"error":"el turno ya no está confirmado"}); return }
@@ -417,10 +417,17 @@ type verificacionPagoRequest struct {
 type verificacionPagoResponse struct {
 	Aprobado bool `json:"aprobado"`
 	PagoID string `json:"pagoId"`
+	Importe float64 `json:"importe"`
+	Moneda string `json:"moneda"`
 }
 
 func importeSena(precio float64) float64 {
 	return math.Round(precio*0.30*100) / 100
+}
+
+func importeDevolucion(sena float64, inicio, ahora time.Time) float64 {
+	if sena > 0 && !inicio.Before(ahora.Add(24*time.Hour)) { return sena }
+	return 0
 }
 
 func (s *servidorReservas) verificarPago(ctx context.Context, pagoID string, importe float64, moneda, referencia string) error {
@@ -436,7 +443,7 @@ func (s *servidorReservas) verificarPago(ctx context.Context, pagoID string, imp
 	if resp.StatusCode != http.StatusOK { return errors.New("el proveedor de pagos no pudo verificar la seña") }
 	var result verificacionPagoResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil { return err }
-	if !result.Aprobado || result.PagoID != pagoID { return errors.New("la seña no figura como aprobada") }
+	if !result.Aprobado || result.PagoID != pagoID || math.Abs(result.Importe-importe)>0.009 || result.Moneda!=moneda { return errors.New("el pago no está aprobado por el importe y moneda exactos de la seña") }
 	return nil
 }
 
@@ -488,6 +495,7 @@ func (s *servidorReservas) confirmarBloqueoCarrito(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo consultar el carrito"}); return
 	}
 	if cart.ClienteID!=u.ID { c.JSON(http.StatusForbidden,gin.H{"error":"el carrito pertenece a otro cliente"}); return }
+	if cart.Estado=="confirmado" && cart.TurnoID!="" { var existente turno; if err:=s.turnos.FindOne(ctx,bson.D{{Key:"_id",Value:cart.TurnoID}}).Decode(&existente); err==nil { c.JSON(http.StatusOK,gin.H{"turno":existente,"mensaje":"La reserva ya había sido confirmada; no se creó un duplicado."}); return } }
 	if cart.Estado!="pendiente_pago" || !cart.ExpiraEn.After(time.Now()) { c.JSON(http.StatusGone,gin.H{"error":gin.H{"code":"BLOQUEO_VENCIDO","message":"El bloqueo venció; iniciá una nueva reserva."}}); return }
 	if err:=s.verificarPago(ctx,req.PagoID,cart.Sena,cart.Moneda,id); err!=nil { c.JSON(http.StatusPaymentRequired,gin.H{"error":gin.H{"code":"SENA_NO_APROBADA","message":err.Error()}}); return }
 	// La reserva sólo se confirma si el proveedor valida el pago por el importe exacto.
