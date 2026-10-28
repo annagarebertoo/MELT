@@ -95,7 +95,7 @@ La ruta POST de carga de tratamientos responde actualmente con algunos errores d
 La consigna del proyecto indica que el Grupo 1 consume del Grupo 5 dos capacidades: **catálogo** y **registro con puntos de regalo adaptado a planes y membresías del gimnasio**.
 
 - **Catálogo:** implementado para consulta pública mediante los dos endpoints GET documentados.
-- **Registro externo con puntos de regalo:** todavía no implementado. No debe interpretarse como parte de la API de Catálogo. Hace falta acordar y publicar una capacidad de registro de clientes que identifique que el alta provino del gimnasio, aplique la regla de puntos de regalo y distinga ese caso de un registro directo.
+- **Registro externo con puntos de regalo:** implementado como `POST /api/v1/beneficios/registro-externo`. Registra el origen `gimnasio`, guarda el plan y la membresía y acredita el regalo configurado para esa combinación. No es parte de la API de Catálogo ni reemplaza la creación de cuenta/autenticación del cliente. Los registros directos no pasan por este endpoint y no reciben este regalo. La operación requiere configurar un código de referido y la tabla de puntos por plan/membresía.
 - **Acceso compartido:** la URL local `localhost` solo sirve para pruebas en el entorno local de MELT. La integración entre grupos requiere desplegar el gateway en una URL accesible desde el entorno del Grupo 1.
 
 El diseño del registro referido debe definir un identificador/código de referido del gimnasio, los datos mínimos del registro, la regla de elegibilidad y cantidad de puntos, la adaptación a planes/membresías, la prevención de acreditaciones duplicadas y cómo se informan errores. Los registros directos no deben recibir el regalo de referido. La implementación deberá estar en el servicio responsable del registro/beneficios, no en el Catálogo.
@@ -107,3 +107,23 @@ El proyecto incluye un mock en `docs/contracts/mock/` para pruebas locales sin M
 ## Cambios de versión y compatibilidad
 
 La versión actual del contrato es `v1`. Los cambios incompatibles deberán publicarse mediante una nueva versión y comunicarse a los consumidores. Los IDs son cadenas de texto; los consumidores no deben convertirlos a números. El alias agregado es compatible con `v1` y no cambia el esquema de respuesta.
+
+
+### Registro externo del gimnasio
+
+`POST /api/v1/beneficios/registro-externo`
+
+Body de ejemplo (reemplazar los valores por los del gimnasio):
+
+```json
+{
+  "solicitudId": "gym-req-0001",
+  "nombre": "Cliente de prueba",
+  "email": "cliente@example.com",
+  "codigoReferido": "CODIGO_CONFIGURADO",
+  "plan": "basico",
+  "membresia": "mensual"
+}
+```
+
+La combinación `plan|membresia` debe existir en la configuración `PUNTOS_POR_PLAN_MEMBRESIA`. La respuesta `201` confirma el registro y el regalo asociado; repetir la misma `solicitudId` devuelve `200` con el registro existente. Email duplicado con otra solicitud devuelve `409`; código inválido devuelve `403`; combinación de plan/membresía no configurada devuelve `422`. Si falta configurar el código o la tabla de puntos, devuelve `503` en lugar de aplicar una regla inventada.
