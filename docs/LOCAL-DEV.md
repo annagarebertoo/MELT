@@ -94,7 +94,7 @@ Los tests unitarios del catálogo cubren el endpoint de salud mediante una depen
 
 ## Alcance y limitaciones actuales
 
-El catálogo persiste tratamientos en MongoDB, ofrece búsqueda textual simple, filtro por categoría/precio máximo, paginación y ordenamiento. La creación mediante POST está implementada en la ruta compatible indicada arriba; la API pública contractual v1 expone solo lectura. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados en Compose, pero todavía no están integrados en los flujos de negocio. Reservas y Beneficios continúan siendo esqueletos HTTP. El registro de clientes, el enlace de registro referido por el Grupo 1 (Gimnasio), la asignación de puntos de regalo por referido, el frontend, autenticación, eventos de dominio, cache hit/miss, métricas de negocio, pruebas de carga y contrato externo desplegado siguen pendientes.
+El catálogo persiste tratamientos en MongoDB, ofrece búsqueda textual simple, filtro por categoría/precio máximo, paginación y ordenamiento. La creación mediante POST está implementada en la ruta compatible indicada arriba; la API pública contractual v1 expone solo lectura. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados en Compose, pero todavía no están integrados en los flujos de negocio. Reservas y Beneficios continúan siendo esqueletos HTTP. El frontend, la integración de la identidad con Reservas y Beneficios, los flujos completos de negocio, los eventos de dominio, cache hit/miss, métricas de negocio, pruebas de carga y el contrato externo desplegado siguen pendientes. La autenticación inicial ya está implementada en esta rama; ver la sección siguiente.
 
 
 ## Registro externo del gimnasio y puntos de regalo
@@ -127,7 +127,7 @@ curl -X POST http://localhost:8080/api/v1/beneficios/registro-externo \
 
 La primera solicitud devuelve `201`; repetir la misma `solicitudId` con el mismo email devuelve `200` sin sumar el regalo otra vez. Un email ya registrado con otra solicitud devuelve `409`. La ruta requiere configuración: si faltan las variables, devuelve `503` y no inventa puntos. Esta ruta de integración del gimnasio se autentica con `X-Partner-Key`, por lo que queda exceptuada de la sesión Bearer de clientes.
 
-**Alcance importante:** este endpoint guarda el registro externo y el saldo inicial de puntos en la base de Beneficios. No reemplaza una integración con un servicio de usuarios/autenticación, que todavía no existe en este repositorio. Antes de usarlo con el Grupo 1 hay que acordar los nombres reales de planes/membresías y las cantidades de puntos, configurar las credenciales por fuera del código y desplegar una URL accesible para ambos grupos.
+**Alcance importante:** este endpoint guarda el registro externo y el saldo inicial de puntos en la base de Beneficios. No está conectado todavía con el servicio `auth` para vincular la identidad de ese registro con una cuenta MELT. Antes de usarlo con el Grupo 1 hay que acordar los nombres reales de planes/membresías y las cantidades de puntos, configurar las credenciales por fuera del código y desplegar una URL accesible para ambos grupos.
 
 
 ## Autenticación y cuentas
@@ -170,4 +170,4 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
   -d '{"email":"cliente@example.com","password":"una-clave-segura"}'
 ```
 
-**Límites de esta primera versión:** el token es stateless, por lo que cerrar sesión en el frontend no revoca un token ya emitido; vence automáticamente. Todavía no hay recuperación de contraseña por email, verificación de email ni conexión automática de la identidad a Reservas y Beneficios. Los permisos de las rutas de negocio se deben incorporar a cada servicio antes de habilitarlo en producción. El endpoint de creación de usuarios internos está protegido por rol, pero las reglas de qué rol puede asignar cada administrador requieren endurecerse antes de producción.
+**Límites de esta primera versión:** el token es stateless, por lo que cerrar sesión en el frontend no revoca un token ya emitido; vence automáticamente. Todavía no hay recuperación de contraseña por email, verificación de email ni conexión automática de la identidad a Reservas y Beneficios. Los permisos de las rutas de negocio se deben incorporar a cada servicio antes de habilitarlo en producción. Solo el superadministrador puede asignar roles administrativos; la autorización fina por operación y recurso sigue pendiente de integrar en los servicios de negocio.
