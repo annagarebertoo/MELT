@@ -10,7 +10,7 @@
 
 MELT es una aplicación web para un centro de estética de una sola sucursal. Ofrece catálogo público, reservas autenticadas, agenda profesional, administración y beneficios basados en puntos. La reserva con validación de disponibilidad es la operación central; su confirmación, la realización del tratamiento y el pago presencial son hechos diferentes.
 
-Se propone una arquitectura de tres microservicios y un API Gateway. La separación responde a capacidades de negocio con reglas y datos propios y al objetivo del proyecto de desarrollar un sistema distribuido. Permite asignar responsabilidades claras, pero introduce comunicaciones remotas y coordinación que el equipo deberá comprender y verificar. No se justifica por una escala de producción que todavía no se ha medido.
+La arquitectura exige al menos tres microservicios y un API Gateway. En la implementación se incorporó además el servicio técnico `auth` para cuentas y sesiones. La separación responde a capacidades de negocio con reglas y datos propios y al objetivo del proyecto de desarrollar un sistema distribuido. Permite asignar responsabilidades claras, pero introduce comunicaciones remotas y coordinación que el equipo deberá comprender y verificar. No se justifica por una escala de producción que todavía no se ha medido.
 
 Los objetivos son evitar turnos superpuestos y operaciones duplicadas, preservar los datos de cada servicio y permitir evolución gradual. El alcance funcional se encuentra en [SPEC.md](../SPEC.md) y la presentación general en [README.md](../README.md).
 
@@ -137,7 +137,7 @@ La persistencia se registrará como versión inicial de D3. MongoDB no determina
 | Ejecución local | Docker y Docker Compose | Futuro procedimiento único y automatizado de arranque. |
 | Observabilidad | Prometheus y Grafana | Métricas y tableros para comprender el estado del sistema. |
 
-Estas herramientas no están implementadas y sus versiones no están fijadas. No se incorpora un proveedor de identidad como decisión cerrada: la autenticación y autorización deberán seleccionarse y justificarse antes de implementar las operaciones privadas.
+Estas herramientas no están implementadas y sus versiones no están fijadas. La autenticación inicial está implementada en el servicio `auth`; la protección de cada endpoint de negocio se incorpora a medida que se desarrollan sus flujos.
 
 La arquitectura interna deberá utilizar al menos dos estilos diferentes en servicios distintos. Como candidatos se conservan capas para Catálogo y arquitectura hexagonal para Reservas y Beneficios. Su elección y justificación se desarrollarán en D2; los frameworks no sustituyen esa decisión.
 
@@ -255,7 +255,7 @@ Estos ADR deben ser archivos independientes con alternativas y consecuencias. Su
 
 ### 11.2. Aspectos pendientes
 
-- Mecanismo de autenticación y autorización y detalle de permisos.
+- Integración de autenticación/autorización en los endpoints de Reservas y Beneficios a medida que se implementen; recuperación y verificación de email.
 - Modalidad exacta de canje y restitución, vigencia de puntos y beneficios y modificaciones del catálogo con reservas existentes.
 - Control concreto de concurrencia y coordinación entre Reservas y Beneficios.
 - Publicación confiable, idempotencia y recuperación; evaluación de Outbox y compensaciones.
