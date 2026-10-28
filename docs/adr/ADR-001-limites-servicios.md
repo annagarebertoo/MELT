@@ -80,3 +80,11 @@ No se justifica por una escala de producción aún no medida, sino por la separa
 - Formalizar los contratos internos (API y eventos) y los mecanismos de idempotencia / recuperación (relacionados con D5).
 - Evaluar si en el futuro conviene refinar los límites (por ejemplo, extraer notificaciones) solo si aparece evidencia de necesidad.
 - Detallar permisos y autenticación (fuera del alcance de este ADR).
+
+## Validación de límites — Entrega 2 (23/10/2026)
+
+Se mantienen los tres límites y la propiedad de datos de esta decisión. El flujo implementado publica tratamientos desde Catálogo mediante NGINX y consulta únicamente `catalogo_db.tratamientos`. No se encontraron consultas a datos ajenos. Reservas y Beneficios son procesos separados con salud HTTP, pero todavía no administran agenda ni puntos; por tanto, sus límites se validan como diseño, no como funcionalidades completas.
+
+La separación lógica de datos es coherente con la arquitectura actualizada. Los permisos privados y las bases aún no utilizadas no quedan acreditados por esa coherencia. La API compartida pertenece a Catálogo y el gateway enruta sin asumir reglas de negocio. No se detectó evidencia que justifique dividir o fusionar servicios en esta entrega.
+
+La validación de D1 queda cubierta para el diseño y el flujo operativo disponibles, con las limitaciones anteriores. El pago presencial mencionado en el contexto histórico no excluye la seña definida posteriormente por las reglas de negocio; no se cambia esa política en esta revisión. Ver la [matriz de cierre](../ENTREGA-2.md) y la [evidencia local](../evidence/entrega-2-2026-10-23.json).

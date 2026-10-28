@@ -1,0 +1,1226 @@
+{
+  "captured_at_utc": "2026-10-23T17:49:24.597386+00:00",
+  "branch": "feature/sofia-adr-entrega-2",
+  "base_commit": "cc230fafd8f9015668f388d243619d083b22bae0",
+  "read_only": true,
+  "contract_version": "1.0.0",
+  "contract_sha256": "166e5c64877e559b8e1ae9a07cf12ee06a85fa5b1d79d822587d0673c6dbc87c",
+  "openapi_validation": "passed",
+  "schema_detects_numeric_id_and_missing_keywords": true,
+  "requests": [
+    {
+      "case": "default",
+      "status": 200,
+      "schema_valid": true,
+      "query": {},
+      "legacy_matches": true,
+      "request_id": "sofia-d8-ee2343964664440aa4eac7c3687f4ec3",
+      "trace_id": "32169c89ad3a4e2f96858b47fe488514",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.698613861Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.548,
+          "request_id": "sofia-d8-ee2343964664440aa4eac7c3687f4ec3",
+          "trace_id": "32169c89ad3a4e2f96858b47fe488514",
+          "span_id": "79144bc1b7ce635f"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-ee2343964664440aa4eac7c3687f4ec3",
+          "trace_id": "32169c89ad3a4e2f96858b47fe488514",
+          "span_id": "ae7d44f7780ad4d9",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "search_name",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "q": "Limpieza facial profunda"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-fb7b58d6862241ae93a16d415001c3f9",
+      "trace_id": "5898c94ef7764e14bcc046996ca59e6e",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.710556003Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 2.227,
+          "request_id": "sofia-d8-fb7b58d6862241ae93a16d415001c3f9",
+          "trace_id": "5898c94ef7764e14bcc046996ca59e6e",
+          "span_id": "ca98bef37d670a95"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-fb7b58d6862241ae93a16d415001c3f9",
+          "trace_id": "5898c94ef7764e14bcc046996ca59e6e",
+          "span_id": "f7baac7e307cebe5",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "search_keyword",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "q": "higiene facial"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-15635ee77e9c428f8833bbf55f1aa5b1",
+      "trace_id": "df64af9a011040c690ad5d3f1fa97f08",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.721055953Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.24,
+          "request_id": "sofia-d8-15635ee77e9c428f8833bbf55f1aa5b1",
+          "trace_id": "df64af9a011040c690ad5d3f1fa97f08",
+          "span_id": "1758222b295f6e09"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-15635ee77e9c428f8833bbf55f1aa5b1",
+          "trace_id": "df64af9a011040c690ad5d3f1fa97f08",
+          "span_id": "61e5bfe7877313df",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "no_results",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "q": "d8-absent-f18c0f69f54a40519d2b8d0c33b54582"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-9c47f760dd13471d82d01ac4e828dbe9",
+      "trace_id": "2b2e6334d2964a3ba506a22e7ed3ec66",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.731667065Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.948,
+          "request_id": "sofia-d8-9c47f760dd13471d82d01ac4e828dbe9",
+          "trace_id": "2b2e6334d2964a3ba506a22e7ed3ec66",
+          "span_id": "f4fc9fde9fd8f2d5"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-9c47f760dd13471d82d01ac4e828dbe9",
+          "trace_id": "2b2e6334d2964a3ba506a22e7ed3ec66",
+          "span_id": "75362511238d1639",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "category_0",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "categoria": "Facial"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-9761d1d73c6440e38ee33493bb1fd4bd",
+      "trace_id": "28a25bed95be4be4abb8c838835ddfa4",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.765777188Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.654,
+          "request_id": "sofia-d8-9761d1d73c6440e38ee33493bb1fd4bd",
+          "trace_id": "28a25bed95be4be4abb8c838835ddfa4",
+          "span_id": "efc19efc5822baa8"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-9761d1d73c6440e38ee33493bb1fd4bd",
+          "trace_id": "28a25bed95be4be4abb8c838835ddfa4",
+          "span_id": "f4e2c7070c40b638",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "category_1",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "categoria": "Corporal"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-dc650b2560de492984b529181a1ff5f9",
+      "trace_id": "43dfa2e503ce47c9b257306aa6abf257",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.776659626Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.585,
+          "request_id": "sofia-d8-dc650b2560de492984b529181a1ff5f9",
+          "trace_id": "43dfa2e503ce47c9b257306aa6abf257",
+          "span_id": "4aa2d8be60a8660c"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-dc650b2560de492984b529181a1ff5f9",
+          "trace_id": "43dfa2e503ce47c9b257306aa6abf257",
+          "span_id": "7aff6b33cb985a77",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "category_2",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "categoria": "Depilación"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-4d365ae256a34b4ba638dffbd861f3c7",
+      "trace_id": "98e835e7c7d24a59b483260dedfade7f",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.787840512Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.439,
+          "request_id": "sofia-d8-4d365ae256a34b4ba638dffbd861f3c7",
+          "trace_id": "98e835e7c7d24a59b483260dedfade7f",
+          "span_id": "407175ed15281244"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-4d365ae256a34b4ba638dffbd861f3c7",
+          "trace_id": "98e835e7c7d24a59b483260dedfade7f",
+          "span_id": "9c3b09586b1a1a46",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "category_3",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "categoria": "Manos y uñas"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-0c5a6486f11440688a3a8ba2a92a3415",
+      "trace_id": "e9874f8647ce424dbf45adf625f4d670",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.799033203Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.274,
+          "request_id": "sofia-d8-0c5a6486f11440688a3a8ba2a92a3415",
+          "trace_id": "e9874f8647ce424dbf45adf625f4d670",
+          "span_id": "bbd59ad6ba2cb157"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-0c5a6486f11440688a3a8ba2a92a3415",
+          "trace_id": "e9874f8647ce424dbf45adf625f4d670",
+          "span_id": "52194ab17e7060c0",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "price_inclusive",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "precioMax": 15000
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-fafe4e60f47f4b0ea452e60b4558507f",
+      "trace_id": "b4f7c9e8a6f04bb783b4673a2371a82c",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.809953967Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.56,
+          "request_id": "sofia-d8-fafe4e60f47f4b0ea452e60b4558507f",
+          "trace_id": "b4f7c9e8a6f04bb783b4673a2371a82c",
+          "span_id": "617b9fef1783f5a8"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-fafe4e60f47f4b0ea452e60b4558507f",
+          "trace_id": "b4f7c9e8a6f04bb783b4673a2371a82c",
+          "span_id": "0f0412601321baef",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "price_exclusive",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "precioMax": 14999
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-93cec99087d0426eaebae96b9d6471de",
+      "trace_id": "e1f5171e17594b07a75cc732960c6a3c",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.819891656Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.165,
+          "request_id": "sofia-d8-93cec99087d0426eaebae96b9d6471de",
+          "trace_id": "e1f5171e17594b07a75cc732960c6a3c",
+          "span_id": "3041d04843c47ee0"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-93cec99087d0426eaebae96b9d6471de",
+          "trace_id": "e1f5171e17594b07a75cc732960c6a3c",
+          "span_id": "90154146f0ff67e6",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "page_one",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "page": 1,
+        "limit": 1
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-dc0f3e22a72e43b1957d3cea4eeae31c",
+      "trace_id": "1174aab6538a4bde884d9fffdfe8d358",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.844441014Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.227,
+          "request_id": "sofia-d8-dc0f3e22a72e43b1957d3cea4eeae31c",
+          "trace_id": "1174aab6538a4bde884d9fffdfe8d358",
+          "span_id": "d3549dfb7f3cede6"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-dc0f3e22a72e43b1957d3cea4eeae31c",
+          "trace_id": "1174aab6538a4bde884d9fffdfe8d358",
+          "span_id": "b46415762c939ce7",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "page_two",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "page": 2,
+        "limit": 1
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-ab80afa956be4015ba891f9e26adaf66",
+      "trace_id": "08592df498954ab78e124023a4effd3c",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.853932372Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.015,
+          "request_id": "sofia-d8-ab80afa956be4015ba891f9e26adaf66",
+          "trace_id": "08592df498954ab78e124023a4effd3c",
+          "span_id": "52da821e72df24de"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-ab80afa956be4015ba891f9e26adaf66",
+          "trace_id": "08592df498954ab78e124023a4effd3c",
+          "span_id": "c3ee6ebac08c9a57",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "limit_max",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "limit": 50
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-fc80db2c5d9747c0af5692562ecabcae",
+      "trace_id": "1d90e95491d740889cea9d9f034741ce",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.88377486Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.722,
+          "request_id": "sofia-d8-fc80db2c5d9747c0af5692562ecabcae",
+          "trace_id": "1d90e95491d740889cea9d9f034741ce",
+          "span_id": "ae7d79eca9f76561"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.003,
+          "request_id": "sofia-d8-fc80db2c5d9747c0af5692562ecabcae",
+          "trace_id": "1d90e95491d740889cea9d9f034741ce",
+          "span_id": "16c5dfc45779bcc4",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "combined",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "q": "higiene facial",
+        "categoria": "Facial",
+        "precioMax": 15000,
+        "page": 1,
+        "limit": 10,
+        "sort": "precio",
+        "order": "desc"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-37bfb14a1a7f412cb71a45e8b9f311dc",
+      "trace_id": "efe5a8e775ea414f977c151c7575a201",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.911965826Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.437,
+          "request_id": "sofia-d8-37bfb14a1a7f412cb71a45e8b9f311dc",
+          "trace_id": "efe5a8e775ea414f977c151c7575a201",
+          "span_id": "7aaea0fde9fd9a2a"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-37bfb14a1a7f412cb71a45e8b9f311dc",
+          "trace_id": "efe5a8e775ea414f977c151c7575a201",
+          "span_id": "610031f337161454",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "sort_nombre_asc",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "sort": "nombre",
+        "order": "asc"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-5dd2a29524324a57ae3f6a2172ac8656",
+      "trace_id": "357d03e291794f56a98336eb75e1ae2f",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.93466147Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.447,
+          "request_id": "sofia-d8-5dd2a29524324a57ae3f6a2172ac8656",
+          "trace_id": "357d03e291794f56a98336eb75e1ae2f",
+          "span_id": "1b32f2951ae2403b"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-5dd2a29524324a57ae3f6a2172ac8656",
+          "trace_id": "357d03e291794f56a98336eb75e1ae2f",
+          "span_id": "ec9e25410c94e485",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "sort_nombre_desc",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "sort": "nombre",
+        "order": "desc"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-89687dcc31c044ddbec5618ce63a9822",
+      "trace_id": "915fba6e846f4b2c9ef437a8e3aee91f",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.946346984Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.098,
+          "request_id": "sofia-d8-89687dcc31c044ddbec5618ce63a9822",
+          "trace_id": "915fba6e846f4b2c9ef437a8e3aee91f",
+          "span_id": "dc86d07cd2dfee81"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-89687dcc31c044ddbec5618ce63a9822",
+          "trace_id": "915fba6e846f4b2c9ef437a8e3aee91f",
+          "span_id": "8b18f464165b46f3",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "sort_precio_asc",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "sort": "precio",
+        "order": "asc"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-cbafa6602ed5424c9506ffc25695af95",
+      "trace_id": "b039c8e3857d41daa6f854413a907f80",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.966532278Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.224,
+          "request_id": "sofia-d8-cbafa6602ed5424c9506ffc25695af95",
+          "trace_id": "b039c8e3857d41daa6f854413a907f80",
+          "span_id": "0f604d37d7902993"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-d8-cbafa6602ed5424c9506ffc25695af95",
+          "trace_id": "b039c8e3857d41daa6f854413a907f80",
+          "span_id": "d660427164bea592",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "sort_precio_desc",
+      "status": 200,
+      "schema_valid": true,
+      "query": {
+        "sort": "precio",
+        "order": "desc"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-37373ec430754dfdb7c6ad70127cbf91",
+      "trace_id": "758463d781a945b09180b483eab7fd7e",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:24.977451858Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.301,
+          "request_id": "sofia-d8-37373ec430754dfdb7c6ad70127cbf91",
+          "trace_id": "758463d781a945b09180b483eab7fd7e",
+          "span_id": "36ea429d6628b0b8"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:24+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-37373ec430754dfdb7c6ad70127cbf91",
+          "trace_id": "758463d781a945b09180b483eab7fd7e",
+          "span_id": "7da6be6404a0b0bd",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "invalid_0",
+      "status": 400,
+      "schema_valid": true,
+      "query": {
+        "page": 0
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-cb155912bfab4676ba9eab1e6ff434ab",
+      "trace_id": "a906ac756fcb4ea6aead71a7ab755277",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:25.001870197Z",
+          "level": "WARN",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 400,
+          "duration_ms": 0.059,
+          "request_id": "sofia-d8-cb155912bfab4676ba9eab1e6ff434ab",
+          "trace_id": "a906ac756fcb4ea6aead71a7ab755277",
+          "span_id": "731fb860790f982b"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:25+00:00",
+          "level": "WARN",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 400,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-d8-cb155912bfab4676ba9eab1e6ff434ab",
+          "trace_id": "a906ac756fcb4ea6aead71a7ab755277",
+          "span_id": "126f7b050c1eb736",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "invalid_1",
+      "status": 400,
+      "schema_valid": true,
+      "query": {
+        "page": "abc"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-58e64f66eb5d4e32b6bb0340a3701e98",
+      "trace_id": "196a851cfa024d099f8dbc7e693fb978",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:25.01876169Z",
+          "level": "WARN",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 400,
+          "duration_ms": 0.073,
+          "request_id": "sofia-d8-58e64f66eb5d4e32b6bb0340a3701e98",
+          "trace_id": "196a851cfa024d099f8dbc7e693fb978",
+          "span_id": "d6774377aaf2911f"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:25+00:00",
+          "level": "WARN",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 400,
+          "duration_seconds": 0.0,
+          "request_id": "sofia-d8-58e64f66eb5d4e32b6bb0340a3701e98",
+          "trace_id": "196a851cfa024d099f8dbc7e693fb978",
+          "span_id": "92b4d8d864cef249",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "invalid_2",
+      "status": 400,
+      "schema_valid": true,
+      "query": {
+        "limit": 0
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-1584341ce6424d028c15fb65933eaed9",
+      "trace_id": "d5f735fc63664e23929d55f1e14f1266",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:25.052022735Z",
+          "level": "WARN",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 400,
+          "duration_ms": 0.09,
+          "request_id": "sofia-d8-1584341ce6424d028c15fb65933eaed9",
+          "trace_id": "d5f735fc63664e23929d55f1e14f1266",
+          "span_id": "dc57722a87906ecb"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:25+00:00",
+          "level": "WARN",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 400,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-d8-1584341ce6424d028c15fb65933eaed9",
+          "trace_id": "d5f735fc63664e23929d55f1e14f1266",
+          "span_id": "5a2551616aff4321",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "invalid_3",
+      "status": 400,
+      "schema_valid": true,
+      "query": {
+        "limit": 51
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-339b8ac87a794012b11633f0bc4f8638",
+      "trace_id": "2cf43dd0f94448ed92a444de47abcd84",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:25.060605167Z",
+          "level": "WARN",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 400,
+          "duration_ms": 0.061,
+          "request_id": "sofia-d8-339b8ac87a794012b11633f0bc4f8638",
+          "trace_id": "2cf43dd0f94448ed92a444de47abcd84",
+          "span_id": "6c55bfdc3e777bcb"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:25+00:00",
+          "level": "WARN",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 400,
+          "duration_seconds": 0.0,
+          "request_id": "sofia-d8-339b8ac87a794012b11633f0bc4f8638",
+          "trace_id": "2cf43dd0f94448ed92a444de47abcd84",
+          "span_id": "a42085a7a03bacee",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "invalid_4",
+      "status": 400,
+      "schema_valid": true,
+      "query": {
+        "sort": "invalid"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-506041d99cb44b47b081fb0c17188d5b",
+      "trace_id": "e49f5bb158ed4b689b4c901ee1ac7f0f",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:25.068526222Z",
+          "level": "WARN",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 400,
+          "duration_ms": 0.094,
+          "request_id": "sofia-d8-506041d99cb44b47b081fb0c17188d5b",
+          "trace_id": "e49f5bb158ed4b689b4c901ee1ac7f0f",
+          "span_id": "7810a158291a222b"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:25+00:00",
+          "level": "WARN",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 400,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-d8-506041d99cb44b47b081fb0c17188d5b",
+          "trace_id": "e49f5bb158ed4b689b4c901ee1ac7f0f",
+          "span_id": "de0a2f438709c274",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "invalid_5",
+      "status": 400,
+      "schema_valid": true,
+      "query": {
+        "order": "invalid"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-61065e9b120a464882cf9179d80cc03d",
+      "trace_id": "74c5ff238c91434780f096595065cafb",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:25.077992178Z",
+          "level": "WARN",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 400,
+          "duration_ms": 0.061,
+          "request_id": "sofia-d8-61065e9b120a464882cf9179d80cc03d",
+          "trace_id": "74c5ff238c91434780f096595065cafb",
+          "span_id": "1ede4d492ca99aba"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:25+00:00",
+          "level": "WARN",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 400,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-d8-61065e9b120a464882cf9179d80cc03d",
+          "trace_id": "74c5ff238c91434780f096595065cafb",
+          "span_id": "f9d0a2eae1c66391",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "invalid_6",
+      "status": 400,
+      "schema_valid": true,
+      "query": {
+        "precioMax": -1
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-4edd3bcfaede435caebe248347a824a2",
+      "trace_id": "acd7d237a2674a289b9ecbf6ac2bada4",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:25.085991639Z",
+          "level": "WARN",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 400,
+          "duration_ms": 0.058,
+          "request_id": "sofia-d8-4edd3bcfaede435caebe248347a824a2",
+          "trace_id": "acd7d237a2674a289b9ecbf6ac2bada4",
+          "span_id": "37a11700d86bb3c8"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:25+00:00",
+          "level": "WARN",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 400,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-d8-4edd3bcfaede435caebe248347a824a2",
+          "trace_id": "acd7d237a2674a289b9ecbf6ac2bada4",
+          "span_id": "6b13661031c4e369",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "invalid_7",
+      "status": 400,
+      "schema_valid": true,
+      "query": {
+        "precioMax": "abc"
+      },
+      "legacy_matches": true,
+      "request_id": "sofia-d8-b9fdb7ee66bd43a4b1e4fb18d94630f1",
+      "trace_id": "ac707846a40a401bb54ac77e9910f0f1",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:25.094448032Z",
+          "level": "WARN",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 400,
+          "duration_ms": 0.061,
+          "request_id": "sofia-d8-b9fdb7ee66bd43a4b1e4fb18d94630f1",
+          "trace_id": "ac707846a40a401bb54ac77e9910f0f1",
+          "span_id": "811a80e9b88e8891"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:25+00:00",
+          "level": "WARN",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 400,
+          "duration_seconds": 0.0,
+          "request_id": "sofia-d8-b9fdb7ee66bd43a4b1e4fb18d94630f1",
+          "trace_id": "ac707846a40a401bb54ac77e9910f0f1",
+          "span_id": "9000609c65075c74",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "detail",
+      "status": 200,
+      "schema_valid": true,
+      "query": null,
+      "legacy_matches": true,
+      "request_id": "sofia-d8-88dc30fda00b4cee87ab8e4a4d43ead5",
+      "trace_id": "7f56bfee889645caa7fa9558e81c461d",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:25.104461953Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos/:id",
+          "status": 200,
+          "duration_ms": 0.974,
+          "request_id": "sofia-d8-88dc30fda00b4cee87ab8e4a4d43ead5",
+          "trace_id": "7f56bfee889645caa7fa9558e81c461d",
+          "span_id": "c7f35071b1cf3dc3"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:25+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos/:id",
+          "status": 200,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-d8-88dc30fda00b4cee87ab8e4a4d43ead5",
+          "trace_id": "7f56bfee889645caa7fa9558e81c461d",
+          "span_id": "e8785892c4dcc605",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "missing",
+      "status": 404,
+      "schema_valid": true,
+      "query": null,
+      "legacy_matches": true,
+      "request_id": "sofia-d8-bf4d92838fed4bdf8432007f327e91a5",
+      "trace_id": "a7966f0c79f04d5cae9293d524769277",
+      "correlated_logs": [
+        {
+          "timestamp": "2026-10-23T17:49:25.131997582Z",
+          "level": "WARN",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos/:id",
+          "status": 404,
+          "duration_ms": 1.019,
+          "request_id": "sofia-d8-bf4d92838fed4bdf8432007f327e91a5",
+          "trace_id": "a7966f0c79f04d5cae9293d524769277",
+          "span_id": "28066df825e52f79"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:25+00:00",
+          "level": "WARN",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos/:id",
+          "status": 404,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d8-bf4d92838fed4bdf8432007f327e91a5",
+          "trace_id": "a7966f0c79f04d5cae9293d524769277",
+          "span_id": "45068ab67ba27f83",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    }
+  ],
+  "trace": {
+    "id": "32169c89ad3a4e2f96858b47fe488514",
+    "parent_propagated": true,
+    "spans": [
+      {
+        "service": "catalogo-profesionales",
+        "operation": "tratamientos.aggregate",
+        "span_id": "9b8147cfe4d423ce",
+        "parent_span_id": "79144bc1b7ce635f"
+      },
+      {
+        "service": "catalogo-profesionales",
+        "operation": "tratamientos.find",
+        "span_id": "87d4f7235dd57b24",
+        "parent_span_id": "79144bc1b7ce635f"
+      },
+      {
+        "service": "catalogo-profesionales",
+        "operation": "GET /tratamientos",
+        "span_id": "79144bc1b7ce635f",
+        "parent_span_id": "ae7d44f7780ad4d9"
+      },
+      {
+        "service": "melt-gateway",
+        "operation": "HTTP catalogo",
+        "span_id": "ae7d44f7780ad4d9",
+        "parent_span_id": "51bce7f909404322"
+      }
+    ]
+  },
+  "replicas": [
+    {
+      "name": "melt-catalogo-profesionales-1",
+      "detail_matches_mongodb": true
+    },
+    {
+      "name": "melt-catalogo-profesionales-2",
+      "detail_matches_mongodb": true
+    }
+  ],
+  "mongodb": {
+    "count": 1,
+    "snapshot_unchanged": true,
+    "document_sha256": "11e424868c49987dc421108ac6471ecaf7748f6e10e8cc01f42db488fc6880dc"
+  },
+  "edge_input_observations": [
+    {
+      "query": {
+        "categoria": "Inexistente"
+      },
+      "observed_status": 200,
+      "total": 0,
+      "error_code": null,
+      "contract_conformance_asserted": false
+    },
+    {
+      "query": {
+        "precioMax": "NaN"
+      },
+      "observed_status": 200,
+      "total": 0,
+      "error_code": null,
+      "contract_conformance_asserted": false
+    },
+    {
+      "query": {
+        "precioMax": "Inf"
+      },
+      "observed_status": 200,
+      "total": 1,
+      "error_code": null,
+      "contract_conformance_asserted": false
+    },
+    {
+      "query": {
+        "page": 1000001
+      },
+      "observed_status": 400,
+      "total": null,
+      "error_code": "INVALID_PARAMETER",
+      "contract_conformance_asserted": false
+    }
+  ],
+  "limitations": [
+    "Single stored document: ordering across multiple records not demonstrated.",
+    "No dependency failure or Internet publication tested.",
+    "Mock divergences and edge-input limitations documented separately."
+  ]
+}

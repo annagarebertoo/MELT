@@ -39,7 +39,7 @@ Hay que definir modalidades de comunicación, cuándo usar cada una y qué probl
 | Catálogo → procesamiento de búsqueda | Asíncrona (candidata vía RabbitMQ) | Reflejar cambios del catálogo en el índice. |
 
 - El **API Gateway (NGINX)** enruta las solicitudes y aplica políticas de entrada; no concentra reglas de negocio de reservas ni de saldo.
-- Se proponen eventos de dominio tales como: turno confirmado, tratamiento completado, turno cancelado. Sus esquemas, reintentos y recuperación están pendientes.
+- Se proponen eventos de dominio tales como: turno confirmado, tratamiento completado y turno cancelado. La política inicial de reintentos de correo y el tratamiento de acreditaciones duplicadas quedan definidos en la enmienda aceptada; los esquemas definitivos de eventos y la configuración operativa de colas y recuperación se detallarán durante la implementación.
 
 ### Principios iniciales
 
@@ -63,15 +63,38 @@ Hay que definir modalidades de comunicación, cuándo usar cada una y qué probl
 ### Negativas / problemas que introduce
 
 - **Fallas de comunicación síncrona:** timeouts, respuestas ausentes o tardías. Una respuesta perdida no prueba que el efecto no ocurrió; la repetición debe preservar una única operación de negocio (idempotencia).
-- **Mensajes duplicados o reordenados:** el consumidor (Beneficios, correo) debe tratar eventos de forma idempotente (no acreditar dos veces el mismo tratamiento completado, no restituir dos veces).
+- **Mensajes duplicados o reordenados:** el consumidor de Beneficios identifica cada evento y registra cada acreditación con una clave única y una operación transaccional; un mismo tratamiento completado no puede acreditar puntos dos veces. Los efectos de pago/devolución también deben usar una clave idempotente. Para correo se registra el estado del evento y se limita el reintento; no se promete ausencia absoluta de duplicados si el proveedor acepta el envío y se pierde su respuesta.
 - **Consistencia eventual:** entre el registro del turno y la acreditación/restitución puede haber un intervalo en el que el estado visible no refleja aún todos los efectos.
 - **Coordinación Reservas–Beneficios** en la reserva con beneficio: dos servicios, dos bases; hay que evitar consumir puntos sin resolver el turno (y viceversa). No se adopta aún una saga completa como decisión cerrada.
 
 ### Aspectos pendientes (a completar en el diseño e implementación)
 
 - Tiempos de espera, políticas de reintento y tratamiento de errores en llamadas HTTP.
-- Esquemas de eventos, nombres de colas/exchanges y estrategia de dead-letter.
-- Idempotencia de productores y consumidores.
+- Esquemas definitivos de eventos, nombres de colas/exchanges y configuración operativa de dead-letter.
+- Idempotencia de productores y consumidores, con claves únicas para acreditaciones y operaciones de pago/devolución.
 - Evaluación de **Transactional Outbox** como patrón candidato para no perder la publicación de eventos tras un commit.
 - Estrategia de recuperación y posibles compensaciones en el flujo de reserva con beneficio.
 - Instrumentación (trazas, métricas) para seguir una operación a través de servicios y colas.
+
+
+## Enmienda de decisión — eventos y efectos posteriores
+
+**Estado de esta enmienda:** Aceptada por el equipo para el diseño actualizado.
+
+- Los cambios de estado de un turno realizados por el profesional (confirmación y cancelación) publican eventos que originan el envío de correo al cliente.
+- La finalización registrada por el profesional publica el evento que habilita la acreditación de puntos. Los puntos no se acreditan por reservar ni por pagar una seña.
+- Los efectos de correo y puntos son asíncronos y recuperables. Para correos se aplica un intento inicial y hasta 3 reintentos automáticos con esperas crecientes; si persiste el fallo, el evento pasa a una cola de errores para revisión y eventual reenvío manual. Se registra el estado de procesamiento. La falla del proveedor de correo no revierte la operación de agenda. Para puntos, el identificador único del tratamiento/evento y una restricción de unicidad en la base de datos impiden que reintentar la misma acreditación duplique el saldo.
+- El bloqueo de horario por carrito durante 10 minutos es una operación síncrona de control de concurrencia en Reservas; su expiración libera el intervalo automáticamente. No debe modelarse como una confirmación definitiva del turno.
+- El resultado de pago de la seña debe verificarse antes de confirmar la reserva. Las notificaciones de pago y devolución deben correlacionarse con la operación original y no duplicar efectos. La seña equivale al 30 % del precio del tratamiento; se devuelve el 100 % si se cancela con al menos 24 horas de anticipación y no se devuelve por cancelación más tardía o inasistencia. El proveedor/modalidad y el procedimiento operativo de devolución quedan pendientes.
+
+## Validación incremental — Entrega 2 (23/10/2026)
+
+**Estado de la validación:** parcial, comprobada sobre la comunicación síncrona disponible. Se conservan la propuesta y la enmienda como diseño; sus eventos y garantías no se consideran implementados por estar documentados.
+
+- Se verificó HTTP real cliente → NGINX → Catálogo, con respuestas 200, errores de validación 400 y recurso inexistente 404. Las seis solicitudes conservan `X-Request-ID`, contexto de traza y logs correlacionados entre gateway y servicio.
+- La configuración del contenedor coincide con la del repositorio y pasa `nginx -T`. Se inspeccionaron timeouts de conexión/envío/lectura de 2s/5s/5s; no se provocaron vencimientos ni fallas de transporte. No hay política explícita `proxy_next_upstream*` en los archivos inspeccionados; esto no acredita ausencia de reintentos implícitos. El comportamiento ante fallas, respuestas tardías y repetición de operaciones permanece sin validar.
+- La regresión de D11 comprobó propagación, relaciones entre spans y lecturas reales de MongoDB. La exportación de telemetría no constituye mensajería de negocio.
+- RabbitMQ está declarado en Compose, pero no tiene contenedor en el entorno inspeccionado. No se encontraron productores ni consumidores AMQP/RabbitMQ en los servicios. Los eventos, reintentos de correo, idempotencia y tratamiento de mensajes fallidos siguen diseñados, sin prueba funcional.
+- Reservas → Catálogo y Reservas → Beneficios permanecen como interacciones previstas; no hay llamadas de negocio implementadas que permitan validar sus políticas. No se agregan mecanismos ni se cambian reglas de negocio en esta etapa.
+
+El procedimiento y sus limitaciones se encuentran en [Validación de comunicación](../COMMUNICATION.md), con [evidencia reproducible](../evidence/d5-2026-10-23.json). Esta validación incremental no acredita todos los requisitos de comunicación síncrona y asíncrona de la etapa final.

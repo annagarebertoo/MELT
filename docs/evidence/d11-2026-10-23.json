@@ -1,0 +1,314 @@
+{
+  "date": "2026-10-23T16:40:43.513515+00:00",
+  "branch": "feature/sofia-entrega-2",
+  "base_commit": "0096f253bc7ce50634efb52e5264482f36425794",
+  "uncommitted_implementation": true,
+  "implementation_sha256": {
+    "compose.yaml": "f2d062a951890454f3908cbb8d5b3e1c5190086dc58ded22723d980a3ba9c13c",
+    "infra/nginx/nginx.conf": "242bd2a0d34af92a1edb443551fde3272da36d2be4821d18662640a5e709184f",
+    "infra/nginx/default.conf": "4c8c7983c317ba105d0bcd22e213c14f4d61effc7185531a79ddbcc09e7fb500",
+    "infra/jaeger/config.yaml": "54145448a7580d7d2997e22cbf8307cf4915820412b868fdb62c4a099e73f8b9",
+    "services/catalogo-profesionales/go.mod": "1225c1885df185cfc4e346c32f3f6038f55684106a5d191cc632d90c5aaadf90",
+    "services/catalogo-profesionales/go.sum": "d3b4f1ef7f65df015a2c7da9e4dff9f46774b05ed153e81472cdb636e0e92afc",
+    "services/catalogo-profesionales/cmd/api/main.go": "c0f03b0022b2f2ea83a72ddd20ee26d96190463ddeaa54ad5e93ce9a2cf71860",
+    "services/catalogo-profesionales/cmd/api/observability.go": "cb0153e2f1802b4208d115700a61e0e7a8376557336351604d8e4eaa2b49ff0c",
+    "services/catalogo-profesionales/cmd/api/observability_test.go": "a6774d64f6ac5900950ddec3de2474d94c851104e9b01e9a8e6e459383c23165",
+    "scripts/verify-observability.py": "acfda95480936a633eeb210e4ab0afb22ea962582c5c0e53c10115d87f2279cd"
+  },
+  "requests": [
+    {
+      "case": "provided",
+      "status": 200,
+      "request_id": "sofia-d11-40b682c36947",
+      "trace_id": "5bbab6dab3e06927b6e9d0352f5af69b",
+      "trace_url": "http://localhost:16686/trace/5bbab6dab3e06927b6e9d0352f5af69b",
+      "total_treatments": 1,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T16:40:43+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.004,
+          "request_id": "sofia-d11-40b682c36947",
+          "trace_id": "5bbab6dab3e06927b6e9d0352f5af69b",
+          "span_id": "dd209ae6cf4e9bca",
+          "upstream": "172.19.0.4:8081"
+        },
+        {
+          "timestamp": "2026-10-23T16:40:43.626767843Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "d218caf44cf9",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 2.461,
+          "request_id": "sofia-d11-40b682c36947",
+          "trace_id": "5bbab6dab3e06927b6e9d0352f5af69b",
+          "span_id": "79ee363cca03e62a"
+        }
+      ],
+      "spans": [
+        {
+          "service": "catalogo-profesionales",
+          "operation": "GET /tratamientos",
+          "span_id": "79ee363cca03e62a",
+          "parent_span_id": "dd209ae6cf4e9bca",
+          "kind": "server",
+          "db_operation": null
+        },
+        {
+          "service": "melt-gateway",
+          "operation": "HTTP catalogo",
+          "span_id": "dd209ae6cf4e9bca",
+          "parent_span_id": null,
+          "kind": "server",
+          "db_operation": null
+        },
+        {
+          "service": "catalogo-profesionales",
+          "operation": "tratamientos.aggregate",
+          "span_id": "deeb406622e36d1d",
+          "parent_span_id": "79ee363cca03e62a",
+          "kind": "client",
+          "db_operation": "aggregate"
+        },
+        {
+          "service": "catalogo-profesionales",
+          "operation": "tratamientos.find",
+          "span_id": "de7edfea7bab655c",
+          "parent_span_id": "79ee363cca03e62a",
+          "kind": "client",
+          "db_operation": "find"
+        }
+      ]
+    },
+    {
+      "case": "generated",
+      "status": 200,
+      "request_id": "cd0616f2d7f9ba274d11cf7564bd1a29",
+      "trace_id": "34f46b0645be5e7f16aeb9d633dcc06f",
+      "trace_url": "http://localhost:16686/trace/34f46b0645be5e7f16aeb9d633dcc06f",
+      "total_treatments": 1,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T16:40:45+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.003,
+          "request_id": "cd0616f2d7f9ba274d11cf7564bd1a29",
+          "trace_id": "34f46b0645be5e7f16aeb9d633dcc06f",
+          "span_id": "5e613522153adf0a",
+          "upstream": "172.19.0.3:8081"
+        },
+        {
+          "timestamp": "2026-10-23T16:40:45.856938304Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.368,
+          "request_id": "cd0616f2d7f9ba274d11cf7564bd1a29",
+          "trace_id": "34f46b0645be5e7f16aeb9d633dcc06f",
+          "span_id": "1abdd83935c9ff06"
+        }
+      ],
+      "spans": [
+        {
+          "service": "melt-gateway",
+          "operation": "HTTP catalogo",
+          "span_id": "5e613522153adf0a",
+          "parent_span_id": null,
+          "kind": "server",
+          "db_operation": null
+        },
+        {
+          "service": "catalogo-profesionales",
+          "operation": "tratamientos.aggregate",
+          "span_id": "c80fde0a03a55499",
+          "parent_span_id": "1abdd83935c9ff06",
+          "kind": "client",
+          "db_operation": "aggregate"
+        },
+        {
+          "service": "catalogo-profesionales",
+          "operation": "tratamientos.find",
+          "span_id": "ccb9061c9011fd9b",
+          "parent_span_id": "1abdd83935c9ff06",
+          "kind": "client",
+          "db_operation": "find"
+        },
+        {
+          "service": "catalogo-profesionales",
+          "operation": "GET /tratamientos",
+          "span_id": "1abdd83935c9ff06",
+          "parent_span_id": "5e613522153adf0a",
+          "kind": "server",
+          "db_operation": null
+        }
+      ]
+    },
+    {
+      "case": "invalid",
+      "status": 200,
+      "request_id": "dccf73b31eace9005483a6d5a8a56151",
+      "trace_id": "34ed359095347f39a1852ea868b0c7b1",
+      "trace_url": "http://localhost:16686/trace/34ed359095347f39a1852ea868b0c7b1",
+      "total_treatments": 1,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T16:40:48+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "dccf73b31eace9005483a6d5a8a56151",
+          "trace_id": "34ed359095347f39a1852ea868b0c7b1",
+          "span_id": "343e5ea9638890b5",
+          "upstream": "172.19.0.4:8081"
+        },
+        {
+          "timestamp": "2026-10-23T16:40:48.044261213Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "d218caf44cf9",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.09,
+          "request_id": "dccf73b31eace9005483a6d5a8a56151",
+          "trace_id": "34ed359095347f39a1852ea868b0c7b1",
+          "span_id": "4ceb4967326ab79f"
+        }
+      ],
+      "spans": [
+        {
+          "service": "catalogo-profesionales",
+          "operation": "GET /tratamientos",
+          "span_id": "4ceb4967326ab79f",
+          "parent_span_id": "343e5ea9638890b5",
+          "kind": "server",
+          "db_operation": null
+        },
+        {
+          "service": "melt-gateway",
+          "operation": "HTTP catalogo",
+          "span_id": "343e5ea9638890b5",
+          "parent_span_id": null,
+          "kind": "server",
+          "db_operation": null
+        },
+        {
+          "service": "catalogo-profesionales",
+          "operation": "tratamientos.aggregate",
+          "span_id": "1361812e279cf85b",
+          "parent_span_id": "4ceb4967326ab79f",
+          "kind": "client",
+          "db_operation": "aggregate"
+        },
+        {
+          "service": "catalogo-profesionales",
+          "operation": "tratamientos.find",
+          "span_id": "d340d0b922350492",
+          "parent_span_id": "4ceb4967326ab79f",
+          "kind": "client",
+          "db_operation": "find"
+        }
+      ]
+    },
+    {
+      "case": "propagated",
+      "status": 200,
+      "request_id": "sofia-context-40b682c36947",
+      "trace_id": "c212f7e9ec604097a70b54c04de8cf2f",
+      "trace_url": "http://localhost:16686/trace/c212f7e9ec604097a70b54c04de8cf2f",
+      "total_treatments": 1,
+      "logs": [
+        {
+          "timestamp": "2026-10-23T16:40:50+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.003,
+          "request_id": "sofia-context-40b682c36947",
+          "trace_id": "c212f7e9ec604097a70b54c04de8cf2f",
+          "span_id": "2af6dede12bc3b83",
+          "upstream": "172.19.0.3:8081"
+        },
+        {
+          "timestamp": "2026-10-23T16:40:50.283275354Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 1.906,
+          "request_id": "sofia-context-40b682c36947",
+          "trace_id": "c212f7e9ec604097a70b54c04de8cf2f",
+          "span_id": "52e946d8a23a0775"
+        }
+      ],
+      "spans": [
+        {
+          "service": "melt-gateway",
+          "operation": "HTTP catalogo",
+          "span_id": "2af6dede12bc3b83",
+          "parent_span_id": "2ead332f9a46463d",
+          "kind": "server",
+          "db_operation": null
+        },
+        {
+          "service": "catalogo-profesionales",
+          "operation": "tratamientos.aggregate",
+          "span_id": "0d929929af16011a",
+          "parent_span_id": "52e946d8a23a0775",
+          "kind": "client",
+          "db_operation": "aggregate"
+        },
+        {
+          "service": "catalogo-profesionales",
+          "operation": "tratamientos.find",
+          "span_id": "5ed08c8dc65db2fc",
+          "parent_span_id": "52e946d8a23a0775",
+          "kind": "client",
+          "db_operation": "find"
+        },
+        {
+          "service": "catalogo-profesionales",
+          "operation": "GET /tratamientos",
+          "span_id": "52e946d8a23a0775",
+          "parent_span_id": "2af6dede12bc3b83",
+          "kind": "server",
+          "db_operation": null
+        }
+      ]
+    }
+  ],
+  "replicas": [
+    {
+      "name": "melt-catalogo-profesionales-1",
+      "health": "ok"
+    },
+    {
+      "name": "melt-catalogo-profesionales-2",
+      "health": "ok"
+    }
+  ]
+}

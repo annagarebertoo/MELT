@@ -1,0 +1,260 @@
+{
+  "captured_at_utc": "2026-10-23T17:49:09.565728+00:00",
+  "branch": "feature/sofia-adr-entrega-2",
+  "base_commit": "cc230fafd8f9015668f388d243619d083b22bae0",
+  "read_only": true,
+  "nginx": {
+    "configuration_test": "passed",
+    "container_file_matches_repository": true,
+    "configuration_sha256": "d14a6cbcd56bd822575c3cf262692df141c631944cb2c85b92d7dfe385ca6da9",
+    "timeouts": {
+      "proxy_connect_timeout": "2s",
+      "proxy_send_timeout": "5s",
+      "proxy_read_timeout": "5s"
+    },
+    "explicit_proxy_next_upstream_directives": [],
+    "timeout_expiry_or_failover_tested": false
+  },
+  "requests": [
+    {
+      "case": "health",
+      "status": 200,
+      "error_code": null,
+      "request_id": "sofia-d5-2b63ffac1e1349ebbfa688706c507f8e",
+      "trace_id": "9e185c22998e4bb9a3d6c89685981db2",
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:49:09.68000195Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "d218caf44cf9",
+          "method": "GET",
+          "route": "/health",
+          "status": 200,
+          "duration_ms": 0.969,
+          "request_id": "sofia-d5-2b63ffac1e1349ebbfa688706c507f8e",
+          "trace_id": "9e185c22998e4bb9a3d6c89685981db2",
+          "span_id": "96415350a9886d11"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:09+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/health",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d5-2b63ffac1e1349ebbfa688706c507f8e",
+          "trace_id": "9e185c22998e4bb9a3d6c89685981db2",
+          "span_id": "afdaf0269feab26e",
+          "upstream": "172.19.0.4:8081"
+        }
+      ]
+    },
+    {
+      "case": "list",
+      "status": 200,
+      "error_code": null,
+      "request_id": "sofia-d5-09119c81af824e33858fc0d044cbfb08",
+      "trace_id": "b0a770f5c92d465b80a99a953489b1f0",
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:49:09.928083394Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 200,
+          "duration_ms": 2.001,
+          "request_id": "sofia-d5-09119c81af824e33858fc0d044cbfb08",
+          "trace_id": "b0a770f5c92d465b80a99a953489b1f0",
+          "span_id": "3a5f6c093e09c37b"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:09+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 200,
+          "duration_seconds": 0.003,
+          "request_id": "sofia-d5-09119c81af824e33858fc0d044cbfb08",
+          "trace_id": "b0a770f5c92d465b80a99a953489b1f0",
+          "span_id": "645f08b3b29bfb49",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "detail",
+      "status": 200,
+      "error_code": null,
+      "request_id": "sofia-d5-f3a6fa9b212c447c94429434f380d0f0",
+      "trace_id": "392e1a2dc5dd433d857c7279c7548afe",
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:49:10.18547323Z",
+          "level": "INFO",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "d218caf44cf9",
+          "method": "GET",
+          "route": "/tratamientos/:id",
+          "status": 200,
+          "duration_ms": 1.12,
+          "request_id": "sofia-d5-f3a6fa9b212c447c94429434f380d0f0",
+          "trace_id": "392e1a2dc5dd433d857c7279c7548afe",
+          "span_id": "a4d8f89ecf5964d8"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:10+00:00",
+          "level": "INFO",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos/:id",
+          "status": 200,
+          "duration_seconds": 0.002,
+          "request_id": "sofia-d5-f3a6fa9b212c447c94429434f380d0f0",
+          "trace_id": "392e1a2dc5dd433d857c7279c7548afe",
+          "span_id": "655ad6b74205ac0b",
+          "upstream": "172.19.0.4:8081"
+        }
+      ]
+    },
+    {
+      "case": "invalid_limit",
+      "status": 400,
+      "error_code": "INVALID_PARAMETER",
+      "request_id": "sofia-d5-303862af687f4737b610af9853c73ada",
+      "trace_id": "14cd2a92f300434fb7092e6a3311a8d7",
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:49:10.428689427Z",
+          "level": "WARN",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 400,
+          "duration_ms": 0.055,
+          "request_id": "sofia-d5-303862af687f4737b610af9853c73ada",
+          "trace_id": "14cd2a92f300434fb7092e6a3311a8d7",
+          "span_id": "9206a3c83e764e6d"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:10+00:00",
+          "level": "WARN",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 400,
+          "duration_seconds": 0.0,
+          "request_id": "sofia-d5-303862af687f4737b610af9853c73ada",
+          "trace_id": "14cd2a92f300434fb7092e6a3311a8d7",
+          "span_id": "23de118369f356ef",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    },
+    {
+      "case": "invalid_sort",
+      "status": 400,
+      "error_code": "INVALID_PARAMETER",
+      "request_id": "sofia-d5-784d1a980a1041ba9f2c4052ae9ee0be",
+      "trace_id": "3e3c6424dba549c1b5a4ff6bb7dc181c",
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:49:10.656263702Z",
+          "level": "WARN",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "d218caf44cf9",
+          "method": "GET",
+          "route": "/tratamientos",
+          "status": 400,
+          "duration_ms": 0.083,
+          "request_id": "sofia-d5-784d1a980a1041ba9f2c4052ae9ee0be",
+          "trace_id": "3e3c6424dba549c1b5a4ff6bb7dc181c",
+          "span_id": "147d5cf1429db86d"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:10+00:00",
+          "level": "WARN",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos",
+          "status": 400,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-d5-784d1a980a1041ba9f2c4052ae9ee0be",
+          "trace_id": "3e3c6424dba549c1b5a4ff6bb7dc181c",
+          "span_id": "c58f8c46dd28ff81",
+          "upstream": "172.19.0.4:8081"
+        }
+      ]
+    },
+    {
+      "case": "missing_treatment",
+      "status": 404,
+      "error_code": "TRATAMIENTO_NOT_FOUND",
+      "request_id": "sofia-d5-8ad3c7f7537d41abbdc85fe5bd29cb01",
+      "trace_id": "29e716b3161e48c5b79092059549a4b2",
+      "logs": [
+        {
+          "timestamp": "2026-10-23T17:49:10.867804874Z",
+          "level": "WARN",
+          "msg": "http_request",
+          "service": "catalogo-profesionales",
+          "instance": "6ab9b7fac2b2",
+          "method": "GET",
+          "route": "/tratamientos/:id",
+          "status": 404,
+          "duration_ms": 0.946,
+          "request_id": "sofia-d5-8ad3c7f7537d41abbdc85fe5bd29cb01",
+          "trace_id": "29e716b3161e48c5b79092059549a4b2",
+          "span_id": "d101d5fedb8011cb"
+        },
+        {
+          "timestamp": "2026-10-23T17:49:10+00:00",
+          "level": "WARN",
+          "service": "melt-gateway",
+          "method": "GET",
+          "route": "/api/v1/catalogo/tratamientos/:id",
+          "status": 404,
+          "duration_seconds": 0.001,
+          "request_id": "sofia-d5-8ad3c7f7537d41abbdc85fe5bd29cb01",
+          "trace_id": "29e716b3161e48c5b79092059549a4b2",
+          "span_id": "14afebee8280e8dd",
+          "upstream": "172.19.0.3:8081"
+        }
+      ]
+    }
+  ],
+  "asynchronous": {
+    "rabbitmq_declared_image": "rabbitmq:3-management",
+    "rabbitmq_containers": [],
+    "source_scan": {
+      "scope": "services/**/*.go and services/**/go.mod",
+      "files_scanned": 10,
+      "matching_files": []
+    },
+    "business_event_publication_consumption_tested": false
+  },
+  "d11_regression": [
+    "PASS provided request_id=sofia-d11-db380b9d878d trace_id=ea549417876bb0c91a312a201023c39c",
+    "PASS generated request_id=b679268055f2622c0f13f6a349f0288a trace_id=35968297a2df6b00ddfc8de112e471a6",
+    "PASS invalid request_id=aad799723e997df21269598bc4162f8e trace_id=a23f3a50411dc3b87c93b2fbbbc62b0a",
+    "PASS propagated request_id=sofia-context-db380b9d878d trace_id=f36093a9dcf943e6acd1f76f4bf56d1c",
+    "PASS two Catálogo replicas with MongoDB healthy",
+    "PASS sensitive query and header absent from recorded request telemetry"
+  ],
+  "limits": [
+    "No timeout expiry, dependency failure or retry behavior provoked.",
+    "No service start, stop, restart or persistent business writes performed.",
+    "Gateway-to-service HTTP validated; business calls between microservices are not implemented.",
+    "Source scan is scoped evidence, not a broker queue/consumer inspection."
+  ]
+}

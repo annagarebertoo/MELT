@@ -1,0 +1,181 @@
+openapi: 3.0.3
+info:
+  title: MELT - Autenticación y cuentas
+  version: 1.0.0
+  description: >
+    API de registro de clientes, inicio de sesión, consulta de identidad y alta
+    de cuentas internas con roles. Las contraseñas nunca se devuelven.
+servers:
+  - url: http://localhost:8080/api/v1/auth
+    description: Entorno local a través del API Gateway
+paths:
+  /registro:
+    post:
+      summary: Registrar una cuenta de cliente
+      operationId: registrarCliente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistroRequest'
+      responses:
+        '201':
+          description: Cuenta creada. Iniciar sesión por separado para obtener un token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usuario:
+                    $ref: '#/components/schemas/Usuario'
+        '400':
+          description: Datos inválidos o contraseña fuera de los límites admitidos.
+        '409':
+          description: Ya existe una cuenta con ese email.
+        '503':
+          description: No se pudo guardar la cuenta.
+  /login:
+    post:
+      summary: Iniciar sesión
+      operationId: iniciarSesion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Credenciales válidas; devuelve token Bearer con vencimiento.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, tipo, expiraEnSegundos, usuario]
+                properties:
+                  token:
+                    type: string
+                  tipo:
+                    type: string
+                    enum: [Bearer]
+                  expiraEnSegundos:
+                    type: integer
+                  usuario:
+                    $ref: '#/components/schemas/Usuario'
+        '400':
+          description: Formato de solicitud inválido.
+        '401':
+          description: Email o contraseña incorrectos.
+  /me:
+    get:
+      summary: Consultar la cuenta autenticada
+      operationId: obtenerCuentaActual
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Cuenta actual.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usuario:
+                    $ref: '#/components/schemas/Usuario'
+        '401':
+          description: Token ausente, inválido, vencido o cuenta deshabilitada.
+  /usuarios:
+    post:
+      summary: Crear una cuenta interna
+      operationId: crearUsuarioInterno
+      security:
+        - bearerAuth: []
+      description: >
+        Requiere rol administrador o superadministrador. Solo el
+        superadministrador puede asignar los roles administrador y
+        superadministrador.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearUsuarioRequest'
+      responses:
+        '201':
+          description: Cuenta interna creada.
+        '400':
+          description: Datos o roles inválidos.
+        '401':
+          description: Token ausente o inválido.
+        '403':
+          description: Rol insuficiente para la operación solicitada.
+        '409':
+          description: Ya existe una cuenta con ese email.
+        '503':
+          description: No se pudo guardar la cuenta.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RegistroRequest:
+      type: object
+      required: [nombre, email, password]
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          description: Entre 8 y 72 bytes para compatibilidad con bcrypt.
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+    CrearUsuarioRequest:
+      allOf:
+        - $ref: '#/components/schemas/RegistroRequest'
+        - type: object
+          required: [roles]
+          properties:
+            roles:
+              type: array
+              minItems: 1
+              uniqueItems: true
+              items:
+                type: string
+                enum: [cliente, profesional, recepcion, administrador, superadministrador]
+    Usuario:
+      type: object
+      properties:
+        id:
+          type: string
+        nombre:
+          type: string
+        email:
+          type: string
+          format: email
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [cliente, profesional, recepcion, administrador, superadministrador]
+        activo:
+          type: boolean
+        creadoEn:
+          type: string
+          format: date-time

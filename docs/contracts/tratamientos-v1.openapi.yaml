@@ -12,11 +12,11 @@ paths:
   /tratamientos:
     get:
       summary: Listar y buscar tratamientos
-      description: Obtiene una lista paginada de tratamientos. La búsqueda por q se realiza únicamente sobre el nombre del tratamiento.
+      description: Obtiene una lista paginada de tratamientos. La búsqueda por q considera el nombre y las palabras clave asociadas al tratamiento.
       parameters:
         - name: q
           in: query
-          description: Texto a buscar en el nombre del tratamiento.
+          description: Texto a buscar en el nombre y en las palabras clave asociadas al tratamiento.
           required: false
           schema:
             type: string
@@ -120,6 +120,19 @@ paths:
                   code: INTERNAL_ERROR
                   message: Se produjo un error interno.
 
+
+        '503':
+          description: El catálogo no está disponible temporalmente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: CATALOGO_NO_DISPONIBLE
+                  message: El catálogo no está disponible temporalmente.
+
+
   /tratamientos/{id}:
     get:
       summary: Obtener un tratamiento
@@ -130,9 +143,9 @@ paths:
           description: Identificador único del tratamiento.
           required: true
           schema:
-            type: integer
-            minimum: 1
-          example: 1
+            type: string
+            minLength: 1
+          example: "trat-001"
 
       responses:
         '200':
@@ -164,6 +177,20 @@ paths:
                   code: INTERNAL_ERROR
                   message: Se produjo un error interno.
 
+        '503':
+          description: El catálogo no está disponible temporalmente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: CATALOGO_NO_DISPONIBLE
+                  message: El catálogo no está disponible temporalmente.
+
+
+                  
+
 components:
   schemas:
 
@@ -178,11 +205,12 @@ components:
         - moneda
         - duracionMinutos
         - imagenes
+        - keywords
       properties:
         id:
-          type: integer
+          type: string
           description: Identificador único del tratamiento.
-          example: 1
+          example: "trat-001"
 
         nombre:
           type: string
@@ -232,6 +260,17 @@ components:
             format: uri
           example:
             - https://melt.example.com/images/limpieza-facial.jpg
+
+        keywords:
+          type: array
+          description: Términos relacionados y sinónimos utilizados por el motor de búsqueda.
+          items:
+            type: string
+            minLength: 1
+          example:
+            - limpieza
+            - limpieza profunda
+            - higiene facial
 
     TratamientosResponse:
       type: object
