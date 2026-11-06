@@ -92,15 +92,42 @@ Los errores de la API pública usan la estructura:
 
 La ruta POST de carga de tratamientos responde actualmente con algunos errores de formato diferentes (por ejemplo, cuerpo JSON inválido o ID duplicado). Esa operación no está cubierta por el contrato público OpenAPI v1.
 
-## Alcance de la integración con Grupo 1 — Gimnasio
+## Integración con Grupo 1 — Gimnasio
 
-La consigna del proyecto indica que el Grupo 1 consume del Grupo 5 dos capacidades: **catálogo** y **registro con puntos de regalo adaptado a planes y membresías del gimnasio**.
+La integración contempla dos capacidades de MELT:
 
-- **Catálogo:** implementado para consulta pública mediante los dos endpoints GET documentados.
-- **Registro externo con puntos de regalo:** implementado como `POST /api/v1/beneficios/registro-externo`. Registra el origen `gimnasio`, guarda el plan y la membresía y acredita el regalo configurado para esa combinación. No es parte de la API de Catálogo ni reemplaza la creación de cuenta/autenticación del cliente. Los registros directos no pasan por este endpoint y no reciben este regalo. La operación requiere configurar el código de referido, una clave privada para el consumidor (`X-Partner-Key`) y la tabla de puntos por plan/membresía.
-- **Acceso compartido:** la URL local `localhost` solo sirve para pruebas en el entorno local de MELT. La integración entre grupos requiere desplegar el gateway en una URL accesible desde el entorno del Grupo 1.
+- **Catálogo público:** el grupo puede consultar tratamientos mediante GET /api/v1/tratamientos y GET /api/v1/tratamientos/{id}. No requiere autenticación.
+- **Registro referido con puntos:** el gimnasio dirige a las personas al formulario de alta de MELT usando un enlace con el código acordado, por ejemplo https://melt.example/registro?referencia=GIMNASIO_MELT. El frontend debe conservar ese valor y enviarlo como codigoReferido en POST /api/v1/auth/registro.
 
-Los valores concretos de planes, membresías y puntos quedan a cargo de la configuración acordada con el Grupo 1; no hay valores de negocio inventados en el código. El endpoint guarda el registro y el saldo inicial en Beneficios, pero todavía no está integrado con un servicio de usuarios/autenticación, que no existe en el repositorio.
+### Regla de puntos
+
+- Una cuenta nueva creada con el código de gimnasio válido recibe **100 puntos**.
+- El alta normal, sin código o con código incorrecto, no recibe puntos de referido.
+- Una cuenta existente no puede obtener el regalo retroactivamente.
+- La acreditación se vincula al ID de usuario de Auth y tiene índice único para evitar duplicados.
+- El monto se configura con PUNTOS_REGISTRO_GIMNASIO (100 por defecto); no existe conversión a pesos.
+- Si Beneficios no está disponible durante el alta, Auth informa pendiente_reintento_en_login y vuelve a intentar acreditar cuando esa persona inicia sesión. La operación interna es idempotente.
+
+### Contrato de registro
+
+POST /api/v1/auth/registro
+
+```json
+{
+  "nombre": "Cliente de prueba",
+  "email": "cliente@example.com",
+  "password": "una-clave-segura",
+  "codigoReferido": "GIMNASIO_MELT"
+}
+```
+
+La respuesta 201 incluye beneficioRegistro: acreditado, pendiente_reintento_en_login o no_aplica. El código no reemplaza el alta normal ni permite que el cliente elija la cantidad de puntos.
+
+Auth se comunica con Beneficios por la red interna de Docker usando MELT_INTERNAL_KEY. El endpoint POST /internal/registro-gym no se publica en el gateway; no debe ser llamado directamente por el frontend ni por el gimnasio.
+
+### Acceso compartido
+
+La URL localhost sirve solo para pruebas en la computadora donde corre Docker. Para que el Grupo 1 integre el sistema, MELT debe desplegar el gateway en una URL HTTPS accesible desde fuera de la red local y compartir la URL base y el contrato OpenAPI. No se debe compartir MELT_INTERNAL_KEY, AUTH_JWT_SECRET ni credenciales de Mercado Pago.
 
 ## Mock
 
@@ -109,26 +136,6 @@ El proyecto incluye un mock en `docs/contracts/mock/` para pruebas locales sin M
 ## Cambios de versión y compatibilidad
 
 La versión actual del contrato es `v1`. Los cambios incompatibles deberán publicarse mediante una nueva versión y comunicarse a los consumidores. Los IDs son cadenas de texto; los consumidores no deben convertirlos a números. El alias agregado es compatible con `v1` y no cambia el esquema de respuesta.
-
-
-### Registro externo del gimnasio
-
-`POST /api/v1/beneficios/registro-externo`
-
-Body de ejemplo (reemplazar los valores por los del gimnasio):
-
-```json
-{
-  "solicitudId": "gym-req-0001",
-  "nombre": "Cliente de prueba",
-  "email": "cliente@example.com",
-  "codigoReferido": "CODIGO_CONFIGURADO",
-  "plan": "basico",
-  "membresia": "mensual"
-}
-```
-
-La combinación `plan|membresia` debe existir en la configuración `PUNTOS_POR_PLAN_MEMBRESIA`. El consumidor también debe enviar `X-Partner-Key`. La respuesta `201` confirma el registro y el regalo asociado; repetir la misma `solicitudId` devuelve `200` con el registro existente. Email duplicado con otra solicitud devuelve `409`; código inválido devuelve `403`; combinación de plan/membresía no configurada devuelve `422`. Si falta configurar el código, la clave del consumidor o la tabla de puntos, devuelve `503` en lugar de aplicar una regla inventada.
 
 
 ## Autenticación y cuentas
