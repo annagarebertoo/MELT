@@ -74,6 +74,9 @@ services:
       AUTH_TOKEN_TTL_MINUTES: ${AUTH_TOKEN_TTL_MINUTES:-15}
       AUTH_ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL:-}
       AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-}
+      BENEFICIOS_URL: http://beneficios:8083
+      CODIGO_GIMNASIO: ${CODIGO_GIMNASIO:?Defini CODIGO_GIMNASIO para los enlaces del gimnasio}
+      MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -88,6 +91,8 @@ services:
       CODIGO_GIMNASIO: ${CODIGO_GIMNASIO:-}
       CLAVE_API_GIMNASIO: ${CLAVE_API_GIMNASIO:-}
       PUNTOS_POR_PLAN_MEMBRESIA: ${PUNTOS_POR_PLAN_MEMBRESIA:-}
+      PUNTOS_REGISTRO_GIMNASIO: ${PUNTOS_REGISTRO_GIMNASIO:-100}
+      MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
     depends_on:
       mongodb:
         condition: service_healthy
