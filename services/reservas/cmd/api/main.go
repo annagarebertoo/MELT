@@ -241,7 +241,15 @@ func (s *servidorReservas) guardarAgenda(c *gin.Context) {
 }
 
 func (s *servidorReservas) disponibilidad(c *gin.Context) {
-	prof:=strings.TrimSpace(c.Query("profesionalId")); fecha,err:=time.Parse("2006-01-02",c.Query("fecha"))
+	prof := strings.TrimSpace(c.Query("profesionalId"))
+
+loc, locErr := time.LoadLocation("America/Argentina/Cordoba")
+if locErr != nil {
+    c.JSON(http.StatusInternalServerError, gin.H{"error": "no se pudo cargar la zona horaria"})
+    return
+}
+
+fecha, err := time.ParseInLocation("2006-01-02", c.Query("fecha"), loc)
 	if prof=="" || err!=nil { c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"PARAMETROS_INVALIDOS","message":"Usá profesionalId y fecha (YYYY-MM-DD)."}}); return }
 	ctx,cancel:=context.WithTimeout(c.Request.Context(),5*time.Second); defer cancel()
 	dur := 0
@@ -261,14 +269,42 @@ func (s *servidorReservas) disponibilidad(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo consultar la agenda"}); return
 	}
 	startMin,_:=parseHora(agenda.HoraInicio); endMin,_:=parseHora(agenda.HoraFin)
-	loc:=fecha.Location(); base:=time.Date(fecha.Year(),fecha.Month(),fecha.Day(),0,0,0,0,loc)
+	base := time.Date(fecha.Year(), fecha.Month(), fecha.Day(), 0, 0, 0, 0, fecha.Location())
 	var slots []string
 	for m:=startMin; m+dur<=endMin; m+=15 {
 		start:=base.Add(time.Duration(m)*time.Minute); end:=start.Add(time.Duration(dur)*time.Minute)
-		var count int64
-		count,err=s.turnos.CountDocuments(ctx,bson.D{{Key:"profesionalId",Value:prof},{Key:"estado",Value:"confirmado"},{Key:"inicio",Value:bson.D{{Key:"$lt",Value:end}}},{Key:"fin",Value:bson.D{{Key:"$gt",Value:start}}}})
-		if err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo consultar disponibilidad"}); return }
-		if count==0 && start.After(time.Now()) { slots=append(slots,start.Format("15:04")) }
+		var countTurnos int64
+countTurnos, err = s.turnos.CountDocuments(ctx, bson.D{
+    {Key: "profesionalId", Value: prof},
+    {Key: "estado", Value: "confirmado"},
+    {Key: "inicio", Value: bson.D{{Key: "$lt", Value: end}}},
+    {Key: "fin", Value: bson.D{{Key: "$gt", Value: start}}},
+})
+if err != nil {
+    c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo consultar disponibilidad"})
+    return
+}
+
+var countBloqueos int64
+countBloqueos, err = s.bloqueos.CountDocuments(ctx, bson.D{
+    {Key: "profesionalId", Value: prof},
+    {Key: "minuto", Value: bson.D{
+        {Key: "$gte", Value: start.UTC().Unix() / 60},
+        {Key: "$lt", Value: end.UTC().Unix() / 60},
+    }},
+    {Key: "$or", Value: bson.A{
+        bson.D{{Key: "expiraEn", Value: bson.D{{Key: "$exists", Value: false}}}},
+        bson.D{{Key: "expiraEn", Value: bson.D{{Key: "$gt", Value: time.Now().UTC()}}}},
+    }},
+})
+if err != nil {
+    c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo consultar disponibilidad"})
+    return
+}
+
+if countTurnos == 0 && countBloqueos == 0 && start.After(time.Now()) {
+    slots = append(slots, start.Format("15:04"))
+}
 	}
 	if slots==nil { slots=[]string{} }
 	c.JSON(http.StatusOK,gin.H{"profesionalId":prof,"fecha":c.Query("fecha"),"duracionMinutos":dur,"horarios":slots})
