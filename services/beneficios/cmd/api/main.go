@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +17,12 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
+
+type RegistroGymRequest struct {
+	UsuarioID string `json:"usuarioId" binding:"required"`
+	Nombre string `json:"nombre" binding:"required"`
+	Email string `json:"email" binding:"required,email"`
+}
 
 type RegistroExternoRequest struct {
 	SolicitudID string `json:"solicitudId" binding:"required"`
@@ -46,6 +53,8 @@ type Servidor struct {
 	codigoGimnasio     string
 	claveAPI           string
 	puntosPorMembresia map[string]int
+	puntosRegistroGym int
+	claveInterna string
 }
 
 func main() {
@@ -73,6 +82,7 @@ func main() {
 	_, err = coleccion.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_registro_externo_email")},
 		{Keys: bson.D{{Key: "solicitudId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_registro_externo_solicitud")},
+		{Keys: bson.D{{Key: "usuarioId", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true).SetName("uq_registro_gym_usuario")},
 	})
 	if err != nil {
 		log.Fatal("no se pudieron crear los índices de registros externos")
@@ -88,6 +98,8 @@ func main() {
 		codigoGimnasio:     strings.TrimSpace(os.Getenv("CODIGO_GIMNASIO")),
 		claveAPI:           strings.TrimSpace(os.Getenv("CLAVE_API_GIMNASIO")),
 		puntosPorMembresia: puntos,
+		puntosRegistroGym: puntosGym,
+		claveInterna: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY")),
 	}
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
@@ -117,6 +129,7 @@ func crearRouter(servidor *Servidor) *gin.Engine {
 	})
 
 	router.POST("/registro-externo", servidor.registrarExterno)
+	router.POST("/internal/registro-gym", servidor.registrarRegistroGym)
 	router.GET("/mis-puntos", servidor.requiereCliente(), servidor.misPuntos)
 	return router
 }
@@ -144,6 +157,33 @@ func (s *Servidor) requiereCliente() gin.HandlerFunc {
 	}
 }
 
+// registrarRegistroGym acredita una única vez el regalo al ID creado por Auth.
+func (s *Servidor) registrarRegistroGym(c *gin.Context) {
+	if s == nil || s.registros == nil || s.claveInterna == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code":"BENEFICIOS_NO_DISPONIBLE","message":"La integración interna no está configurada."}}); return
+	}
+	clave := c.GetHeader("X-Melt-Internal-Key")
+	if subtle.ConstantTimeCompare([]byte(clave), []byte(s.claveInterna)) != 1 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code":"INTERNAL_UNAUTHORIZED","message":"Servicio no autorizado."}}); return
+	}
+	var req RegistroGymRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.UsuarioID)=="" || strings.TrimSpace(req.Nombre)=="" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code":"DATOS_INVALIDOS","message":"usuarioId, nombre y email válido son obligatorios."}}); return
+	}
+	req.UsuarioID = strings.TrimSpace(req.UsuarioID); req.Nombre = strings.TrimSpace(req.Nombre); req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	ctx,cancel := context.WithTimeout(c.Request.Context(),5*time.Second); defer cancel()
+	var existente bson.M
+	err := s.registros.FindOne(ctx,bson.D{{Key:"usuarioId",Value:req.UsuarioID}}).Decode(&existente)
+	if err == nil { c.JSON(http.StatusOK,existente); return }
+	if !errors.Is(err,mongo.ErrNoDocuments) { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo consultar el beneficio"}); return }
+	doc := bson.M{"id":req.UsuarioID,"usuarioId":req.UsuarioID,"nombre":req.Nombre,"email":req.Email,"origen":"gimnasio","puntosRegalo":s.puntosRegistroGym,"saldoPuntos":s.puntosRegistroGym,"regaloAcreditado":true,"creadoEn":time.Now().UTC()}
+	if _,err := s.registros.InsertOne(ctx,doc); err != nil {
+		if mongo.IsDuplicateKeyError(err) { var repetido bson.M; if e:=s.registros.FindOne(ctx,bson.D{{Key:"usuarioId",Value:req.UsuarioID}}).Decode(&repetido); e==nil { c.JSON(http.StatusOK,repetido); return }; c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"EMAIL_YA_BENEFICIADO","message":"Ese email ya recibió un beneficio de registro."}}); return }
+		c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo acreditar el beneficio"}); return
+	}
+	c.JSON(http.StatusCreated,doc)
+}
+
 // misPuntos consulta el saldo ya registrado para el email de la identidad verificada.
 // Los registros del gimnasio todavía no tienen vínculo persistente por ID de usuario.
 func (s *Servidor) misPuntos(c *gin.Context) {
@@ -155,7 +195,8 @@ func (s *Servidor) misPuntos(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	var registro RegistroExterno
-	err := s.registros.FindOne(ctx, bson.D{{Key: "email", Value: email}}).Decode(&registro)
+	err := s.registros.FindOne(ctx, bson.D{{Key: "usuarioId", Value: c.GetString("authUserID")}}).Decode(&registro)
+	if errors.Is(err, mongo.ErrNoDocuments) { err = s.registros.FindOne(ctx, bson.D{{Key: "email", Value: email}}).Decode(&registro) }
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		c.JSON(http.StatusOK, gin.H{"usuarioId": c.GetString("authUserID"), "saldoPuntos": 0, "movimientos": []RegistroExterno{}})
 		return
