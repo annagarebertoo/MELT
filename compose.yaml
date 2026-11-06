@@ -80,6 +80,8 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+      beneficios:
+        condition: service_started
     restart: unless-stopped
 
   beneficios:
