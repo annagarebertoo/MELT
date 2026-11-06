@@ -79,11 +79,59 @@ func main() {
 	}
 
 	coleccion := cliente.Database("beneficios_db").Collection("registros_externos")
-	_, err = coleccion.Indexes().CreateMany(ctx, []mongo.IndexModel{
-		{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_registro_externo_email")},
-		{Keys: bson.D{{Key: "solicitudId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_registro_externo_solicitud")},
-		{Keys: bson.D{{Key: "usuarioId", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true).SetName("uq_registro_gym_usuario")},
-	})
+
+// Migrar el índice de solicitudId para que los registros internos
+// del gimnasio, que no tienen ese campo, no entren en conflicto.
+cursor, err := coleccion.Indexes().List(ctx)
+if err != nil {
+    log.Fatal("no se pudieron consultar los índices de registros externos")
+}
+
+var indices []bson.M
+if err := cursor.All(ctx, &indices); err != nil {
+    log.Fatal("no se pudieron leer los índices de registros externos")
+}
+cursor.Close(ctx)
+
+for _, indice := range indices {
+    if indice["name"] == "uq_registro_externo_solicitud" {
+        sparse, _ := indice["sparse"].(bool)
+
+        if !sparse {
+             err := coleccion.Indexes().DropOne(
+                ctx,
+                "uq_registro_externo_solicitud",
+            )
+            if err != nil {
+                log.Fatal("no se pudo migrar el índice de solicitudId")
+            }
+        }
+        break
+    }
+}
+
+_, err = coleccion.Indexes().CreateMany(ctx, []mongo.IndexModel{
+    {
+        Keys: bson.D{{Key: "email", Value: 1}},
+        Options: options.Index().
+            SetUnique(true).
+            SetName("uq_registro_externo_email"),
+    },
+    {
+        Keys: bson.D{{Key: "solicitudId", Value: 1}},
+        Options: options.Index().
+            SetUnique(true).
+            SetSparse(true).
+            SetName("uq_registro_externo_solicitud"),
+    },
+    {
+        Keys: bson.D{{Key: "usuarioId", Value: 1}},
+        Options: options.Index().
+            SetUnique(true).
+            SetSparse(true).
+            SetName("uq_registro_gym_usuario"),
+    },
+})
 	if err != nil {
 		log.Fatal("no se pudieron crear los índices de registros externos")
 	}
