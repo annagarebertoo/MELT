@@ -196,7 +196,6 @@ func (s *Servidor) misPuntos(c *gin.Context) {
 	defer cancel()
 	var registro RegistroExterno
 	err := s.registros.FindOne(ctx, bson.D{{Key: "usuarioId", Value: c.GetString("authUserID")}}).Decode(&registro)
-	if errors.Is(err, mongo.ErrNoDocuments) { err = s.registros.FindOne(ctx, bson.D{{Key: "email", Value: email}}).Decode(&registro) }
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		c.JSON(http.StatusOK, gin.H{"usuarioId": c.GetString("authUserID"), "saldoPuntos": 0, "movimientos": []RegistroExterno{}})
 		return
