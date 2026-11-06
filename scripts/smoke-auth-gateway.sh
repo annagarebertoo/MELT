@@ -43,6 +43,27 @@ login_code=$(http_code /tmp/melt-login.json -X POST "$BASE_URL/api/v1/auth/login
 [[ "$login_code" == "200" ]] || fail "login de cliente: se esperaba 200, se obtuvo $login_code ($(cat /tmp/melt-login.json))"
 TOKEN=$(jq -er '.token' /tmp/melt-login.json) || fail "login no devolvió token"
 
+# 1b. El alta con el código válido del gimnasio acredita el regalo una sola vez.
+GYM_EMAIL="${GYM_EMAIL:-cliente.gimnasio.integracion@melt.test}"
+GYM_CODE="${CODIGO_GIMNASIO:-GIMNASIO_CI_TEST}"
+gym_register_code=$(http_code /tmp/melt-gym-register.json -X POST "$BASE_URL/api/v1/auth/registro" \
+  -H 'Content-Type: application/json' \
+  -d "{\"nombre\":\"Cliente Gimnasio\",\"email\":\"$GYM_EMAIL\",\"password\":\"$CLIENT_PASSWORD\",\"codigoReferido\":\"$GYM_CODE\"}")
+[[ "$gym_register_code" == "201" ]] || fail "registro referido: se esperaba 201, se obtuvo $gym_register_code ($(cat /tmp/melt-gym-register.json))"
+[[ "$(jq -er '.beneficioRegistro' /tmp/melt-gym-register.json)" == "acreditado" ]] || fail "el registro referido no informó beneficio acreditado"
+gym_login_code=$(http_code /tmp/melt-gym-login.json -X POST "$BASE_URL/api/v1/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$GYM_EMAIL\",\"password\":\"$CLIENT_PASSWORD\"}")
+[[ "$gym_login_code" == "200" ]] || fail "login referido: se esperaba 200, se obtuvo $gym_login_code"
+GYM_TOKEN=$(jq -er '.token' /tmp/melt-gym-login.json) || fail "login referido no devolvió token"
+gym_points_code=$(http_code /tmp/melt-gym-points.json "$BASE_URL/api/v1/beneficios/mis-puntos" -H "Authorization: Bearer $GYM_TOKEN")
+[[ "$gym_points_code" == "200" ]] || fail "consulta puntos referido: se esperaba 200, se obtuvo $gym_points_code"
+[[ "$(jq -er '.saldoPuntos' /tmp/melt-gym-points.json)" == "${PUNTOS_REGISTRO_GIMNASIO:-100}" ]] || fail "el saldo referido no coincide con los puntos configurados"
+# Un login posterior no vuelve a acreditar el mismo regalo.
+gym_points_again_code=$(http_code /tmp/melt-gym-points-again.json "$BASE_URL/api/v1/beneficios/mis-puntos" -H "Authorization: Bearer $GYM_TOKEN")
+[[ "$gym_points_again_code" == "200" ]] || fail "segunda consulta de puntos: se esperaba 200, se obtuvo $gym_points_again_code"
+[[ "$(jq -er '.saldoPuntos' /tmp/melt-gym-points-again.json)" == "${PUNTOS_REGISTRO_GIMNASIO:-100}" ]] || fail "el regalo se duplicó o cambió luego del login"
+
 me_code=$(http_code /tmp/melt-me.json "$BASE_URL/api/v1/auth/me" -H "Authorization: Bearer $TOKEN")
 [[ "$me_code" == "200" ]] || fail "GET /auth/me: se esperaba 200, se obtuvo $me_code"
 
@@ -73,4 +94,4 @@ ADMIN_TOKEN=$(jq -er '.token' /tmp/melt-admin-login.json) || fail "login de supe
 admin_points_code=$(http_code /tmp/melt-points-admin.json "$BASE_URL/api/v1/beneficios/mis-puntos" -H "Authorization: Bearer $ADMIN_TOKEN")
 [[ "$admin_points_code" == "403" ]] || fail "Beneficios debe denegar rol administrador con 403, obtuvo $admin_points_code"
 
-echo "OK: registro/login, /me, protección de Reservas, identidad no falsificable, consulta de puntos y autorización por rol."
+echo "OK: registro normal y referido, regalo único del gimnasio, login, /me, protección de Reservas, identidad no falsificable y permisos."
