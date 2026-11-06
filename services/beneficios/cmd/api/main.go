@@ -191,7 +191,6 @@ func (s *Servidor) misPuntos(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "BENEFICIOS_NO_DISPONIBLE", "message": "El servicio de beneficios no está disponible."}})
 		return
 	}
-	email, _ := c.Get("authUserEmail")
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	var registro RegistroExterno
