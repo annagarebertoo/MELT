@@ -92,6 +92,12 @@ func main() {
 	if err != nil {
 		log.Fatal("PUNTOS_POR_PLAN_MEMBRESIA debe ser un JSON válido con puntos no negativos")
 	}
+	puntosGym := 100
+	if raw := strings.TrimSpace(os.Getenv("PUNTOS_REGISTRO_GIMNASIO")); raw != "" {
+		valor, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || valor < 0 { log.Fatal("PUNTOS_REGISTRO_GIMNASIO debe ser un entero no negativo") }
+		puntosGym = valor
+	}
 	servidor := &Servidor{
 		cliente:            cliente,
 		registros:          coleccion,
