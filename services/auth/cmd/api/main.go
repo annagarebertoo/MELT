@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/subtle"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -34,12 +35,14 @@ type Usuario struct {
 	Roles        []string  `bson:"roles" json:"roles"`
 	Activo       bool      `bson:"activo" json:"activo"`
 	CreadoEn     time.Time `bson:"creadoEn" json:"creadoEn"`
+	ReferidoGym bool `bson:"referidoGym,omitempty" json:"-"`
 }
 
 type registroRequest struct {
 	Nombre   string `json:"nombre" binding:"required"`
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=8"`
+	CodigoReferido string `json:"codigoReferido,omitempty"`
 }
 
 type crearUsuarioRequest struct {
@@ -59,6 +62,9 @@ type authServer struct {
 	users     *mongo.Collection
 	jwtSecret []byte
 	tokenTTL  time.Duration
+	beneficiosURL string
+	codigoGimnasio string
+	claveInterna string
 }
 
 type claims struct {
@@ -107,7 +113,7 @@ func main() {
 		}
 		ttl = minutes
 	}
-	s := &authServer{client: client, users: users, jwtSecret: []byte(secret), tokenTTL: ttl}
+	s := &authServer{client: client, users: users, jwtSecret: []byte(secret), tokenTTL: ttl, beneficiosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("BENEFICIOS_URL")), "/"), codigoGimnasio: strings.TrimSpace(os.Getenv("CODIGO_GIMNASIO")), claveInterna: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY"))}
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" { port = "8084" }
 	if err := s.router().Run(":" + port); err != nil { log.Fatal("no se pudo iniciar autenticación") }
@@ -145,7 +151,13 @@ func (s *authServer) registrarCliente(c *gin.Context) {
 	}
 	usuario, err := s.nuevoUsuario(c, req.Nombre, req.Email, req.Password, []string{"cliente"})
 	if err != nil { return }
-	c.JSON(http.StatusCreated, gin.H{"usuario": usuario})
+	beneficio := "no_aplica"
+	if req.CodigoReferido != "" && s.codigoGimnasio != "" && subtle.ConstantTimeCompare([]byte(req.CodigoReferido), []byte(s.codigoGimnasio)) == 1 {
+		usuario.ReferidoGym = true
+		_, _ = s.users.UpdateOne(c.Request.Context(), bson.D{{Key:"id",Value:usuario.ID}}, bson.D{{Key:"$set",Value:bson.D{{Key:"referidoGym",Value:true}}}})
+		if s.acreditarRegistroGym(c.Request.Context(), usuario) == nil { beneficio = "acreditado" } else { beneficio = "pendiente_reintento_en_login" }
+	}
+	c.JSON(http.StatusCreated, gin.H{"usuario": usuario, "beneficioRegistro": beneficio})
 }
 
 func (s *authServer) crearUsuario(c *gin.Context) {
@@ -221,6 +233,21 @@ func (s *authServer) nuevoUsuario(c *gin.Context, nombre, email, password string
 	return usuario, nil
 }
 
+
+func (s *authServer) acreditarRegistroGym(parent context.Context, u *Usuario) error {
+	if s.beneficiosURL == "" || s.claveInterna == "" || u == nil || !u.ReferidoGym { return errors.New("integración de beneficios no configurada") }
+	body, err := json.Marshal(map[string]string{"usuarioId":u.ID,"nombre":u.Nombre,"email":u.Email})
+	if err != nil { return err }
+	ctx,cancel := context.WithTimeout(parent,3*time.Second); defer cancel()
+	req,err := http.NewRequestWithContext(ctx,http.MethodPost,s.beneficiosURL+"/internal/registro-gym",strings.NewReader(string(body)))
+	if err != nil { return err }
+	req.Header.Set("Content-Type","application/json"); req.Header.Set("X-Melt-Internal-Key",s.claveInterna)
+	resp,err := (&http.Client{Timeout:3*time.Second}).Do(req)
+	if err != nil { return err }; defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK { return errors.New("beneficios no confirmó la acreditación") }
+	return nil
+}
+
 func (s *authServer) login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -235,6 +262,7 @@ func (s *authServer) login(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code":"CREDENCIALES_INVALIDAS","message":"Email o contraseña incorrectos."}})
 		return
 	}
+	if usuario.ReferidoGym { _ = s.acreditarRegistroGym(c.Request.Context(), &usuario) }
 	token, err := s.emitirToken(usuario)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code":"ERROR_INTERNO","message":"No se pudo iniciar sesión."}})

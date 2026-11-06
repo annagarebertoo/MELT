@@ -64,6 +64,9 @@ jobs:
       AUTH_JWT_SECRET: ci-integration-secret-at-least-32-characters-long
       AUTH_ADMIN_EMAIL: admin.integracion@melt.test
       AUTH_ADMIN_PASSWORD: Integration-Admin-123!
+      CODIGO_GIMNASIO: GIMNASIO_CI_TEST
+      MELT_INTERNAL_KEY: ci-internal-secret-at-least-32-characters
+      PUNTOS_REGISTRO_GIMNASIO: "100"
     steps:
       - uses: actions/checkout@v4
       - name: Levantar gateway y servicios necesarios

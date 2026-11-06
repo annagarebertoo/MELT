@@ -1,10 +1,11 @@
 openapi: 3.0.3
 info:
   title: MELT - Autenticación y cuentas
-  version: 1.0.0
+  version: 1.1.0
   description: >
     API de registro de clientes, inicio de sesión, consulta de identidad y alta
-    de cuentas internas con roles. Las contraseñas nunca se devuelven.
+    de cuentas internas con roles. Un registro puede incluir un código de referido
+    del gimnasio; el regalo se acredita una sola vez en Beneficios. Las contraseñas nunca se devuelven.
 servers:
   - url: http://localhost:8080/api/v1/auth
     description: Entorno local a través del API Gateway
@@ -21,7 +22,7 @@ paths:
               $ref: '#/components/schemas/RegistroRequest'
       responses:
         '201':
-          description: Cuenta creada. Iniciar sesión por separado para obtener un token.
+          description: Cuenta creada. Si beneficioRegistro es acreditado, el alta recibió el regalo del gimnasio. Iniciar sesión por separado para obtener un token.
           content:
             application/json:
               schema:
@@ -29,6 +30,10 @@ paths:
                 properties:
                   usuario:
                     $ref: '#/components/schemas/Usuario'
+                  beneficioRegistro:
+                    type: string
+                    enum: [no_aplica, acreditado, pendiente_reintento_en_login]
+                    description: Estado del regalo por referido.
         '400':
           description: Datos inválidos o contraseña fuera de los límites admitidos.
         '409':
@@ -136,6 +141,9 @@ components:
           minLength: 8
           maxLength: 72
           description: Entre 8 y 72 bytes para compatibilidad con bcrypt.
+        codigoReferido:
+          type: string
+          description: Código opcional recibido en el enlace del gimnasio. No asigna puntos si falta o no coincide con la configuración del servidor.
     LoginRequest:
       type: object
       required: [email, password]

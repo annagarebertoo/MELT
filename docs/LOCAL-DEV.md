@@ -97,38 +97,58 @@ Los tests unitarios del catálogo cubren el endpoint de salud mediante una depen
 El catálogo persiste tratamientos en MongoDB, ofrece búsqueda textual simple, filtro por categoría/precio máximo, paginación y ordenamiento. La creación mediante POST está implementada en la ruta compatible indicada arriba; la API pública contractual v1 expone solo lectura. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados en Compose, pero todavía no están integrados en los flujos de negocio. Reservas y Beneficios continúan siendo esqueletos HTTP. El frontend, la integración de la identidad con Reservas y Beneficios, los flujos completos de negocio, los eventos de dominio, cache hit/miss, métricas de negocio, pruebas de carga y el contrato externo desplegado siguen pendientes. La autenticación inicial ya está implementada en esta rama; ver la sección siguiente.
 
 
-## Registro externo del gimnasio y puntos de regalo
+## Integración de registro y puntos del gimnasio
 
-El endpoint vive en Beneficios, no en Catálogo. Para habilitarlo, configurá estas variables en el entorno antes de levantar Compose (no subas claves reales al repositorio):
+Esta integración ya no utiliza planes ni membresías. El gimnasio comparte un enlace hacia el formulario de MELT con el código de referido. El frontend conserva ese código y lo envía en el alta como codigoReferido.
 
-- `CODIGO_GIMNASIO`: código de referido que debe venir en el body.
-- `CLAVE_API_GIMNASIO`: clave privada que el backend del gimnasio envía en el header `X-Partner-Key`.
-- `PUNTOS_POR_PLAN_MEMBRESIA`: JSON con la cantidad de puntos por combinación de plan y membresía. Ejemplo de formato, con nombres y valores ilustrativos que hay que reemplazar por los acordados con el Grupo 1:
+Regla: cada cuenta nueva que se registra con el código correcto recibe 100 puntos (configurable). Los registros normales no reciben puntos. El regalo se acredita una sola vez por usuario y queda vinculado al ID de Auth. Una cuenta existente no recibe puntos retroactivos.
+
+### Configuración
+
+Copiá .env.example a .env y completá los valores locales. No subas .env al repositorio.
+
+```powershell
+Copy-Item .env.example .env
+$env:AUTH_JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+$env:CODIGO_GIMNASIO = "GIMNASIO_MELT_DEV"
+$env:MELT_INTERNAL_KEY = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+$env:PUNTOS_REGISTRO_GIMNASIO = "100"
+docker compose config
+docker compose up --build -d
+```
+
+También podés guardar CODIGO_GIMNASIO, MELT_INTERNAL_KEY y PUNTOS_REGISTRO_GIMNASIO en .env. La clave interna debe ser un secreto largo compartido únicamente por Auth y Beneficios. El servicio de Beneficios no expone su endpoint interno a través del gateway.
+
+### Registro referido desde el frontend
+
+El enlace que entrega el gimnasio puede tener esta forma (reemplazar dominio y código al desplegar):
+
+https://melt.example/registro?referencia=GIMNASIO_MELT
+
+El frontend debe leer referencia de la URL y enviar ese valor en el JSON del registro:
 
 ```json
-{"basico|mensual":100,"premium|anual":500}
+{
+  "nombre": "Cliente de prueba",
+  "email": "cliente@example.com",
+  "password": "una-clave-segura",
+  "codigoReferido": "GIMNASIO_MELT"
+}
 ```
 
-Ejemplo de llamada:
+Endpoint: POST http://localhost:8080/api/v1/auth/registro
 
-```sh
-curl -X POST http://localhost:8080/api/v1/beneficios/registro-externo \
-  -H "Content-Type: application/json" \
-  -H "X-Partner-Key: $CLAVE_API_GIMNASIO" \
-  -d '{
-    "solicitudId": "gym-req-0001",
-    "nombre": "Cliente de prueba",
-    "email": "cliente@example.com",
-    "codigoReferido": "CODIGO_CONFIGURADO",
-    "plan": "basico",
-    "membresia": "mensual"
-  }'
-```
+Respuesta esperada: 201 Created. El campo beneficioRegistro indica acreditado, pendiente_reintento_en_login o no_aplica. Si Beneficios está temporalmente caído, Auth conserva el origen referido y vuelve a intentar la acreditación cuando la persona inicia sesión. Beneficios aplica una clave única por usuario para no duplicar el regalo.
 
-La primera solicitud devuelve `201`; repetir la misma `solicitudId` con el mismo email devuelve `200` sin sumar el regalo otra vez. Un email ya registrado con otra solicitud devuelve `409`. La ruta requiere configuración: si faltan las variables, devuelve `503` y no inventa puntos. Esta ruta de integración del gimnasio se autentica con `X-Partner-Key`, por lo que queda exceptuada de la sesión Bearer de clientes.
+### Consulta del saldo
 
-**Alcance importante:** este endpoint guarda el registro externo y el saldo inicial de puntos en la base de Beneficios. No está conectado todavía con el servicio `auth` para vincular la identidad de ese registro con una cuenta MELT. Antes de usarlo con el Grupo 1 hay que acordar los nombres reales de planes/membresías y las cantidades de puntos, configurar las credenciales por fuera del código y desplegar una URL accesible para ambos grupos.
+Después del login, el frontend consulta GET http://localhost:8080/api/v1/beneficios/mis-puntos con Authorization: Bearer <token>. El saldo se busca por el ID de usuario verificado, no solo por email.
 
+El gimnasio no debe llamar directamente a /internal/registro-gym ni recibir MELT_INTERNAL_KEY. Esa ruta es exclusivamente interna entre microservicios.
+
+### Contrato y límites
+
+El contrato de registro está documentado en docs/contracts/autenticacion-v1.openapi.yaml. La URL localhost es solo local: para compartir la API con el otro grupo hay que desplegar el gateway en HTTPS y comunicar una URL pública. No se deben compartir secretos JWT, claves internas ni credenciales de pago.
 
 ## Autenticación y cuentas
 
@@ -176,7 +196,7 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 - `GET /api/v1/beneficios/mis-puntos`: requiere sesión y rol `cliente`; consulta el saldo del registro de Beneficios asociado al email verificado. Si no hay registro, devuelve saldo cero.
 - `POST /api/v1/beneficios/registro-externo`: conserva la autenticación independiente mediante `X-Partner-Key` para el sistema externo del gimnasio.
 
-El registro externo del gimnasio todavía no tiene una vinculación persistente con el ID de cuenta MELT; la consulta inicial de puntos usa el email normalizado. Antes de producción hay que reemplazar esta vinculación transitoria por una asociación explícita de identidad. Solo el superadministrador puede asignar roles administrativos; las operaciones reales de turnos y el resto de operaciones de puntos/canjes siguen pendientes de implementación.
+La acreditación del regalo del gimnasio queda vinculada al ID de usuario de Auth. La API de Beneficios aún no implementa un catálogo completo de movimientos ni canjes; el saldo inicial de este regalo sí queda persistido e idempotente. Solo el superadministrador puede asignar roles administrativos.
 
 Para ejecutar la prueba de integración de login, cabeceras falsificadas, rutas privadas y permisos por rol en un entorno con Docker Compose levantado, usá `bash scripts/smoke-auth-gateway.sh`. GitHub Actions ejecuta esta misma prueba en el job `gateway-integration`.
 
@@ -198,3 +218,18 @@ El middleware `requierePermiso` aplica autorización por operación y deniega po
 | `reservas.gestionar-turnos` | recepción, administrador, superadministrador |
 
 Cuando se implementen los handlers, encadenar ambos middlewares en este orden: `requiereIdentidad(), requierePermiso("clave.de.operacion")`. La autorización por rol no reemplaza la autorización por recurso: consultar, cancelar o modificar una reserva propia debe comparar el ID autenticado con el propietario de la reserva. Las rutas reales de turnos aún no están implementadas; por eso esta política y sus tests preparan el control de acceso, pero no implican que crear/cancelar reservas ya funcione.
+
+
+## Reservas: agenda y endpoints iniciales
+
+El servicio Reservas persiste agendas semanales y turnos en MongoDB, en la base `reservas_db`. Compose configura `MONGODB_URI=mongodb://mongodb:27017` y espera que MongoDB esté saludable.
+
+- `PUT /api/v1/reservas/agenda`: crea o actualiza el horario semanal. `diaSemana` usa 0=domingo y 6=sábado; `horaInicio` y `horaFin` usan `HH:MM`. Un profesional solo puede editar su propia agenda; recepción y administración pueden gestionar la agenda de un profesional indicado.
+- `GET /api/v1/reservas/disponibilidad?profesionalId=ID&fecha=YYYY-MM-DD&duracionMinutos=60`: devuelve inicios disponibles cada 15 minutos dentro de la agenda. La duración debe estar entre 5 y 480 minutos.
+- `POST /api/v1/reservas/turnos`: requiere rol cliente y JSON con `profesionalId`, `tratamientoId`, `inicio` (RFC3339 con zona horaria) y `duracionMinutos`.
+- `GET /api/v1/reservas/turnos`: clientes ven sus turnos, profesionales sus turnos asignados y recepción/administración pueden consultar todos.
+- `DELETE /api/v1/reservas/turnos/{id}`: el cliente solo cancela turnos propios; recepción/administración pueden cancelar otros turnos.
+
+Todos los endpoints de Reservas quedan detrás de `auth_request` en el gateway y aplican middleware de identidad y permisos por operación. El backend verifica que el horario esté dentro de la agenda y que no se solape con turnos confirmados.
+
+**Limitaciones de esta primera implementación:** la duración del tratamiento llega en la solicitud y todavía debe validarse contra Catálogo; no se implementaron pagos/seña, carrito con bloqueo de 10 minutos, reglas de devolución ni verificación de propiedad del profesional contra el catálogo de usuarios. La prevención de solapamientos usa un mutex dentro de una instancia del servicio; para despliegues con múltiples réplicas hace falta coordinación distribuida o una restricción transaccional en la persistencia. No usar este diseño como garantía de concurrencia multiinstancia en producción.

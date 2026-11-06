@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"net/http/httptest"
+	"net/http"
+	"io"
 	"github.com/gin-gonic/gin"
 	"time"
 )
@@ -100,4 +103,30 @@ func TestRolesValidos(t *testing.T) {
 		if !rolesValidos[rol] { t.Errorf("el rol %q debería existir", rol) }
 	}
 	if rolesValidos["root"] { t.Fatal("no debería aceptar roles no definidos") }
+}
+
+func TestAcreditarRegistroGymLlamaAEndpointInterno(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	servidorHTTP := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/internal/registro-gym" {
+			t.Errorf("ruta inesperada: %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("X-Melt-Internal-Key") != "clave-interna-de-prueba" {
+			t.Error("falta la clave interna")
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil { t.Fatal(err) }
+		var payload map[string]string
+		if err := json.Unmarshal(body, &payload); err != nil { t.Fatal(err) }
+		if payload["usuarioId"] != "usuario-123" || payload["email"] != "cliente@example.com" {
+			t.Errorf("payload inesperado: %#v", payload)
+		}
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer servidorHTTP.Close()
+	s := &authServer{beneficiosURL: servidorHTTP.URL, claveInterna: "clave-interna-de-prueba"}
+	u := &Usuario{ID: "usuario-123", Nombre: "Cliente", Email: "cliente@example.com", ReferidoGym: true}
+	if err := s.acreditarRegistroGym(context.Background(), u); err != nil {
+		t.Fatalf("no se esperaba error al acreditar: %v", err)
+	}
 }

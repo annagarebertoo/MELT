@@ -134,3 +134,10 @@ func TestCategoriaValida(t *testing.T) {
 		})
 	}
 }
+
+func TestTratamientoIncluyeProfesionalesAsociados(t *testing.T) {
+	tratamiento := Tratamiento{ID: "t1", ProfesionalesIDs: []string{"p1", "p2"}}
+	if len(tratamiento.ProfesionalesIDs) != 2 || tratamiento.ProfesionalesIDs[0] != "p1" {
+		t.Fatalf("no se conservaron los profesionales asociados: %#v", tratamiento.ProfesionalesIDs)
+	}
+}

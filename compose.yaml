@@ -45,6 +45,23 @@ services:
       context: ./services/reservas
     environment:
       PORT: "8082"
+      MONGODB_URI: mongodb://mongodb:27017
+      PAGOS_URL: ${PAGOS_URL:-http://pagos:8085}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      pagos:
+        condition: service_started
+    restart: unless-stopped
+
+  pagos:
+    build:
+      context: ./services/pagos
+    environment:
+      PORT: "8085"
+      MP_ENV: "test"
+      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
+      MP_BASE_URL: ${MP_BASE_URL:-https://api.mercadopago.com}
     restart: unless-stopped
 
   auth:
@@ -57,9 +74,14 @@ services:
       AUTH_TOKEN_TTL_MINUTES: ${AUTH_TOKEN_TTL_MINUTES:-15}
       AUTH_ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL:-}
       AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-}
+      BENEFICIOS_URL: http://beneficios:8083
+      CODIGO_GIMNASIO: ${CODIGO_GIMNASIO:?Defini CODIGO_GIMNASIO para los enlaces del gimnasio}
+      MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
     depends_on:
       mongodb:
         condition: service_healthy
+      beneficios:
+        condition: service_started
     restart: unless-stopped
 
   beneficios:
@@ -71,6 +93,8 @@ services:
       CODIGO_GIMNASIO: ${CODIGO_GIMNASIO:-}
       CLAVE_API_GIMNASIO: ${CLAVE_API_GIMNASIO:-}
       PUNTOS_POR_PLAN_MEMBRESIA: ${PUNTOS_POR_PLAN_MEMBRESIA:-}
+      PUNTOS_REGISTRO_GIMNASIO: ${PUNTOS_REGISTRO_GIMNASIO:-100}
+      MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
     depends_on:
       mongodb:
         condition: service_healthy

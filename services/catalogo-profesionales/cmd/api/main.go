@@ -29,6 +29,7 @@ type Tratamiento struct {
 	DuracionMinutos int      `bson:"duracionMinutos" json:"duracionMinutos"`
 	Imagenes        []string `bson:"imagenes" json:"imagenes"`
 	Keywords        []string `bson:"keywords" json:"keywords"`
+	ProfesionalesIDs []string `bson:"profesionalesIds" json:"profesionalesIds"`
 }
 
 type Servidor struct {
