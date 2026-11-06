@@ -83,3 +83,14 @@ func TestRutaMisPuntosRegistrada(t *testing.T) {
 	}
 	t.Fatal("la ruta GET /mis-puntos no está registrada")
 }
+
+func TestRutaRegistroGymInternaRegistrada(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := crearRouter(nil)
+	for _, route := range router.Routes() {
+		if route.Method == http.MethodPost && route.Path == "/internal/registro-gym" {
+			return
+		}
+	}
+	t.Fatal("la ruta POST /internal/registro-gym no está registrada")
+}
