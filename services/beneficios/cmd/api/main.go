@@ -292,6 +292,7 @@ func (s *Servidor) registrarExterno(c *gin.Context) {
 	}
 	if _, err := s.registros.InsertOne(ctx, registro); err != nil {
 		if mongo.IsDuplicateKeyError(err) {
+			log.Printf("ERROR DUPLICADO AL ACREDITAR GIMNASIO: %v", err)
 			// A unique email or request ID prevents a second gift from being credited.
 			var porSolicitud RegistroExterno
 			if findErr := s.registros.FindOne(ctx, bson.D{{Key: "solicitudId", Value: req.SolicitudID}}).Decode(&porSolicitud); findErr == nil {
