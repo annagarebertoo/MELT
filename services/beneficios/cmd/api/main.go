@@ -81,7 +81,7 @@ func main() {
 	coleccion := cliente.Database("beneficios_db").Collection("registros_externos")
 	_, err = coleccion.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_registro_externo_email")},
-		{Keys: bson.D{{Key: "solicitudId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_registro_externo_solicitud")},
+		{Keys: bson.D{{Key: "solicitudId", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true).SetName("uq_registro_externo_solicitud_v2")},
 		{Keys: bson.D{{Key: "usuarioId", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true).SetName("uq_registro_gym_usuario")},
 	})
 	if err != nil {
