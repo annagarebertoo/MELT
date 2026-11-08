@@ -46,6 +46,7 @@ services:
     environment:
       PORT: "8082"
       MONGODB_URI: mongodb://mongodb:27017
+      MELT_TIMEZONE: ${MELT_TIMEZONE:-America/Argentina/Buenos_Aires}
       PAGOS_URL: ${PAGOS_URL:-http://pagos:8085}
     depends_on:
       mongodb:

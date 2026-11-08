@@ -29,7 +29,7 @@ Los bloqueos temporales participan de la validación de disponibilidad y compati
 
 La seña forma parte del alcance. Antes de confirmar la reserva, debe quedar registrado un resultado exitoso del pago de la seña. La seña se distingue del saldo restante, que continúa pagándose presencialmente, y del programa de puntos.
 
-La seña equivale al **30 % del precio vigente del tratamiento** y debe abonarse para confirmar la reserva. Si el cliente cancela con **24 horas o más de anticipación**, se devuelve el **100 % de la seña**. Si cancela con menos de 24 horas o no asiste, no se devuelve. La cancelación tardía igualmente libera el horario. El proveedor/modalidad de pago y el procedimiento operativo para ejecutar y conciliar devoluciones quedan pendientes; no se presume una integración concreta.
+La seña equivale al **30 % del precio vigente del tratamiento** y debe abonarse para confirmar la reserva. Si el cliente cancela con **24 horas o más de anticipación**, se devuelve el **100 % de la seña**. Si cancela con menos de 24 horas o no asiste, no se devuelve. La cancelación tardía igualmente libera el horario. La implementación local verifica pagos y procesa devoluciones mediante el adaptador `pagos` en modo de prueba para Mercado Pago; la devolución puede reintentarse si el proveedor falla.
 
 ### 4. Puntos y correos
 
@@ -51,7 +51,7 @@ La confirmación o cancelación de un turno realizada por el profesional genera 
 - Los bloqueos temporales necesitan expiración confiable y limpieza de estados vencidos.
 - La validación de compatibilidad debe coordinarse con la reserva bajo concurrencia.
 - Pagos, devoluciones y mensajes requieren correlación, idempotencia y trazabilidad.
-- El proveedor/modalidad de pago y el procedimiento operativo de devolución siguen pendientes; los porcentajes y plazos de devolución ya están definidos en esta decisión.
+- El acceso a Mercado Pago de producción no forma parte del entorno local. La integración de prueba y el contrato de reintento de devoluciones quedan implementados en `services/pagos` y `services/reservas`.
 
 ## Criterios de aceptación
 

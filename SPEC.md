@@ -70,7 +70,7 @@ MELT publicará una capacidad para otro grupo y consumirá una capacidad externa
 
 ### 3.2. Funcionalidades fuera de alcance
 
-Quedan fuera de esta versión la gestión de múltiples sucursales, el pago en línea del saldo total del tratamiento, facturación, inventario de insumos, historias clínicas, gestión salarial y una aplicación móvil nativa. La seña sí está incluida en el alcance: equivale al 30 % del precio del tratamiento, con devolución total si se cancela con al menos 24 horas de anticipación y sin devolución ante cancelación tardía o inasistencia. La modalidad/proveedor de pago y el procedimiento operativo de devolución quedan pendientes de definición.
+Quedan fuera de esta versión la gestión de múltiples sucursales, el pago en línea del saldo total del tratamiento, facturación, inventario de insumos, historias clínicas, gestión salarial y una aplicación móvil nativa. La seña sí está incluida en el alcance: equivale al 30 % del precio del tratamiento, con devolución total si se cancela con al menos 24 horas de anticipación y sin devolución ante cancelación tardía o inasistencia. La verificación de la seña y las devoluciones se integra con Mercado Pago mediante el adaptador `pagos`, configurado en modo de prueba para el entorno local.
 
 Las decisiones técnicas de implementación se documentarán en `docs/ARCHITECTURE.md`.
 
@@ -326,7 +326,7 @@ Esta sección consolida las correcciones acordadas por el equipo. Continúa sien
 - **RN-20 — Seña requerida para reservar.** Para confirmar una reserva, el cliente debe abonar una seña equivalente al **30 % del precio del tratamiento**, calculada sobre el precio vigente mostrado en el resumen antes de confirmar. La reserva solo queda confirmada cuando se registra el resultado exitoso del pago; un pago pendiente o fallido no confirma el turno.
 - **RN-20.1 — Devolución por cancelación.** Si el cliente cancela con **24 horas o más de anticipación** respecto del inicio del turno, se devuelve el **100 % de la seña**. Si cancela con menos de 24 horas de anticipación, la seña no se devuelve. La cancelación tardía libera el turno igualmente.
 - **RN-20.2 — Inasistencia.** Si el cliente no asiste al turno, la seña no se devuelve.
-- La seña es distinta del saldo restante del tratamiento y de los puntos del programa. El importe se informa antes de pagar. El proveedor o modalidad de pago, el procedimiento operativo de devolución y el tratamiento de cambios de turno quedan pendientes de definición; pagos y devoluciones deben ser trazables e idempotentes.
+- La seña es distinta del saldo restante del tratamiento y de los puntos del programa. El importe se informa antes de pagar. El servicio `reservas` verifica la aprobación, el importe exacto, la moneda ARS y la referencia del carrito a través del adaptador `pagos`; las devoluciones se ejecutan por el mismo adaptador con una clave idempotente y tienen un endpoint para reintentar un fallo. El pago en producción y los cambios de turno quedan fuera de la configuración local.
 
 ### 12.5. Búsqueda, datos y caché
 

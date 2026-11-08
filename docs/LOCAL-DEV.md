@@ -192,7 +192,7 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 
 **Límites de esta primera versión:** el token es stateless, por lo que cerrar sesión en el frontend no revoca un token ya emitido; vence automáticamente. Todavía no hay recuperación de contraseña por email ni verificación de email. NGINX verifica la sesión para las rutas privadas de Reservas y Beneficios y propaga el ID, email y roles devueltos por Auth; las cabeceras que manda el cliente se sobrescriben en esas rutas.
 
-- `GET /api/v1/reservas/me`: endpoint de integración que devuelve la identidad verificada propagada por el gateway. El servicio Reservas aún no tiene operaciones de turnos; cada operación nueva deberá aplicar `requiereIdentidad` y roles por actor, además de comprobar propiedad del recurso.
+- `GET /api/v1/reservas/me`: endpoint de integración que devuelve la identidad verificada propagada por el gateway. Las operaciones de reservas aplican identidad, permisos por operación y comprobaciones de propiedad del recurso.
 - `GET /api/v1/beneficios/mis-puntos`: requiere sesión y rol `cliente`; consulta el saldo del registro de Beneficios asociado al email verificado. Si no hay registro, devuelve saldo cero.
 - `POST /api/v1/beneficios/registro-externo`: conserva la autenticación independiente mediante `X-Partner-Key` para el sistema externo del gimnasio.
 
@@ -222,16 +222,35 @@ El middleware `requierePermiso` aplica autorización por operación y deniega po
 Cada ruta privada encadena `requiereIdentidad()` y `requierePermiso("clave.de.operacion")`; las políticas desconocidas se deniegan por defecto. La matriz define qué roles pueden invocar cada operación. Los handlers aplican además autorización por recurso: clientes consultan/cancelan sus turnos, profesionales consultan los propios, y solo recepción/administración ven o gestionan turnos de terceros. Los permisos no sustituyen esas comprobaciones de propiedad.
 
 
-## Reservas: agenda y endpoints iniciales
+## Reservas: agenda, disponibilidad y turnos
 
 El servicio Reservas persiste agendas semanales y turnos en MongoDB, en la base `reservas_db`. Compose configura `MONGODB_URI=mongodb://mongodb:27017` y espera que MongoDB esté saludable.
 
 - `PUT /api/v1/reservas/agenda`: crea o actualiza el horario semanal. `diaSemana` usa 0=domingo y 6=sábado; `horaInicio` y `horaFin` usan `HH:MM`. Un profesional solo puede editar su propia agenda; recepción y administración pueden gestionar la agenda de un profesional indicado.
-- `GET /api/v1/reservas/disponibilidad?profesionalId=ID&fecha=YYYY-MM-DD&duracionMinutos=60`: devuelve inicios disponibles cada 15 minutos dentro de la agenda. La duración debe estar entre 5 y 480 minutos.
-- `POST /api/v1/reservas/turnos`: requiere rol cliente y JSON con `profesionalId`, `tratamientoId`, `inicio` (RFC3339 con zona horaria) y `duracionMinutos`.
+- `GET /api/v1/reservas/disponibilidad?profesionalId=ID&tratamientoId=ID&fecha=YYYY-MM-DD`: devuelve inicios cada 15 minutos dentro de la agenda del profesional, tomando duración del Catálogo. Rechaza profesionales que no estén asociados al tratamiento, turnos confirmados y bloqueos activos del carrito. La zona horaria local se configura con `MELT_TIMEZONE`; por omisión es `America/Argentina/Buenos_Aires`.
+- `POST /api/v1/reservas/carrito/bloqueos`: JSON con `profesionalId`, `tratamientoId` e `inicio` RFC3339 con zona. Valida que el profesional sea compatible, que el horario futuro esté dentro de su agenda y que no se superponga; reserva los minutos con un índice único compartido por todas las réplicas. El bloqueo vence a los 10 minutos y devuelve el importe de seña del 30 %.
+- `POST /api/v1/reservas/carrito/bloqueos/{id}/confirmar`: JSON `{"pagoId":"..."}`. Confirma solo después de verificar con Pagos la seña exacta en ARS. Repetir la confirmación del mismo carrito devuelve el turno existente y no crea otro.
+- `DELETE /api/v1/reservas/carrito/bloqueos/{id}`: libera un bloqueo pendiente que pertenece al cliente autenticado.
+- `POST /api/v1/reservas/turnos`: la creación directa está deshabilitada; devuelve `CARRITO_REQUERIDO`. Usá el bloqueo temporal y confirmalo después de pagar la seña.
 - `GET /api/v1/reservas/turnos`: clientes ven sus turnos, profesionales sus turnos asignados y recepción/administración pueden consultar todos.
-- `DELETE /api/v1/reservas/turnos/{id}`: el cliente solo cancela turnos propios; recepción/administración pueden cancelar otros turnos.
+- `DELETE /api/v1/reservas/turnos/{id}`: el cliente solo cancela turnos propios; recepción/administración pueden cancelar otros. Desde 24 horas antes inclusive se devuelve el 100 % de la seña; con menos de 24 horas no hay devolución. Si el proveedor falla, la cancelación queda registrada y la devolución puede reintentarse en `POST /api/v1/reservas/turnos/{id}/devolucion/reintentar`.
 
-Todos los endpoints de Reservas quedan detrás de `auth_request` en el gateway y aplican middleware de identidad y permisos por operación. El backend verifica que el horario esté dentro de la agenda y que no se solape con turnos confirmados.
+Los endpoints privados quedan detrás de `auth_request` en el gateway y aplican identidad y permisos por operación en Reservas. La restricción única de profesional y minuto coordina bloqueos aun con varias réplicas; al cancelar se liberan los minutos ocupados. Catálogo y Pagos se invocan con timeout. La disponibilidad usa la duración real y profesionales habilitados que devuelve Catálogo.
 
-**Limitaciones de esta primera implementación:** la duración del tratamiento llega en la solicitud y todavía debe validarse contra Catálogo; no se implementaron pagos/seña, carrito con bloqueo de 10 minutos, reglas de devolución ni verificación de propiedad del profesional contra el catálogo de usuarios. La prevención de solapamientos usa un mutex dentro de una instancia del servicio; para despliegues con múltiples réplicas hace falta coordinación distribuida o una restricción transaccional en la persistencia. No usar este diseño como garantía de concurrencia multiinstancia en producción.
+### Pruebas de Reservas
+
+Las pruebas unitarias se ejecutan con:
+
+```sh
+cd services/reservas
+go test -p=1 -count=1 ./...
+```
+
+La prueba `TestReservasMongoIntegrationFlujoCompleto` recorre disponibilidad, dos solicitudes simultáneas, bloqueo, seña, confirmación idempotente, devolución y liberación contra MongoDB real, con Catálogo y Pagos simulados. Para ejecutarla, dejá MongoDB de Compose levantado y configurá la URI de prueba:
+
+```powershell
+$env:RESERVAS_TEST_MONGODB_URI = 'mongodb://localhost:27017'
+go test -p=1 -count=1 -run TestReservasMongoIntegrationFlujoCompleto ./...
+```
+
+La prueba crea y elimina una base de datos de nombre único; no toca `reservas_db`.

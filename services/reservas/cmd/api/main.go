@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"math"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -95,7 +95,7 @@ func (s *servidorReservas) obtenerTratamiento(ctx context.Context, id string) (t
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound { return t, http.StatusUnprocessableEntity, errors.New("el tratamiento no existe en Catálogo") }
 	if resp.StatusCode != http.StatusOK { return t, http.StatusServiceUnavailable, errors.New("Catálogo no está disponible") }
-	if err := json.NewDecoder(resp.Body).Decode(&t); err != nil || t.ID == "" || t.DuracionMinutos < 1 || t.DuracionMinutos > 480 {
+	if err := json.NewDecoder(resp.Body).Decode(&t); err != nil || t.ID == "" || t.DuracionMinutos < 5 || t.DuracionMinutos > 480 {
 		return t, http.StatusServiceUnavailable, errors.New("Catálogo devolvió un tratamiento inválido")
 	}
 	return t, http.StatusOK, nil
@@ -239,54 +239,83 @@ func (s *servidorReservas) disponibilidad(c *gin.Context) {
 	prof:=strings.TrimSpace(c.Query("profesionalId")); fecha,err:=time.Parse("2006-01-02",c.Query("fecha"))
 	if prof=="" || err!=nil { c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"PARAMETROS_INVALIDOS","message":"Usá profesionalId y fecha (YYYY-MM-DD)."}}); return }
 	ctx,cancel:=context.WithTimeout(c.Request.Context(),5*time.Second); defer cancel()
-	dur := 0
-	if tratamientoID := strings.TrimSpace(c.Query("tratamientoId")); tratamientoID != "" {
-		tratamiento, status, catErr := s.obtenerTratamiento(ctx, tratamientoID)
-		if catErr != nil { c.JSON(status, gin.H{"error":gin.H{"code":"TRATAMIENTO_NO_VALIDO","message":catErr.Error()}}); return }
-		dur = tratamiento.DuracionMinutos
-	} else {
-		// Compatibilidad temporal: los clientes nuevos deben enviar tratamientoId.
-		dur, err = parsePositiveInt(c.Query("duracionMinutos"))
-		if err != nil { dur = 0 }
-	}
-	if dur < 5 || dur > 480 { c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"PARAMETROS_INVALIDOS","message":"Enviá tratamientoId (preferido) o duracionMinutos entre 5 y 480."}}); return }
+	tratamientoID := strings.TrimSpace(c.Query("tratamientoId"))
+	if tratamientoID == "" { c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"PARAMETROS_INVALIDOS","message":"Enviá tratamientoId para consultar la duración real del tratamiento."}}); return }
+	tratamiento, status, catErr := s.obtenerTratamiento(ctx, tratamientoID)
+	if catErr != nil { c.JSON(status, gin.H{"error":gin.H{"code":"TRATAMIENTO_NO_VALIDO","message":catErr.Error()}}); return }
+	if !tratamientoCompatible(tratamiento, prof) { c.JSON(http.StatusUnprocessableEntity, gin.H{"error":gin.H{"code":"PROFESIONAL_NO_APTO","message":"El profesional seleccionado no está habilitado para realizar este tratamiento."}}); return }
+	dur := tratamiento.DuracionMinutos
+	loc := zonaHorariaReservas()
+	base := time.Date(fecha.Year(),fecha.Month(),fecha.Day(),0,0,0,0,loc)
 	var agenda agendaSemanal
-	if err:=s.agendas.FindOne(ctx,bson.D{{Key:"profesionalId",Value:prof},{Key:"diaSemana",Value:int(fecha.Weekday())},{Key:"activo",Value:true}}).Decode(&agenda); err!=nil {
+	if err:=s.agendas.FindOne(ctx,bson.D{{Key:"profesionalId",Value:prof},{Key:"diaSemana",Value:int(base.Weekday())},{Key:"activo",Value:true}}).Decode(&agenda); err!=nil {
 		if errors.Is(err,mongo.ErrNoDocuments) { c.JSON(http.StatusOK,gin.H{"profesionalId":prof,"fecha":c.Query("fecha"),"horarios":[]string{}}); return }
 		c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo consultar la agenda"}); return
 	}
+	if !agendaValida(agenda.DiaSemana,agenda.HoraInicio,agenda.HoraFin) { c.JSON(http.StatusServiceUnavailable,gin.H{"error":gin.H{"code":"AGENDA_INVALIDA","message":"La agenda del profesional contiene un rango horario inválido."}}); return }
 	startMin,_:=parseHora(agenda.HoraInicio); endMin,_:=parseHora(agenda.HoraFin)
-	loc:=fecha.Location(); base:=time.Date(fecha.Year(),fecha.Month(),fecha.Day(),0,0,0,0,loc)
 	var slots []string
-	for m:=startMin; m+dur<=endMin; m+=15 {
+	for m:=primerIntervaloDe15Minutos(startMin); m+dur<=endMin; m+=15 {
 		start:=base.Add(time.Duration(m)*time.Minute); end:=start.Add(time.Duration(dur)*time.Minute)
-		var count int64
-		count,err=s.turnos.CountDocuments(ctx,bson.D{{Key:"profesionalId",Value:prof},{Key:"estado",Value:"confirmado"},{Key:"inicio",Value:bson.D{{Key:"$lt",Value:end}}},{Key:"fin",Value:bson.D{{Key:"$gt",Value:start}}}})
-		if err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo consultar disponibilidad"}); return }
-		if count==0 && start.After(time.Now()) { slots=append(slots,start.Format("15:04")) }
+		ocupado, busyErr := s.horarioOcupado(ctx,prof,start,end)
+		if busyErr!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo consultar disponibilidad"}); return }
+		if !ocupado && start.After(time.Now()) { slots=append(slots,start.Format("15:04")) }
 	}
 	if slots==nil { slots=[]string{} }
 	c.JSON(http.StatusOK,gin.H{"profesionalId":prof,"fecha":c.Query("fecha"),"duracionMinutos":dur,"horarios":slots})
 }
 
-func parsePositiveInt(v string) (int,error) { var n int; _,err:=fmtSscanf(v,"%d",&n); if err!=nil || n<=0 { return 0,errors.New("entero inválido") }; return n,nil }
+func primerIntervaloDe15Minutos(minuto int) int { return ((minuto+14)/15)*15 }
+
+func zonaHorariaReservas() *time.Location {
+	nombre := strings.TrimSpace(os.Getenv("MELT_TIMEZONE"))
+	if nombre == "" { nombre = "America/Argentina/Buenos_Aires" }
+	loc, err := time.LoadLocation(nombre)
+	if err != nil {
+		log.Printf("zona horaria MELT_TIMEZONE=%q inválida; se usa America/Argentina/Buenos_Aires", nombre)
+		return time.FixedZone("America/Argentina/Buenos_Aires", -3*60*60)
+	}
+	return loc
+}
+
+func (s *servidorReservas) horarioOcupado(ctx context.Context, profesionalID string, inicio, fin time.Time) (bool,error) {
+	turnos, err := s.turnos.CountDocuments(ctx,bson.D{{Key:"profesionalId",Value:profesionalID},{Key:"estado",Value:"confirmado"},{Key:"inicio",Value:bson.D{{Key:"$lt",Value:fin}}},{Key:"fin",Value:bson.D{{Key:"$gt",Value:inicio}}}})
+	if err != nil { return false,err }
+	if turnos > 0 { return true,nil }
+	minutoInicio := inicio.UTC().Unix()/60
+	minutoFin := fin.UTC().Unix()/60
+	filter := bson.D{
+		{Key:"profesionalId",Value:profesionalID},
+		{Key:"minuto",Value:bson.D{{Key:"$gte",Value:minutoInicio},{Key:"$lt",Value:minutoFin}}},
+		{Key:"$or",Value:bson.A{
+			bson.D{{Key:"expiraEn",Value:bson.D{{Key:"$exists",Value:false}}}},
+			bson.D{{Key:"expiraEn",Value:bson.D{{Key:"$gt",Value:time.Now().UTC()}}}},
+		}},
+	}
+	reservasTemporales, err := s.bloqueos.CountDocuments(ctx,filter)
+	return reservasTemporales > 0,err
+}
 
 func (s *servidorReservas) crearTurno(c *gin.Context) {
 	u:=c.MustGet("identidad").(identidad)
 	var req struct { ProfesionalID string `json:"profesionalId" binding:"required"`; TratamientoID string `json:"tratamientoId" binding:"required"`; Inicio string `json:"inicio" binding:"required"` }
 	if err:=c.ShouldBindJSON(&req); err!=nil { c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"TURNO_INVALIDO","message":"Indicá profesionalId, tratamientoId e inicio RFC3339."}}); return }
+	req.ProfesionalID = strings.TrimSpace(req.ProfesionalID)
+	req.TratamientoID = strings.TrimSpace(req.TratamientoID)
 	ctx,cancel:=context.WithTimeout(c.Request.Context(),5*time.Second); defer cancel()
 	tratamiento, status, catErr := s.obtenerTratamiento(ctx, req.TratamientoID)
 	if catErr != nil { c.JSON(status, gin.H{"error":gin.H{"code":"TRATAMIENTO_NO_VALIDO","message":catErr.Error()}}); return }
 	if !tratamientoCompatible(tratamiento, req.ProfesionalID) { c.JSON(http.StatusUnprocessableEntity, gin.H{"error":gin.H{"code":"PROFESIONAL_NO_APTO","message":"El profesional seleccionado no está habilitado para realizar este tratamiento."}}); return }
 	start,err:=time.Parse(time.RFC3339,req.Inicio); if err!=nil || !start.After(time.Now()) { c.JSON(http.StatusBadRequest,gin.H{"error":"el inicio debe ser una fecha futura RFC3339"}); return }
+	localStart := start.In(zonaHorariaReservas())
 	duracionMinutos := tratamiento.DuracionMinutos
 	end:=start.Add(time.Duration(duracionMinutos)*time.Minute)
-	if start.Second()!=0 || start.Nanosecond()!=0 || start.Minute()%15 != 0 { c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"INTERVALO_INVALIDO","message":"El inicio debe coincidir con un intervalo de 15 minutos."}}); return }
+	if localStart.Second()!=0 || localStart.Nanosecond()!=0 || localStart.Minute()%15 != 0 { c.JSON(http.StatusBadRequest,gin.H{"error":gin.H{"code":"INTERVALO_INVALIDO","message":"El inicio debe coincidir con un intervalo de 15 minutos."}}); return }
 	var agenda agendaSemanal
-	if err:=s.agendas.FindOne(ctx,bson.D{{Key:"profesionalId",Value:req.ProfesionalID},{Key:"diaSemana",Value:int(start.Weekday())},{Key:"activo",Value:true}}).Decode(&agenda); err!=nil { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"FUERA_DE_AGENDA","message":"El profesional no atiende ese día."}}); return }
+	if err:=s.agendas.FindOne(ctx,bson.D{{Key:"profesionalId",Value:req.ProfesionalID},{Key:"diaSemana",Value:int(localStart.Weekday())},{Key:"activo",Value:true}}).Decode(&agenda); err!=nil { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"FUERA_DE_AGENDA","message":"El profesional no atiende ese día."}}); return }
+	if !agendaValida(agenda.DiaSemana,agenda.HoraInicio,agenda.HoraFin) { c.JSON(http.StatusServiceUnavailable,gin.H{"error":gin.H{"code":"AGENDA_INVALIDA","message":"La agenda del profesional contiene un rango horario inválido."}}); return }
 	from,_:=parseHora(agenda.HoraInicio); to,_:=parseHora(agenda.HoraFin)
-	minute:=start.Hour()*60+start.Minute()
+	minute:=localStart.Hour()*60+localStart.Minute()
 	if minute<from || minute+duracionMinutos>to { c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"FUERA_DE_AGENDA","message":"El horario queda fuera de la agenda del profesional."}}); return }
 	var overlap turno
 	err=s.turnos.FindOne(ctx,bson.D{{Key:"profesionalId",Value:req.ProfesionalID},{Key:"estado",Value:"confirmado"},{Key:"inicio",Value:bson.D{{Key:"$lt",Value:end}}},{Key:"fin",Value:bson.D{{Key:"$gt",Value:start}}}}).Decode(&overlap)
@@ -448,6 +477,8 @@ func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
 	u := c.MustGet("identidad").(identidad)
 	var req solicitudCarrito
 	if err := c.ShouldBindJSON(&req); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":gin.H{"code":"CARRITO_INVALIDO","message":"Indicá profesionalId, tratamientoId e inicio RFC3339."}}); return }
+	req.ProfesionalID = strings.TrimSpace(req.ProfesionalID)
+	req.TratamientoID = strings.TrimSpace(req.TratamientoID)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second); defer cancel()
 	t, status, err := s.obtenerTratamiento(ctx, req.TratamientoID)
 	if err != nil { c.JSON(status, gin.H{"error":gin.H{"code":"TRATAMIENTO_NO_VALIDO","message":err.Error()}}); return }
@@ -455,11 +486,13 @@ func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
 	if t.Precio < 0 || (t.Moneda != "" && t.Moneda != "ARS") { c.JSON(http.StatusUnprocessableEntity, gin.H{"error":gin.H{"code":"PRECIO_INVALIDO","message":"El tratamiento no tiene un precio válido en ARS."}}); return }
 	start, err := time.Parse(time.RFC3339, req.Inicio)
 	if err != nil || !start.After(time.Now()) || start.Second()!=0 || start.Nanosecond()!=0 || start.Minute()%15!=0 { c.JSON(http.StatusBadRequest, gin.H{"error":gin.H{"code":"INTERVALO_INVALIDO","message":"El inicio debe ser futuro, RFC3339 y coincidir con un intervalo de 15 minutos."}}); return }
+	localStart := start.In(zonaHorariaReservas())
 	end := start.Add(time.Duration(t.DuracionMinutos)*time.Minute)
 	var agenda agendaSemanal
-	if err := s.agendas.FindOne(ctx, bson.D{{Key:"profesionalId",Value:req.ProfesionalID},{Key:"diaSemana",Value:int(start.Weekday())},{Key:"activo",Value:true}}).Decode(&agenda); err != nil { c.JSON(http.StatusConflict, gin.H{"error":gin.H{"code":"FUERA_DE_AGENDA","message":"El profesional no atiende ese día."}}); return }
+	if err := s.agendas.FindOne(ctx, bson.D{{Key:"profesionalId",Value:req.ProfesionalID},{Key:"diaSemana",Value:int(localStart.Weekday())},{Key:"activo",Value:true}}).Decode(&agenda); err != nil { c.JSON(http.StatusConflict, gin.H{"error":gin.H{"code":"FUERA_DE_AGENDA","message":"El profesional no atiende ese día."}}); return }
+	if !agendaValida(agenda.DiaSemana,agenda.HoraInicio,agenda.HoraFin) { c.JSON(http.StatusServiceUnavailable,gin.H{"error":gin.H{"code":"AGENDA_INVALIDA","message":"La agenda del profesional contiene un rango horario inválido."}}); return }
 	from,_ := parseHora(agenda.HoraInicio); to,_ := parseHora(agenda.HoraFin)
-	if start.Hour()*60+start.Minute()<from || start.Hour()*60+start.Minute()+t.DuracionMinutos>to { c.JSON(http.StatusConflict, gin.H{"error":gin.H{"code":"FUERA_DE_AGENDA","message":"El horario queda fuera de la agenda del profesional."}}); return }
+	if localStart.Hour()*60+localStart.Minute()<from || localStart.Hour()*60+localStart.Minute()+t.DuracionMinutos>to { c.JSON(http.StatusConflict, gin.H{"error":gin.H{"code":"FUERA_DE_AGENDA","message":"El horario queda fuera de la agenda del profesional."}}); return }
 	now := time.Now().UTC()
 	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key:"expiraEn",Value:bson.D{{Key:"$lte",Value:now}}}})
 	var overlap turno
@@ -517,7 +550,8 @@ func (s *servidorReservas) confirmarBloqueoCarrito(c *gin.Context) {
 	}
 	_,err=s.bloqueos.UpdateMany(ctx,bson.D{{Key:"turnoId",Value:id}},bson.D{{Key:"$set",Value:bson.D{{Key:"turnoId",Value:doc.ID}}},{Key:"$unset",Value:bson.D{{Key:"expiraEn",Value:""}}}})
 	if err!=nil { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"turno creado pero no se pudo consolidar el bloqueo; requiere recuperación operativa"}); return }
-	_,_ = s.carritos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id}},bson.D{{Key:"$set",Value:bson.D{{Key:"estado",Value:"confirmado"},{Key:"turnoId",Value:doc.ID}}}})
+	finalizado, finalErr := s.carritos.UpdateOne(ctx,bson.D{{Key:"_id",Value:id},{Key:"estado",Value:"confirmando"},{Key:"pagoId",Value:req.PagoID}},bson.D{{Key:"$set",Value:bson.D{{Key:"estado",Value:"confirmado"},{Key:"turnoId",Value:doc.ID}}},{Key:"$unset",Value:bson.D{{Key:"expiraEn",Value:""}}}})
+	if finalErr != nil || finalizado.MatchedCount != 1 { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"el turno fue creado pero no se pudo cerrar el carrito; requiere recuperación operativa"}); return }
 	c.JSON(http.StatusCreated,gin.H{"turno":doc,"pago":gin.H{"estado":"aprobado","importe":cart.Sena,"moneda":cart.Moneda}})
 }
 
@@ -540,5 +574,4 @@ func (s *servidorReservas) reintentarDevolucion(c *gin.Context) {
 }
 
 func slotNoSuperpuesto(start,end,otherStart,otherEnd time.Time) bool { return !start.Before(otherEnd) || !end.After(otherStart) }
-func fmtSscanf(s, format string, n *int) (int,error) { return fmt.Sscanf(s,format,n) }
 
