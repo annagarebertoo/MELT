@@ -53,6 +53,13 @@ async function loadTreatments() {
     $("#next-page").disabled = !state.hasNext;
     $("#page-label").textContent = `Página ${state.page}`;
     $("#catalog-status").textContent = `${total} ${total === 1 ? "tratamiento disponible" : "tratamientos disponibles"}`;
+    const featured = treatments.slice(0, 4);
+    $("#featured-list").innerHTML = featured.map((item, index) => `
+      <article class="featured-card">
+        <button class="featured-image featured-image-${index + 1} book-treatment" type="button" data-id="${escapeHTML(item.id)}" aria-label="Ver horarios para ${escapeHTML(item.nombre)}"><span>${escapeHTML((item.categoria || "M").slice(0, 1))}</span></button>
+        <div class="featured-info"><div><h3>${escapeHTML(item.nombre)}</h3><p>${formatPrice(item.precio)} <span>· ${Number(item.duracionMinutos)} min</span></p></div><button class="featured-link book-treatment" type="button" data-id="${escapeHTML(item.id)}">Ver detalles ↗</button></div>
+      </article>`).join("") || `<p class="featured-loading">La selección se actualizará cuando haya tratamientos disponibles.</p>`;
+    $("#featured-list").querySelectorAll(".book-treatment").forEach((button) => button.addEventListener("click", () => selectTreatment(button.dataset.id)));
     $("#treatments-list").innerHTML = treatments.map((item) => `
       <article class="treatment-card">
         <div class="treatment-visual" aria-hidden="true"><span>${escapeHTML((item.categoria || "M").slice(0, 1))}</span></div>
@@ -281,6 +288,35 @@ function initialize() {
   $("#refresh-account").addEventListener("click", loadAccount);
   $("#refresh-bookings").addEventListener("click", loadBookings);
   document.querySelectorAll("[data-scroll]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.scroll).scrollIntoView({ behavior: "smooth" })));
+  document.querySelectorAll("[data-register]").forEach((button) => button.addEventListener("click", () => setAuthMode("register")));
+  const menu = $("#site-menu");
+  const backdrop = $("#menu-backdrop");
+  const menuToggle = $("#menu-toggle");
+  const closeMenu = () => {
+    menu.classList.remove("open");
+    backdrop.classList.remove("visible");
+    menu.setAttribute("aria-hidden", "true");
+    menu.inert = true;
+    menuToggle.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("menu-open");
+    menuToggle.focus();
+  };
+  const openMenu = () => {
+    menu.classList.add("open");
+    backdrop.classList.add("visible");
+    menu.setAttribute("aria-hidden", "false");
+    menu.inert = false;
+    menuToggle.setAttribute("aria-expanded", "true");
+    document.body.classList.add("menu-open");
+    $("#menu-close").focus();
+  };
+  menuToggle.addEventListener("click", openMenu);
+  $("#menu-close").addEventListener("click", closeMenu);
+  backdrop.addEventListener("click", closeMenu);
+  menu.querySelectorAll("a").forEach((link) => link.addEventListener("click", closeMenu));
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMenu(); });
+  $("#featured-prev").addEventListener("click", () => $("#featured-list").scrollBy({ left: -340, behavior: "smooth" }));
+  $("#featured-next").addEventListener("click", () => $("#featured-list").scrollBy({ left: 340, behavior: "smooth" }));
   const dateInput = $("#booking-date");
   dateInput.min = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   dateInput.value = dateInput.min;

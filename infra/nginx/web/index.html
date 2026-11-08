@@ -3,36 +3,56 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f4eee4">
-    <title>MELT | Estética a tu ritmo</title>
+    <meta name="theme-color" content="#f8f3e9">
+    <meta name="description" content="Encontrá tu próximo ritual de estética y bienestar. Elegí un tratamiento y reservá tu turno en MELT.">
+    <title>MELT | Fundite con tu esencia</title>
     <link rel="stylesheet" href="/styles.css">
     <script src="/app.js" defer></script>
   </head>
   <body>
     <header class="site-header">
-      <a class="brand" href="#inicio" aria-label="MELT, inicio">MELT<span>.</span></a>
-      <nav aria-label="Navegación principal">
-        <a href="#tratamientos">Tratamientos</a>
-        <a href="#reservas">Reservar</a>
-        <a href="#cuenta">Mi cuenta</a>
-      </nav>
-      <button class="button button-dark header-account" data-scroll="cuenta">Ingresar</button>
+      <button class="header-menu-button" id="menu-toggle" type="button" aria-label="Abrir menú" aria-controls="site-menu" aria-expanded="false"><span></span><span></span></button>
+      <a class="brand" href="#inicio" aria-label="MELT, inicio">MELT</a>
+      <div class="header-actions">
+        <button class="header-login" type="button" data-scroll="cuenta">Ingresar</button>
+        <button class="header-register" type="button" data-scroll="cuenta" data-register>Registrarme</button>
+      </div>
     </header>
+
+    <div class="menu-backdrop" id="menu-backdrop"></div>
+    <aside class="site-menu" id="site-menu" aria-hidden="true" aria-label="Menú principal" inert>
+      <div class="site-menu-top"><span class="brand">MELT</span><button id="menu-close" type="button" aria-label="Cerrar menú">×</button></div>
+      <nav aria-label="Navegación principal">
+        <a href="#inicio">Inicio</a><a href="#seleccion">Selección MELT</a><a href="#tratamientos">Tratamientos</a><a href="#reservas">Reservar turno</a><a href="#cuenta">Mi cuenta</a>
+      </nav>
+      <p>Tu tiempo, tu ritual.</p>
+    </aside>
 
     <main id="inicio">
       <section class="hero">
+        <img class="hero-image" src="/assets/melt-hero.jpg" alt="Productos de cuidado facial sobre una textura cremosa">
+        <div class="hero-shade" aria-hidden="true"></div>
         <div class="hero-copy">
-          <p class="eyebrow">Tu espacio de cuidado personal</p>
-          <h1>Un momento<br>para <em>vos.</em></h1>
-          <p class="hero-intro">Elegí tu tratamiento, encontrá un horario y dejá el resto en nuestras manos.</p>
-          <a class="button button-dark" href="#tratamientos">Explorar tratamientos <span aria-hidden="true">↘</span></a>
-          <p class="hero-note">Atención personalizada · Reservas simples · Beneficios para vos</p>
+          <p class="eyebrow light">Centro de estética &amp; bienestar</p>
+          <h1>Fundite con<br>tu esencia.</h1>
+          <a class="hero-cta" href="#seleccion">Encontrá tu próximo ritual <span aria-hidden="true">↗</span></a>
         </div>
-        <div class="hero-art" aria-label="Ilustración abstracta de formas orgánicas" role="img">
-          <div class="sun"></div><div class="shape shape-one"></div><div class="shape shape-two"></div>
-          <span class="art-caption">MELT · cuidado con intención</span>
+        <a class="scroll-cue" href="#seleccion" aria-label="Ver tratamientos destacados"><span aria-hidden="true">⌄</span></a>
+      </section>
+
+      <section class="featured-section section-pad" id="seleccion">
+        <div class="design-section-heading">
+          <div><p class="eyebrow">Selección MELT</p><h2>Un ritual para cada momento.</h2></div>
+          <div class="featured-controls"><button type="button" id="featured-prev" aria-label="Ver tratamientos anteriores">←</button><button type="button" id="featured-next" aria-label="Ver más tratamientos">→</button></div>
         </div>
-        <span class="hero-index">01 / 04</span>
+        <p class="section-note">Conocé algunos de los tratamientos disponibles y encontrá el que va con vos.</p>
+        <div id="featured-list" class="featured-rail" aria-live="polite"><p class="featured-loading">Cargando la selección…</p></div>
+      </section>
+
+      <section class="editorial-section section-pad">
+        <div class="editorial-title"><p class="eyebrow">Un espacio para vos</p><h2>El cuidado también es<br>hacerte un lugar.</h2><p>Elegí tu tratamiento, encontrá un horario y dejá el resto en nuestras manos.</p></div>
+        <div class="editorial-art editorial-art-one" aria-hidden="true"></div><div class="editorial-art editorial-art-two" aria-hidden="true"></div>
+        <button class="editorial-link" type="button" data-scroll="tratamientos">Explorar todos los tratamientos <span aria-hidden="true">↗</span></button>
       </section>
 
       <section class="section treatments-section" id="tratamientos">
