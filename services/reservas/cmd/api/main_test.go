@@ -36,7 +36,7 @@ func TestSlotNoSuperpuesto(t *testing.T) {
 
 func TestRequiereIdentidadDeniegaAnonimo(t *testing.T) {
 	gin.SetMode(gin.TestMode); router:=gin.New()
-	router.GET("/turnos",requiereIdentidad(),requierePermiso("reservas.consultar-mis-turnos"),func(c *gin.Context){c.Status(http.StatusOK)})
+	router.GET("/turnos",requiereIdentidad(),requierePermiso("reservas.consultar-turnos"),func(c *gin.Context){c.Status(http.StatusOK)})
 	rec:=httptest.NewRecorder(); router.ServeHTTP(rec,httptest.NewRequest(http.MethodGet,"/turnos",nil))
 	if rec.Code!=http.StatusUnauthorized { t.Fatalf("se esperaba 401 y se obtuvo %d",rec.Code) }
 }
@@ -45,7 +45,7 @@ func TestPermisosPorOperacion(t *testing.T) {
 	cases:=[]struct{name,op,role string; want int}{
 		{"cliente puede crear","reservas.crear","cliente",http.StatusOK},
 		{"profesional no crea por cliente","reservas.crear","profesional",http.StatusForbidden},
-		{"recepción puede consultar turnos","reservas.consultar-mis-turnos","recepcion",http.StatusOK},
+		{"recepción puede consultar turnos","reservas.consultar-turnos","recepcion",http.StatusOK},
 		{"cliente no gestiona agenda","reservas.gestionar-agenda","cliente",http.StatusForbidden},
 		{"operación desconocida denegada","reservas.desconocida","administrador",http.StatusForbidden},
 	}

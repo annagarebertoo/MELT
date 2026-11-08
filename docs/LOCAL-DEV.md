@@ -209,15 +209,17 @@ El middleware `requierePermiso` aplica autorización por operación y deniega po
 
 | Operación | Roles permitidos |
 |---|---|
-| `reservas.consultar-propias` | cliente |
+| `reservas.consultar-disponibilidad` | cliente, profesional, recepción, administrador, superadministrador |
+| `reservas.consultar-turnos` | cliente, profesional, recepción, administrador, superadministrador |
 | `reservas.crear` | cliente |
-| `reservas.cancelar-propia` | cliente |
-| `reservas.consultar-agenda` | profesional, recepción, administrador, superadministrador |
+| `reservas.cancelar-turno` | cliente, recepción, administrador, superadministrador |
 | `reservas.gestionar-agenda` | profesional, recepción, administrador, superadministrador |
-| `reservas.consultar-todas` | recepción, administrador, superadministrador |
-| `reservas.gestionar-turnos` | recepción, administrador, superadministrador |
+| `reservas.crear-bloqueo-carrito` | cliente |
+| `reservas.confirmar-bloqueo-carrito` | cliente |
+| `reservas.liberar-bloqueo-carrito` | cliente |
+| `reservas.reintentar-devolucion` | cliente, recepción, administrador, superadministrador |
 
-Cuando se implementen los handlers, encadenar ambos middlewares en este orden: `requiereIdentidad(), requierePermiso("clave.de.operacion")`. La autorización por rol no reemplaza la autorización por recurso: consultar, cancelar o modificar una reserva propia debe comparar el ID autenticado con el propietario de la reserva. Las rutas reales de turnos aún no están implementadas; por eso esta política y sus tests preparan el control de acceso, pero no implican que crear/cancelar reservas ya funcione.
+Cada ruta privada encadena `requiereIdentidad()` y `requierePermiso("clave.de.operacion")`; las políticas desconocidas se deniegan por defecto. La matriz define qué roles pueden invocar cada operación. Los handlers aplican además autorización por recurso: clientes consultan/cancelan sus turnos, profesionales consultan los propios, y solo recepción/administración ven o gestionan turnos de terceros. Los permisos no sustituyen esas comprobaciones de propiedad.
 
 
 ## Reservas: agenda y endpoints iniciales

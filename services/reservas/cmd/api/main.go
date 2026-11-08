@@ -102,16 +102,15 @@ func (s *servidorReservas) obtenerTratamiento(ctx context.Context, id string) (t
 }
 
 var permisosPorOperacion = map[string]map[string]bool{
-	"reservas.consultar-propias": {"cliente": true},
 	"reservas.consultar-disponibilidad": {"cliente": true, "profesional": true, "recepcion": true, "administrador": true, "superadministrador": true},
-	"reservas.consultar-mis-turnos": {"cliente": true, "profesional": true, "recepcion": true, "administrador": true, "superadministrador": true},
+	"reservas.consultar-turnos": {"cliente": true, "profesional": true, "recepcion": true, "administrador": true, "superadministrador": true},
 	"reservas.cancelar-turno": {"cliente": true, "recepcion": true, "administrador": true, "superadministrador": true},
 	"reservas.crear": {"cliente": true},
-	"reservas.cancelar-propia": {"cliente": true},
-	"reservas.consultar-agenda": {"profesional": true, "recepcion": true, "administrador": true, "superadministrador": true},
 	"reservas.gestionar-agenda": {"profesional": true, "recepcion": true, "administrador": true, "superadministrador": true},
-	"reservas.consultar-todas": {"recepcion": true, "administrador": true, "superadministrador": true},
-	"reservas.gestionar-turnos": {"recepcion": true, "administrador": true, "superadministrador": true},
+	"reservas.crear-bloqueo-carrito": {"cliente": true},
+	"reservas.confirmar-bloqueo-carrito": {"cliente": true},
+	"reservas.liberar-bloqueo-carrito": {"cliente": true},
+	"reservas.reintentar-devolucion": {"cliente": true, "recepcion": true, "administrador": true, "superadministrador": true},
 }
 
 func main() {
@@ -145,15 +144,15 @@ func (s *servidorReservas) router() *gin.Engine {
 	r.Use(gin.Logger(), gin.Recovery())
 	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"servicio":"reservas","estado":"ok"}) })
 	r.GET("/me", requiereIdentidad(), func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"usuario": identidadDesdeHeaders(c)}) })
-	r.PUT("/agenda", requiereIdentidad("profesional","recepcion","administrador","superadministrador"), requierePermiso("reservas.gestionar-agenda"), s.guardarAgenda)
-	r.GET("/disponibilidad", requiereIdentidad("cliente","profesional","recepcion","administrador","superadministrador"), requierePermiso("reservas.consultar-disponibilidad"), s.disponibilidad)
-	r.GET("/turnos", requiereIdentidad(), requierePermiso("reservas.consultar-mis-turnos"), s.listarTurnos)
-	r.POST("/carrito/bloqueos", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.crearBloqueoCarrito)
-	r.POST("/carrito/bloqueos/:id/confirmar", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.confirmarBloqueoCarrito)
-	r.DELETE("/carrito/bloqueos/:id", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.liberarBloqueoCarrito)
-	r.POST("/turnos", requiereIdentidad("cliente"), requierePermiso("reservas.crear"), s.confirmarTurnoDesdeCarrito)
+	r.PUT("/agenda", requiereIdentidad(), requierePermiso("reservas.gestionar-agenda"), s.guardarAgenda)
+	r.GET("/disponibilidad", requiereIdentidad(), requierePermiso("reservas.consultar-disponibilidad"), s.disponibilidad)
+	r.GET("/turnos", requiereIdentidad(), requierePermiso("reservas.consultar-turnos"), s.listarTurnos)
+	r.POST("/carrito/bloqueos", requiereIdentidad(), requierePermiso("reservas.crear-bloqueo-carrito"), s.crearBloqueoCarrito)
+	r.POST("/carrito/bloqueos/:id/confirmar", requiereIdentidad(), requierePermiso("reservas.confirmar-bloqueo-carrito"), s.confirmarBloqueoCarrito)
+	r.DELETE("/carrito/bloqueos/:id", requiereIdentidad(), requierePermiso("reservas.liberar-bloqueo-carrito"), s.liberarBloqueoCarrito)
+	r.POST("/turnos", requiereIdentidad(), requierePermiso("reservas.crear"), s.confirmarTurnoDesdeCarrito)
 	r.DELETE("/turnos/:id", requiereIdentidad(), requierePermiso("reservas.cancelar-turno"), s.cancelarTurno)
-	r.POST("/turnos/:id/devolucion/reintentar", requiereIdentidad(), requierePermiso("reservas.cancelar-turno"), s.reintentarDevolucion)
+	r.POST("/turnos/:id/devolucion/reintentar", requiereIdentidad(), requierePermiso("reservas.reintentar-devolucion"), s.reintentarDevolucion)
 	return r
 }
 
@@ -170,15 +169,11 @@ func tieneRol(u identidad, roles ...string) bool {
 	return false
 }
 
-func requiereIdentidad(rolesPermitidos ...string) gin.HandlerFunc {
+func requiereIdentidad() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		u := identidadDesdeHeaders(c)
 		if u.ID == "" || u.Email == "" || len(u.Roles) == 0 {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error":gin.H{"code":"IDENTIDAD_REQUERIDA","message":"Iniciá sesión para continuar."}})
-			return
-		}
-		if len(rolesPermitidos)>0 && !tieneRol(u, rolesPermitidos...) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error":gin.H{"code":"PERMISOS_INSUFICIENTES","message":"No tenés permisos para realizar esta acción."}})
 			return
 		}
 		c.Set("identidad",u)

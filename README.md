@@ -89,7 +89,7 @@ La arquitectura interna de los microservicios combinará al menos dos estilos tr
 
 El servicio de autenticación se publica por el gateway en `/api/v1/auth`. Permite registrar clientes, iniciar sesión y consultar la cuenta actual. Las cuentas internas se crean con permisos administrativos; el registro público no permite elegir roles. Ver [guía local](docs/LOCAL-DEV.md) y [contrato OpenAPI](docs/contracts/autenticacion-v1.openapi.yaml).
 
-La autenticación ya tiene una primera implementación, pero la autorización debe integrarse en cada endpoint de negocio protegido cuando esos flujos estén implementados. La recuperación de contraseña y la verificación de email quedan pendientes.
+Las rutas de negocio protegidas integran autenticación y permisos por operación. Reservas aplica una matriz de roles con denegación por defecto y comprueba además la propiedad de turnos y agendas en cada handler. La recuperación de contraseña y la verificación de email quedan pendientes.
 
 ## Ejecución local
 
