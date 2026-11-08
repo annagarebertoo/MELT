@@ -108,7 +108,42 @@ La guía completa, las variables opcionales del administrador inicial y los ejem
 
 ## Despliegue
 
-**Pendiente.** Las URL del frontend y de las capacidades publicadas se incorporarán cuando exista un entorno desplegado y accesible.
+## Despliegue
+
+El backend de MELT cuenta con tres servicios desplegados en Render, utilizando MongoDB Atlas para la persistencia de datos.
+
+### Servicios publicados
+
+| Servicio | Plataforma | URL |
+|---|---|---|
+| API Gateway | Render | https://melt-gateway.onrender.com |
+| Autenticación (Auth) | Render | https://melt-tygp.onrender.com |
+| Beneficios | Render | https://melt-beneficios.onrender.com |
+
+### Punto de entrada
+
+El frontend debe comunicarse con los servicios backend a través del API Gateway:
+
+`https://melt-gateway.onrender.com`
+
+El Gateway centraliza el acceso a los servicios y gestiona la autenticación de las rutas protegidas.
+
+### Verificación del despliegue
+
+Se realizaron pruebas de integración sobre los servicios publicados:
+
+- Verificación del estado del Gateway mediante `/health`.
+- Registro e inicio de sesión de usuarios.
+- Validación del código de registro del gimnasio.
+- Acreditación de 100 puntos de bienvenida.
+- Consulta del saldo de puntos mediante el Gateway.
+- Verificación de que los puntos no se acrediten nuevamente al iniciar sesión.
+- Registro de usuarios sin código de gimnasio.
+- Verificación del rechazo de solicitudes sin autenticación.
+
+Los datos se persisten en MongoDB Atlas, en las bases correspondientes a cada servicio.
+
+**Nota:** Las variables de entorno y credenciales se configuran en Render y no deben incluirse en el repositorio.
 
 ## Integración con otro grupo
 

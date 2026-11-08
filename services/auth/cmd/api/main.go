@@ -135,6 +135,9 @@ func (s *authServer) router() *gin.Engine {
 	r.POST("/login", s.login)
 	r.GET("/me", s.requiereAuth(), s.me)
 	r.GET("/verify", s.verificarSesion)
+	r.GET("/verify-admin", s.requiereRol("administrador", "superadministrador"), func(c *gin.Context) {
+    c.Status(http.StatusNoContent)
+})
 	r.POST("/usuarios", s.requiereRol("administrador", "superadministrador"), s.crearUsuario)
 	return r
 }
