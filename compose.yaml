@@ -8,6 +8,7 @@ services:
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/nginx/web:/usr/share/nginx/html:ro
     depends_on:
       - catalogo-profesionales
       - reservas

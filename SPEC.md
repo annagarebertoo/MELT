@@ -76,7 +76,7 @@ Las decisiones técnicas de implementación se documentarán en `docs/ARCHITECTU
 
 ### 3.3. Lineamientos de experiencia visual
 
-La interfaz será completamente en español, con identidad editorial minimalista y una paleta inspirada en manteca, crema y chocolate. Se priorizará una página principal de navegación vertical, una fotografía principal protagonista, imágenes destacadas y composiciones originales, sin exceso de tarjetas ni bordes redondeados. El diseño detallado de pantallas, la distribución definitiva de categorías, las animaciones y los componentes visuales se definirán durante el desarrollo del frontend.
+La interfaz implementada se sirve desde el gateway y está completamente en español. Usa una paleta crema, oliva y arcilla, una página principal de navegación vertical y componentes adaptables a pantallas pequeñas. Incluye búsqueda del catálogo, registro/login, perfil y saldo de puntos, consulta de disponibilidad, bloqueo temporal, confirmación con seña y cancelación de reservas. La gestión de agenda profesional, el historial de tratamientos realizados, el canje/aplicación de beneficios y otras funciones de administración no están cubiertos todavía por la interfaz.
 
 ## 4. Actores
 
@@ -298,7 +298,7 @@ Se conservan los identificadores originales. Las decisiones resueltas se registr
 | **PD-12** | Resuelta la capacidad propia: API de consulta de tratamientos con filtros, descripción y precios. Pendientes: contrato versionado, mock, condiciones de consumo y capacidad externa con su flujo y conducta ante fallas. |
 | **PD-13** | Acordada la prevención de reservas, acreditaciones, canjes y restituciones duplicadas. Pendientes: aprobación de RN-12 y RN-15, estados de procesamiento, reconocimiento de una misma intención y responsables de recuperación. |
 
-No se fijan precios, cantidades de puntos ni horarios comerciales en esta versión. El diseño detallado de las pantallas permanece abierto para el desarrollo del frontend.
+No se fijan precios, cantidades de puntos ni horarios comerciales en esta versión. La interfaz actual es una primera implementación funcional; la cobertura completa de las capacidades administrativas y de profesionales continúa pendiente.
 
 
 ## 12. Decisiones funcionales incorporadas — revisión de alcance

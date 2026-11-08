@@ -94,7 +94,7 @@ Los tests unitarios del catálogo cubren el endpoint de salud mediante una depen
 
 ## Alcance y limitaciones actuales
 
-El catálogo persiste tratamientos en MongoDB, ofrece búsqueda textual simple, filtro por categoría/precio máximo, paginación y ordenamiento. La creación mediante POST está implementada en la ruta compatible indicada arriba; la API pública contractual v1 expone solo lectura. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados en Compose, pero todavía no están integrados en los flujos de negocio. Reservas y Beneficios continúan siendo esqueletos HTTP. El frontend, la integración de la identidad con Reservas y Beneficios, los flujos completos de negocio, los eventos de dominio, cache hit/miss, métricas de negocio, pruebas de carga y el contrato externo desplegado siguen pendientes. La autenticación inicial ya está implementada en esta rama; ver la sección siguiente.
+El catálogo persiste tratamientos en MongoDB, ofrece búsqueda textual simple, filtro por categoría/precio máximo, paginación y ordenamiento. La creación mediante POST está implementada en la ruta compatible indicada arriba; la API pública contractual v1 expone solo lectura. La interfaz web se sirve desde el gateway en `http://localhost:8080`; permite buscar tratamientos, registrarse, iniciar sesión, consultar perfil y puntos, revisar disponibilidad, crear reservas con bloqueo temporal y cancelarlas. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados en Compose, pero todavía no están integrados en los flujos de negocio. También falta la integración externa asignada a MELT, el flujo de notificaciones asíncronas, métricas de negocio y pruebas de carga.
 
 
 ## Integración de registro y puntos del gimnasio

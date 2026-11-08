@@ -49,11 +49,11 @@ Las reglas detalladas y los criterios de aceptación se documentarán en [SPEC.m
 
 La confirmación de una reserva y la acreditación de puntos deberán contemplar concurrencia, duplicación de solicitudes y fallas parciales. Los puntos se registran con una clave única para evitar acreditaciones duplicadas. Los correos usan un intento inicial y hasta 3 reintentos automáticos con esperas crecientes; si siguen fallando, pasan a una cola de errores para revisión. Los bloqueos temporales del carrito también deberán respetar las reglas de incompatibilidad y expirar automáticamente.
 
-## Arquitectura propuesta
+## Arquitectura y estado de implementación
 
 El sistema cuenta con un **frontend web**, un **API Gateway** y microservicios con responsabilidades diferenciadas (el mínimo de la consigna es tres; se incorporó además autenticación):
 
-| Componente | Responsabilidad preliminar |
+| Componente | Responsabilidad |
 | --- | --- |
 | Autenticación | Registro e inicio de sesión, identidad de la cuenta y autorización por roles. | 
 | Catálogo y Profesionales | Tratamientos, categorías, profesionales, precios, duraciones, palabras clave y puntos configurados. |
@@ -61,17 +61,15 @@ El sistema cuenta con un **frontend web**, un **API Gateway** y microservicios c
 | Beneficios | Saldos, movimientos de puntos, canjes, aplicaciones y restituciones. |
 | API Gateway | Punto de entrada del frontend y enrutamiento hacia los servicios. |
 
-Cada microservicio será propietario de sus datos. Los límites definitivos, la asignación de la agenda y las comunicaciones se detallarán en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) y en los registros de decisiones arquitectónicas.
+Cada microservicio es propietario de sus datos. La interfaz web está servida por NGINX y usa el gateway para buscar tratamientos, crear cuentas, consultar el perfil y los puntos, buscar disponibilidad, reservar y cancelar turnos. Los límites de datos, comunicaciones y limitaciones vigentes se detallan en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) y en los ADR.
 
-Se prevé utilizar **comunicación síncrona** para las consultas y validaciones que requieran una respuesta inmediata, y **mensajería asíncrona** para eventos y efectos posteriores. Se incorporarán un motor de búsqueda, caché, balanceo de carga, mecanismos de resiliencia y observabilidad. Las incompatibilidades se validarán para la agenda del profesional y para los turnos del mismo cliente.
+Las consultas y validaciones actuales usan HTTP síncrono. La arquitectura final también requiere eventos asíncronos, búsqueda indexada, caché y métricas; sus estados de implementación y evidencia se describen en [docs/ENTREGA-2.md](docs/ENTREGA-2.md) y los ADR vigentes.
 
-## Tecnologías propuestas
-
-> Selección inicial sujeta a revisión durante el diseño. Las tecnologías listadas todavía no implican que estén implementadas.
+## Tecnologías
 
 | Área | Tecnología |
 | --- | --- |
-| Frontend | React y TypeScript |
+| Frontend | HTML, CSS y JavaScript servidos por NGINX |
 | Backend de microservicios | Go y Gin |
 | API Gateway y balanceo | NGINX |
 | Persistencia relacional | PostgreSQL |
@@ -122,9 +120,11 @@ El backend de MELT cuenta con tres servicios desplegados en Render, utilizando M
 
 ### Punto de entrada
 
-El frontend debe comunicarse con los servicios backend a través del API Gateway:
+La interfaz local y el API Gateway comparten origen:
 
-`https://melt-gateway.onrender.com`
+`http://localhost:8080`
+
+En Render, el gateway sirve los archivos estáticos incluidos en su imagen. La versión publicada debe actualizarse desde la rama de entrega antes de considerarla disponible para evaluación.
 
 El Gateway centraliza el acceso a los servicios y gestiona la autenticación de las rutas protegidas.
 

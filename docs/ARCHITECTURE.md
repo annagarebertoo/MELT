@@ -48,7 +48,7 @@ flowchart TB
 
     subgraph MELT["MELT — Contenedores propuestos"]
         direction TB
-        web["Frontend web<br/>React y TypeScript"]
+        web["Frontend web<br/>HTML, CSS y JavaScript"]
         gateway["API Gateway<br/>NGINX"]
 
         subgraph servicios["Servicios de negocio y datos privados"]
@@ -127,7 +127,7 @@ La persistencia se registrará como versión inicial de D3. MongoDB no determina
 
 | Área | Propuesta | Justificación inicial |
 | :--- | :--- | :--- |
-| Frontend | React y TypeScript | Interfaz web común para catálogo público y funciones de los tres roles. |
+| Frontend | HTML, CSS y JavaScript estáticos | Interfaz web servida por NGINX; usa el gateway del mismo origen para catálogo, cuenta, puntos y reservas. |
 | Backend | Go y Gin | Lenguaje compartido y transporte HTTP para los tres servicios. |
 | API Gateway | NGINX | Entrada pública, enrutamiento y futuro balanceo; requiere completar las políticas de acceso. |
 | Persistencia | MongoDB y PostgreSQL | Documentos del catálogo y operaciones transaccionales de agenda y puntos. |
