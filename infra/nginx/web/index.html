@@ -14,8 +14,8 @@
       <button class="header-menu-button" id="menu-toggle" type="button" aria-label="Abrir menú" aria-controls="site-menu" aria-expanded="false"><span></span><span></span></button>
       <a class="brand" href="#inicio" aria-label="MELT, inicio">MELT</a>
       <div class="header-actions">
-        <button class="header-login" type="button" data-scroll="cuenta">Ingresar</button>
-        <button class="header-register" type="button" data-scroll="cuenta" data-register>Registrarme</button>
+        <button class="header-login" id="header-login" type="button" data-scroll="cuenta">Ingresar</button>
+        <button class="header-register" id="header-register" type="button" data-scroll="cuenta" data-register>Crear cuenta</button>
       </div>
     </header>
 
@@ -35,7 +35,7 @@
         <div class="hero-copy">
           <p class="eyebrow light">Centro de estética &amp; bienestar</p>
           <h1>Fundite con<br>tu esencia.</h1>
-          <a class="hero-cta" href="#seleccion">Encontrá tu próximo ritual <span aria-hidden="true">↗</span></a>
+          <div class="hero-actions"><a class="hero-cta" href="#seleccion">Encontrá tu próximo ritual <span aria-hidden="true">↗</span></a><a class="hero-secondary" href="#tratamientos">Explorar tratamientos</a></div>
         </div>
         <a class="scroll-cue" href="#seleccion" aria-label="Ver tratamientos destacados"><span aria-hidden="true">⌄</span></a>
       </section>
@@ -45,7 +45,7 @@
           <div><p class="eyebrow">Selección MELT</p><h2>Un ritual para cada momento.</h2></div>
           <div class="featured-controls"><button type="button" id="featured-prev" aria-label="Ver tratamientos anteriores">←</button><button type="button" id="featured-next" aria-label="Ver más tratamientos">→</button></div>
         </div>
-        <p class="section-note">Conocé algunos de los tratamientos disponibles y encontrá el que va con vos.</p>
+        <p class="section-note">Una selección actualizada desde nuestro catálogo. Cada detalle importa.</p>
         <div id="featured-list" class="featured-rail" aria-live="polite"><p class="featured-loading">Cargando la selección…</p></div>
       </section>
 
@@ -58,13 +58,15 @@
       <section class="section treatments-section" id="tratamientos">
         <div class="section-heading">
           <div><p class="eyebrow">Encontrá tu próximo ritual</p><h2>Tratamientos</h2></div>
-          <p class="section-description">Buscá por nombre, categoría o palabra clave. Elegí la opción que mejor se adapta a vos.</p>
+          <p class="section-description">Explorá el catálogo vigente, compará duración y precio, y elegí tu próximo momento.</p>
         </div>
         <form id="search-form" class="search-bar">
           <label class="search-field"><span class="sr-only">Buscar tratamientos</span><span aria-hidden="true">⌕</span><input id="search-query" type="search" placeholder="¿Qué te gustaría hacer?" autocomplete="off"></label>
           <label><span class="sr-only">Categoría</span><select id="search-category"><option value="">Todas las categorías</option><option>Facial</option><option>Corporal</option><option>Depilación</option><option>Manos y uñas</option></select></label>
           <label class="price-filter"><span class="sr-only">Precio máximo</span><span>$</span><input id="search-price" type="number" min="0" placeholder="Precio máx."></label>
-          <button class="button button-dark" type="submit">Buscar</button>
+          <label class="sort-filter"><span class="sr-only">Ordenar resultados</span><select id="search-sort"><option value="nombre:asc">Orden: A–Z</option><option value="precio:asc">Menor precio</option><option value="precio:desc">Mayor precio</option></select></label>
+          <button class="button button-dark" type="submit">Aplicar filtros</button>
+          <button class="clear-filters" id="clear-filters" type="button">Limpiar</button>
         </form>
         <p id="catalog-status" class="status-line" aria-live="polite"></p>
         <div id="treatments-list" class="treatment-grid" aria-live="polite"></div>
@@ -72,8 +74,8 @@
       </section>
 
       <section class="booking-band" id="reservas">
-        <div><p class="eyebrow">Tu próximo turno</p><h2>Encontrá un horario<br>que te quede bien.</h2><p>La disponibilidad se actualiza con la agenda de cada profesional.</p></div>
-        <a class="button button-light" href="#cuenta">Ver mis reservas <span aria-hidden="true">↗</span></a>
+        <div><p class="eyebrow">Reserva online</p><h2>Tu momento,<br>a tu manera.</h2><p>Elegí un tratamiento, consultá la agenda y guardá tu horario mientras confirmás la seña.</p></div>
+        <a class="button button-light" href="#cuenta">Empezar mi reserva <span aria-hidden="true">↗</span></a>
       </section>
 
       <section class="section account-section" id="cuenta">
@@ -81,6 +83,11 @@
           <div><p class="eyebrow">Todo empieza acá</p><h2>Tu cuenta</h2></div>
           <p class="section-description">Ingresá o creá tu cuenta para reservar y gestionar tus turnos.</p>
         </div>
+        <ol class="booking-steps" aria-label="Pasos de la reserva">
+          <li class="active" data-booking-step="1"><span>01</span><b>Elegí tu tratamiento</b></li>
+          <li data-booking-step="2"><span>02</span><b>Buscá un horario</b></li>
+          <li data-booking-step="3"><span>03</span><b>Confirmá tu seña</b></li>
+        </ol>
         <div id="auth-panel" class="account-layout">
           <div class="account-card">
             <div class="tab-list" role="tablist" aria-label="Acceso a la cuenta">
@@ -100,10 +107,12 @@
             <div class="profile-top"><div class="avatar" id="profile-initials">M</div><div><p class="eyebrow">Tu espacio MELT</p><h3 id="profile-name">Hola</h3></div></div>
             <p id="profile-email" class="muted"></p>
             <div class="points-box"><span>Tu saldo de beneficios</span><strong><span id="points-balance">—</span> <small>puntos</small></strong></div>
-            <div class="profile-actions"><button id="refresh-account" class="button button-outline" type="button">Actualizar</button><button id="logout-button" class="text-button" type="button">Cerrar sesión</button></div>
+            <div class="profile-actions"><button id="refresh-account" class="button button-outline" type="button">Actualizar</button><button id="profile-reservations" class="text-button" type="button">Ver mis turnos ↓</button><button id="logout-button" class="text-button" type="button">Cerrar sesión</button></div>
           </div>
           <div class="calendar-card">
             <div><p class="eyebrow">Disponibilidad</p><h3>Elegí tu turno</h3></div>
+            <p class="calendar-intro">Los horarios se consultan en tiempo real y dependen de la agenda del profesional.</p>
+            <div class="booking-guest-note" id="booking-guest-note"><span class="guest-lock" aria-hidden="true">⌑</span><div><strong>Tu reserva, siempre a mano</strong><p>Ingresá o creá una cuenta para consultar horarios y mantener tu turno en el carrito.</p><div><button class="text-button" type="button" data-booking-auth="login">Ingresar</button><button class="button button-outline" type="button" data-booking-auth="register">Crear cuenta</button></div></div></div>
             <form id="availability-form" class="calendar-form">
               <label class="form-field">Tratamiento<select id="booking-treatment" required><option value="">Elegí un tratamiento</option></select></label>
               <label class="form-field">Profesional<select id="booking-professional" required><option value="">Elegí un profesional</option></select></label>
@@ -112,11 +121,15 @@
             </form>
             <div id="availability-status" class="form-status" aria-live="polite"></div>
             <div id="time-slots" class="time-slots"></div>
+            <div id="booking-summary" class="booking-summary-inline hidden" aria-live="polite"></div>
             <form id="payment-form" class="payment-form hidden">
-              <p id="hold-message"></p>
-              <label class="form-field">ID del pago aprobado en Mercado Pago (modo prueba)<input id="payment-id" required></label>
-              <button class="button button-dark full-width" type="submit">Confirmar reserva</button>
-              <button class="text-button" id="release-hold" type="button">Liberar horario</button>
+              <div class="hold-countdown"><span><i aria-hidden="true"></i>Horario reservado para vos</span><strong id="hold-countdown">10:00</strong></div>
+              <p id="hold-message" class="hold-message"></p>
+              <div class="deposit-summary"><span>Seña requerida · 30 %</span><strong id="hold-amount">—</strong></div>
+              <p class="payment-guidance">Completá el pago en Mercado Pago y pegá el ID de la operación aprobada. La reserva se confirma al validar el pago.</p>
+              <label class="form-field">ID de pago aprobado<input id="payment-id" required inputmode="numeric" pattern="[0-9]+" autocomplete="off" placeholder="Ej.: 1234567890"></label>
+              <button class="button button-dark full-width" id="confirm-booking" type="submit">Validar pago y confirmar turno</button>
+              <button class="text-button release-button" id="release-hold" type="button">Liberar horario</button>
             </form>
           </div>
         </div>
@@ -124,7 +137,12 @@
       </section>
     </main>
 
-    <footer class="site-footer"><a class="brand" href="#inicio">MELT<span>.</span></a><p>Cuidarte también es hacerte un espacio.</p><span>© MELT · Centro de estética</span></footer>
+    <footer class="site-footer"><div class="footer-brand"><a class="brand" href="#inicio">MELT</a><p>Cuidarte también es hacerte un espacio.</p></div><div class="footer-links"><a href="#seleccion">Selección</a><a href="#tratamientos">Tratamientos</a><a href="#reservas">Reservas</a><a href="#cuenta">Mi cuenta</a></div><span>© MELT · Centro de estética</span></footer>
+    <dialog class="treatment-dialog" id="treatment-dialog" aria-labelledby="detail-title">
+      <form method="dialog" class="dialog-top"><span class="eyebrow">Un ritual MELT</span><button class="dialog-close" aria-label="Cerrar detalle">×</button></form>
+      <div class="dialog-layout"><div class="dialog-visual" id="detail-visual" aria-hidden="true"><span id="detail-initial">M</span></div><div class="dialog-copy"><p class="eyebrow" id="detail-category"></p><h2 id="detail-title"></h2><p class="dialog-description" id="detail-description"></p><div class="dialog-meta"><div><span>Duración</span><strong id="detail-duration"></strong></div><div><span>Precio</span><strong id="detail-price"></strong></div></div><div class="detail-keywords" id="detail-keywords"></div><div class="detail-professionals" id="detail-professionals"></div><p id="detail-availability" class="detail-availability"></p><button class="button button-dark" id="detail-book" type="button">Elegir horario <span aria-hidden="true">↗</span></button></div></div>
+    </dialog>
+    <dialog class="confirm-dialog" id="cancel-dialog" aria-labelledby="cancel-title"><form method="dialog" class="cancel-dialog-card"><button class="dialog-close" aria-label="Cerrar">×</button><p class="eyebrow">Gestioná tu turno</p><h2 id="cancel-title">¿Querés cancelar esta reserva?</h2><p id="cancel-policy"></p><div class="cancel-actions"><button class="button button-outline" value="cancel">Mantener turno</button><button class="button button-dark" id="confirm-cancel" value="confirm">Cancelar turno</button></div></form></dialog>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </body>
 </html>
