@@ -329,6 +329,25 @@ func (s *Servidor) crearTratamiento(c *gin.Context) {
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://melt-tygp.onrender.com/verify-admin", nil)
+if err != nil {
+    c.JSON(http.StatusInternalServerError, gin.H{"error": "No se pudo verificar la autorización."})
+    return
+}
+
+req.Header.Set("Authorization", c.GetHeader("Authorization"))
+
+resp, err := http.DefaultClient.Do(req)
+if err != nil {
+    c.JSON(http.StatusServiceUnavailable, gin.H{"error": "No se pudo verificar la autorización."})
+    return
+}
+defer resp.Body.Close()
+
+if resp.StatusCode != http.StatusNoContent {
+    c.JSON(resp.StatusCode, gin.H{"error": "Se requiere rol de administrador."})
+    return
+}
 	if _, err := s.coleccion.InsertOne(ctx, tratamiento); err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			c.JSON(http.StatusConflict, gin.H{"error": "Ya existe un tratamiento con ese ID."})
