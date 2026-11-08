@@ -306,7 +306,7 @@ components:
 
     Profesional:
       type: object
-      required: [id, nombre]
+      required: [id, nombre, activo]
       properties:
         id:
           type: string
@@ -318,6 +318,10 @@ components:
           type: array
           items:
             type: string
+        activo:
+          type: boolean
+          description: Indica si el perfil se publica en el catálogo y se ofrece para reservas.
+          example: true
 
     TratamientosResponse:
       type: object

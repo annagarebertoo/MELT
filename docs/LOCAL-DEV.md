@@ -96,15 +96,29 @@ El gateway usa resolución DNS de Docker y un upstream dinámico de NGINX. La to
 ## Pruebas Go
 
 ```sh
-cd services/catalogo-profesionales
-go test -v ./...
+cd services/auth && go test -count=1 ./... && cd ../..
+cd services/catalogo-profesionales && go test -count=1 ./... && cd ../..
+cd services/reservas && go test -p=1 -count=1 ./... && cd ../..
+cd services/pagos && go test -count=1 ./... && cd ../..
+node --check infra/nginx/web/app.js
+docker compose config --quiet
 ```
 
-Los tests unitarios del catálogo cubren el endpoint de salud mediante una dependencia simulada, el parseo de paginación y funciones auxiliares. Todavía falta una prueba de integración contra MongoDB real y pruebas de los flujos completos de reservas y beneficios.
+Las pruebas de Reservas incluyen `TestReservasMongoIntegrationFlujoCompleto`, que usa MongoDB real para disponibilidad, solicitudes simultáneas, bloqueo temporal, seña, confirmación idempotente, devolución y liberación; Catálogo y Pagos se simulan en esa prueba. Para ejecutarla, con MongoDB local levantado:
+
+```powershell
+$env:RESERVAS_TEST_MONGODB_URI = 'mongodb://localhost:27017'
+Push-Location services/reservas
+go test -p=1 -count=1 -run TestReservasMongoIntegrationFlujoCompleto ./...
+Pop-Location
+Remove-Item Env:RESERVAS_TEST_MONGODB_URI
+```
+
+La cobertura automatizada no reemplaza una comprobación de pago sandbox con las credenciales del equipo ni una prueba de carga/producción.
 
 ## Alcance y limitaciones actuales
 
-El catálogo persiste tratamientos en MongoDB, ofrece búsqueda textual simple, filtro por categoría/precio máximo, paginación y ordenamiento. La creación mediante POST está implementada en la ruta compatible indicada arriba; la API pública contractual v1 expone solo lectura. La interfaz web se sirve desde el gateway en `http://localhost:8080`; permite buscar tratamientos, registrarse, iniciar sesión, consultar perfil y puntos, revisar disponibilidad, crear reservas con bloqueo temporal y cancelarlas. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados en Compose, pero todavía no están integrados en los flujos de negocio. También falta la integración externa asignada a MELT, el flujo de notificaciones asíncronas, métricas de negocio y pruebas de carga.
+El catálogo y los perfiles profesionales persisten en MongoDB (`catalogo_db.tratamientos` y `catalogo_db.profesionales`). Reservas persiste agendas, turnos, bloqueos y carritos en MongoDB (`reservas_db`). La búsqueda actual es simple en MongoDB, con filtro, paginación y ordenamiento; OpenSearch no está integrado. El POST de administración de catálogo es una ruta privada compatible; la API pública contractual v1 expone lectura. La web local en `http://localhost:8080` permite explorar catálogo, registrarse, iniciar sesión, consultar perfil/puntos, revisar disponibilidad, crear el carrito, pagar la seña en modo test y cancelar reservas. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados, pero sus integraciones de negocio siguen pendientes. También están pendientes la API externa de búsqueda de sedes cercanas del grupo de Cocina Fantasma, notificaciones por correo, canjes de puntos y pruebas de carga.
 
 
 ## Integración de registro y puntos del gimnasio

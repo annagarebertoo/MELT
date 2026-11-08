@@ -26,6 +26,8 @@ Desde la actualización D8 del 23/10/2026, NGINX publica las rutas contractuales
 
 Devuelve los perfiles públicos activos, ordenados por nombre. El filtro `tratamientoId` limita el resultado a profesionales cuyo perfil y tratamiento estén asociados. La interfaz ofrece la intersección entre esos perfiles y `profesionalesIds` del tratamiento; una asociación incompleta no habilita horarios.
 
+El contrato expone perfiles públicos de solo lectura. Los campos de `Profesional` están descritos en `tratamientos-v1.openapi.yaml`; `activo` controla la publicación del perfil. La carga o edición administrativa permanece fuera de este contrato público y requiere autorización en la ruta compatible del catálogo.
+
 ### Listar y buscar tratamientos
 
 `GET /api/v1/tratamientos`

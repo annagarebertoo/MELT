@@ -3,13 +3,13 @@
 **Versión:** 0.2 — Primera versión para revisión del equipo.  
 **Entrega:** 1 — Diseño y contrato con mock, 9 de octubre de 2026.  
 **Materia:** Arquitectura de Software — 2026.  
-**Estado:** Diseño inicial; las funcionalidades descritas son previstas, no se declara su implementación.  
+**Estado:** Especificación funcional del equipo. Las reglas definen el comportamiento esperado; el estado verificado de implementación está en la sección 13.
 
 ## 1. Introducción
 
 MELT es un sistema web de gestión para un centro de estética con una única sucursal. El dominio comprende tratamientos, profesionales, disponibilidad, reservas de turnos y un programa de beneficios basado en puntos. Busca centralizar la información y coordinar la agenda para evitar reservas incompatibles y mantener una relación trazable entre los tratamientos realizados y los beneficios de cada cliente.
 
-La operación de negocio central es la **reserva de un turno con validación de disponibilidad**. Su confirmación exige verificar que el profesional pueda realizar el tratamiento y que el intervalo solicitado esté disponible y no se superponga con otra reserva confirmada para ese profesional. La confirmación ocupa la agenda y da lugar a notificaciones. La realización efectiva del tratamiento habilita la acreditación de puntos. El pago se realiza presencialmente y es independiente de la confirmación del turno y del registro de realización.
+La operación de negocio central es la **reserva de un turno con validación de disponibilidad**. Su confirmación exige verificar que el profesional pueda realizar el tratamiento, que el intervalo esté disponible y que no se superponga con otra reserva o bloqueo vigente. El horario se bloquea temporalmente mientras el cliente paga una seña del 30 % mediante el adaptador de Mercado Pago; solo un pago aprobado permite confirmar el turno. El saldo restante se paga presencialmente. La realización efectiva del tratamiento habilita la acreditación de puntos, que pertenece a un flujo distinto.
 
 ### 1.1. Vocabulario
 
@@ -66,7 +66,7 @@ El alcance funcional comprende:
 
 Las funcionalidades se ofrecerán mediante una interfaz web según las responsabilidades de cada actor.
 
-MELT publicará una capacidad para otro grupo y consumirá una capacidad externa dentro de un flujo importante del sistema. La capacidad propia será una API de consulta de tratamientos con filtros, información descriptiva y precios. Su contrato y mock están pendientes; la capacidad externa y su efecto en el flujo de negocio se definirán con el grupo proveedor (PD-12).
+MELT publica una API propia de consulta de tratamientos con filtros, información descriptiva y precios; su contrato OpenAPI v1 y mock están en `docs/contracts/`. La integración externa asignada —búsqueda de sedes cercanas, adaptada a centros o profesionales cercanos— depende de que el grupo de Cocina Fantasma publique su API y contrato. Esa integración consumida sigue pendiente y no se considera implementada (PD-12).
 
 ### 3.2. Funcionalidades fuera de alcance
 
@@ -86,7 +86,7 @@ La interfaz implementada se sirve desde el gateway y está completamente en espa
 | Profesional | Consultar su agenda y los detalles de sus turnos y registrar la realización de los tratamientos que le corresponden. |
 | Administrador | Gestionar catálogo, profesionales, disponibilidad, turnos y reglas del programa de beneficios; configurar los puntos por tratamiento y gestionar categorías, beneficios y recompensas. |
 
-El catálogo es público. Para reservar, el cliente debe iniciar sesión o registrarse. La asignación de roles y los permisos administrativos detallados están pendientes (PD-01). La restricción del cliente a sus propios turnos y puntos y del profesional a los turnos asignados se propone en RN-13.
+El catálogo es público. Para reservar, el cliente debe iniciar sesión o registrarse. Auth define los roles y Reservas aplica permisos por operación, denegación por defecto y comprobaciones de propiedad del recurso. La administración del catálogo requiere autorización administrativa. La interfaz no incluye una consola de administración; esas altas y cambios se realizan por las rutas administrativas documentadas en `docs/contracts/README.md`.
 
 ## 5. Requisitos funcionales
 
@@ -192,12 +192,12 @@ Se propone distinguir **disponible**, **aplicado** y **restituido**. Una aplicac
 1. El cliente explora el catálogo público y consulta un tratamiento.
 2. Inicia sesión o se registra para reservar.
 3. Elige un profesional, consulta el calendario, selecciona una fecha y un horario disponible.
-4. Opcionalmente, selecciona un beneficio disponible.
-5. MELT verifica aptitud del profesional, disponibilidad vigente, ausencia de conflictos y validez del beneficio.
-6. Confirma automáticamente el turno, vincula el beneficio aplicado y muestra el resumen y el importe restante a pagar presencialmente.
-7. Envía la confirmación por correo electrónico.
+4. MELT verifica aptitud del profesional, disponibilidad vigente y ausencia de conflictos; crea un carrito y bloquea el intervalo durante un máximo de 10 minutos.
+5. MELT crea una preferencia de Checkout Pro por el 30 % del precio vigente. El cliente completa el pago en Mercado Pago.
+6. MELT confirma el turno solo después de verificar que el pago fue aprobado y que coinciden la referencia del carrito, el importe y la moneda. Si el pago no se completa o no puede verificarse, no se confirma el turno y el bloqueo vence o se libera.
+7. El cliente puede cancelar el turno conforme a RN-20.1; la devolución se tramita por el adaptador de pagos cuando corresponda.
 
-**Resultado:** turno confirmado; el beneficio seleccionado queda aplicado. No se acredita ningún punto ni se registra un pago online.
+**Resultado:** turno confirmado luego de la aprobación de la seña; el saldo restante se abona presencialmente. Esta versión no aplica beneficios o puntos durante la reserva y no acredita puntos por reservar o pagar.
 
 **Alternativas:**
 
@@ -269,8 +269,8 @@ Se conservan los identificadores originales. Las decisiones resueltas se registr
 
 | ID | Estado y decisión |
 | :--- | :--- |
-| **PD-01** | Parcialmente resuelta: catálogo público y sesión o registro obligatorios para reservar. Pendientes: asignación de roles, permisos administrativos y aprobación de RN-13. |
-| **PD-02** | Parcialmente resuelta: categorías y datos visibles definidos en RF-01. Pendientes: filtros concretos, ordenamiento y parámetros de paginación. |
+| **PD-01** | Resuelta para las operaciones implementadas: roles en Auth, permisos por operación y comprobaciones de propiedad en Reservas; autorización administrativa en Catálogo. Las funciones de perfil y gestión que no tienen endpoint siguen fuera del alcance implementado. |
+| **PD-02** | Resuelta para el catálogo web/API actual: búsqueda por nombre y `keywords`, categorías, precio máximo, paginación y orden por nombre/precio. La sincronización con un índice OpenSearch permanece pendiente (PD-11). |
 | **PD-04** | Pendiente: cambios o retiros de tratamientos y profesionales, cambios de aptitud o disponibilidad con reservas existentes y conservación histórica. |
 | **PD-11** | Pendiente: retraso máximo entre cambios del catálogo y búsqueda y comunicación de información desactualizada. |
 
@@ -278,7 +278,7 @@ Se conservan los identificadores originales. Las decisiones resueltas se registr
 
 | ID | Estado y decisión |
 | :--- | :--- |
-| **PD-03** | Parcialmente resuelta: selección por calendario, fecha y horario y confirmación automática. Pendientes: duración concreta, límites de intervalos, horarios, excepciones, anticipación y restricciones por cliente o recursos. |
+| **PD-03** | Resuelta para el flujo local implementado: duración desde Catálogo, agenda semanal, zona horaria configurable, intervalos de 15 minutos, disponibilidad y validación de cruces; no hay calendario de excepciones ni reglas de anticipación adicionales. La confirmación requiere pago aprobado según RN-20. |
 | **PD-05** | Resuelta para el cliente: cancelación antes del inicio, liberación del horario y política de seña según RN-20. Pendientes: facultades administrativas y tratamiento de excepciones. |
 | **PD-06** | Pendiente: aprobar estados y transiciones de turnos, RN-10 y estados de beneficios; decidir sobre inasistencias, reprogramación y correcciones. El profesional registra los tratamientos completados; cualquier facultad excepcional del administrador requiere confirmación. |
 
@@ -295,15 +295,15 @@ Se conservan los identificadores originales. Las decisiones resueltas se registr
 | ID | Estado y decisión |
 | :--- | :--- |
 | **PD-10** | Resueltas las notificaciones al cliente por confirmación/cancelación del profesional y la estrategia inicial de recuperación: intento inicial, hasta 3 reintentos con espera creciente y cola de errores para revisión. Pendientes: proveedor de correo, procedimiento operativo de reenvío manual, otros eventos/destinatarios y aprobación de RN-14 junto con PD-13. |
-| **PD-12** | Resuelta la capacidad propia: API de consulta de tratamientos con filtros, descripción y precios. Pendientes: contrato versionado, mock, condiciones de consumo y capacidad externa con su flujo y conducta ante fallas. |
+| **PD-12** | Resuelta la capacidad propia: API de consulta de tratamientos con filtros, contrato OpenAPI v1 y mock. Pendiente la capacidad consumida: el grupo de Cocina Fantasma aún debe entregar su API de búsqueda de sedes cercanas y su contrato; no se implementa ni se simula como integración real en este sistema. |
 | **PD-13** | Acordada la prevención de reservas, acreditaciones, canjes y restituciones duplicadas. Pendientes: aprobación de RN-12 y RN-15, estados de procesamiento, reconocimiento de una misma intención y responsables de recuperación. |
 
-No se fijan precios, cantidades de puntos ni horarios comerciales en esta versión. La interfaz actual es una primera implementación funcional; la cobertura completa de las capacidades administrativas y de profesionales continúa pendiente.
+Los precios y horarios cargados para demostración no son valores comerciales. La administración del catálogo y agendas se realiza por API protegida; esta versión no incluye consola administrativa. El estado de cada punto de la parte de identidad y reservas se registra en la sección 13.
 
 
 ## 12. Decisiones funcionales incorporadas — revisión de alcance
 
-Esta sección consolida las correcciones acordadas por el equipo. Continúa siendo una especificación de diseño: no implica que estas funciones estén implementadas.
+Esta sección consolida las correcciones acordadas por el equipo. Las reglas siguen siendo normativas; su estado de implementación comprobado se indica en la sección 13.
 
 ### 12.1. Puntos y notificaciones
 
@@ -344,4 +344,27 @@ Esta sección consolida las correcciones acordadas por el equipo. Continúa sien
 - **CA-21:** una búsqueda por términos asociados encuentra tratamientos por sus `keywords` y respeta filtros, paginación y orden.
 - **CA-22:** cada acreditación de puntos está vinculada a un identificador único y repetir el mismo evento no altera el saldo por segunda vez; si el procesamiento falla de forma persistente, queda registrado para revisión.
 - **CA-23:** los correos se procesan con un intento inicial y hasta 3 reintentos automáticos; los fallos persistentes quedan registrados en una cola de errores para revisión, sin revertir el estado del turno.
+
+## 13. Estado de implementación y verificación
+
+Este estado corresponde a la rama local `feature/interfaz-web-final`, con los cambios de la parte de identidad, reservas e interfaz, y a los datos demo cargados en su MongoDB local. No describe un despliegue en producción ni sustituye las reglas de las secciones anteriores. Las pruebas indicadas se ejecutaron en el entorno local el 8 de noviembre de 2026.
+
+| Punto de la parte de Anna | Estado verificado | Evidencia o condición |
+| :--- | :--- | :--- |
+| Permisos por operación | Implementado | Reservas valida identidad, roles por operación, denegación por defecto y titularidad/alcance del recurso. La matriz está en `docs/LOCAL-DEV.md`. |
+| Disponibilidad y selección de profesional/tratamiento | Implementado | Catálogo publica perfiles activos; Reservas comprueba asociación, agenda semanal, duración y horarios disponibles. Hay datos demo locales para probar la selección. |
+| Creación y cancelación de turnos | Implementado | La creación requiere carrito y pago verificado; la cancelación valida propietario/rol, libera el horario y aplica la regla de devolución. |
+| Carrito con bloqueo de 10 minutos | Implementado | Bloqueo persistido con vencimiento, índices únicos por profesional/minuto y liberación al confirmar, cancelar el carrito o expirar. |
+| Seña del 30 % | Implementado en modo test | Pagos crea una preferencia de Checkout Pro y Reservas verifica estado, referencia del carrito, importe y ARS antes de confirmar. No se probó un cobro real ni producción. |
+| Devoluciones según las 24 horas | Implementado en modo test | A 24 horas o más se solicita el 100 % de la seña; con menos de 24 horas no se devuelve. El reintento está documentado. |
+| Prevención de turnos superpuestos y concurrencia | Implementado y probado | Índices únicos de intervalos bloqueados y prueba de integración con solicitudes simultáneas contra MongoDB. |
+| Interfaz de registro, login, perfil y calendario | Implementado en la web local | La interfaz consume Gateway, Auth, Catálogo, Reservas y Pagos; se verificó la web y las rutas locales. |
+| Pruebas y documentación | Implementadas para este alcance | Pasaron tests de Auth, Catálogo, Reservas y Pagos; integración Mongo de Reservas; `go test -race` de Reservas; `go vet`; `node --check`; `docker compose config`; y `nginx -t`. Las guías están en `docs/RESERVAS-WEB.md` y `docs/LOCAL-DEV.md`. |
+
+### Condiciones y límites de la prueba local
+
+- MongoDB local contiene tres tratamientos demo, dos perfiles públicos demo y catorce agendas semanales demo. Los precios, nombres y profesionales son ficticios; los perfiles demo no son cuentas de Auth ni personal real. Se pueden revisar y volver a cargar según `docs/RESERVAS-WEB.md`.
+- Para recorrer disponibilidad y reserva, el usuario debe crear e iniciar sesión con una cuenta cliente desde la web. Para habilitar perfiles y agendas reales por API se necesita configurar una cuenta administrativa de Auth.
+- La creación y verificación de pagos requiere credenciales de prueba de Mercado Pago válidas. No se hizo ningún cobro real. Sin `MP_RETURN_URL` público, se debe ingresar el identificador de la operación en la interfaz para que MELT la verifique.
+- La API del grupo proveedor de Cocina Fantasma aún no fue entregada, por lo que esa integración externa sigue pendiente. Las funciones de puntos por tratamientos realizados, canjes, correo y consola administrativa también quedan fuera de esta parte.
 

@@ -290,7 +290,7 @@ La principal limitación de esta propuesta es la coordinación entre datos priva
 
 ## 12. Actualización de decisiones de diseño
 
-Las decisiones siguientes actualizan el diseño inicial y deben prevalecer sobre menciones anteriores que indiquen Redis o una única base de datos MongoDB para Catálogo y Profesionales. Estas capacidades están diseñadas, no necesariamente implementadas.
+Las decisiones siguientes actualizan el diseño inicial y deben prevalecer sobre menciones anteriores que indiquen Redis o una única base de datos MongoDB para Catálogo y Profesionales. Son el diseño objetivo; el estado real de cada componente al 8/11/2026 se aclara en la subsección final de esta sección.
 
 ### Persistencia documental
 
@@ -307,7 +307,7 @@ Las decisiones siguientes actualizan el diseño inicial y deben prevalecer sobre
 
 - Al agregar un horario al carrito se crea un bloqueo temporal de 10 minutos, con titular y vencimiento. El bloqueo se libera al confirmar, quitar el elemento o vencer el plazo; no puede permanecer indefinidamente por la desconexión del cliente.
 - Reservas valida superposición de agenda del profesional e incompatibilidad de tratamientos del mismo cliente. Las reglas de incompatibilidad son explícitas por combinación de tratamientos/categorías y pueden incluir intervalos de separación. La operación de bloqueo debe ser atómica para prevenir carreras.
-- La seña equivale al 30 % del precio vigente del tratamiento y debe pagarse para confirmar la reserva. Si el cliente cancela con 24 horas o más de anticipación, se devuelve el 100 %; con menos de 24 horas o ante inasistencia, no se devuelve. La cancelación tardía libera el horario. El resultado exitoso del pago debe quedar registrado antes de confirmar. El proveedor/modalidad y el procedimiento operativo de devolución siguen pendientes; los pagos y devoluciones requieren idempotencia y trazabilidad.
+- La seña equivale al 30 % del precio vigente del tratamiento y debe pagarse para confirmar la reserva. Si el cliente cancela con 24 horas o más de anticipación, se devuelve el 100 %; con menos de 24 horas o ante inasistencia, no se devuelve. La cancelación tardía libera el horario. El adaptador implementado usa Mercado Pago Checkout Pro en modo de prueba, verifica el pago antes de confirmar y admite devoluciones con clave de idempotencia. Cobros de producción quedan fuera de esta configuración.
 
 ### Eventos y correo
 
@@ -323,4 +323,15 @@ Los roles definidos son `cliente`, `profesional`, `recepcion`, `administrador` y
 
 El contrato está en [`docs/contracts/autenticacion-v1.openapi.yaml`](contracts/autenticacion-v1.openapi.yaml), y la ejecución local en [`docs/LOCAL-DEV.md`](LOCAL-DEV.md). `AUTH_JWT_SECRET` y las credenciales opcionales del superadministrador inicial se inyectan por entorno; no deben guardarse en el repositorio.
 
-**Límites conocidos:** no hay recuperación de contraseña ni verificación de email; los tokens emitidos no tienen revocación inmediata; y los endpoints de negocio de Reservas y Beneficios todavía deben aplicar autenticación/autorización cuando se implementen. El endpoint de alta externa de Beneficios usa una clave de integración independiente, no una sesión de cliente.
+**Límites conocidos:** no hay recuperación de contraseña ni verificación de email; los tokens emitidos no tienen revocación inmediata. Reservas aplica autenticación, permisos por operación y autorización por recurso; Catálogo protege las operaciones administrativas mediante verificación de rol contra Auth. Beneficios conserva la autenticación independiente de la integración externa mediante clave de partner.
+
+### Estado implementado de identidad, catálogo y reservas (8/11/2026)
+
+Este snapshot describe la implementación local y complementa el diseño objetivo anterior; no cambia las decisiones históricas de D3/D4 ni acredita despliegue de producción.
+
+- Catálogo almacena tratamientos y perfiles públicos en colecciones separadas de la misma base MongoDB `catalogo_db` (`tratamientos` y `profesionales`). La base objetivo independiente `profesionales_db` aún no se usa.
+- Reservas almacena agendas semanales, turnos, bloqueos y carritos en MongoDB `reservas_db`. Los bloqueos usan unicidad por profesional/minuto y vencimiento TTL. PostgreSQL no está integrado a Reservas en esta versión.
+- Auth persiste cuentas en MongoDB `usuarios_db`. NGINX valida sesiones privadas y propaga identidad verificada. Reservas decide acceso por operación y valida titularidad; la API administrativa de Catálogo requiere rol administrador/superadministrador.
+- El adaptador `pagos` crea preferencias y verifica/refunda operaciones en Mercado Pago test. Producción no está habilitada; el retorno automático requiere configurar una URL HTTPS pública.
+- La web se sirve desde NGINX y consume las rutas de catálogo, Auth, Reservas, Beneficios y Pagos del Gateway. Hay datos demo locales de tratamientos, profesionales y agendas; no se consideran datos comerciales ni cuentas de Auth. Ver `docs/RESERVAS-WEB.md`.
+- La API externa asignada a Cocina Fantasma (búsqueda de sedes cercanas) no está entregada todavía. Puntos por tratamientos completados, canjes, notificaciones por correo y consola administrativa tampoco forman parte de este flujo implementado.

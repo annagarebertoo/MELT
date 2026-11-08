@@ -2,7 +2,7 @@
 
 **Sistema web de gestión para un centro de estética**  
 **Materia:** Arquitectura de Software — 2026  
-**Estado:** Implementación parcial en progreso — infraestructura local y catálogo inicial
+**Estado:** Flujos locales de identidad, catálogo, reservas y pagos implementados; ver estado y límites vigentes más abajo.
 
 ## Descripción
 
@@ -22,32 +22,33 @@ Facilitar la organización de la agenda del centro, brindar a los clientes un me
 - **Administrador:** administra el catálogo, los profesionales, la disponibilidad, los turnos y las reglas del programa de puntos.
 - **Superadministrador:** administra cuentas y asigna roles administrativos.
 
-## Funcionalidades previstas
+## Funcionalidades y estado
 
-1. Consulta y búsqueda de tratamientos mediante filtros, paginación y ordenamiento.
-2. Consulta de profesionales y disponibilidad de horarios.
-3. Reserva y cancelación de turnos, con validación de conflictos de agenda.
-4. Gestión de estados de turnos y registro de tratamientos completados.
-5. Acreditación de puntos y canje de beneficios según reglas del centro.
-6. Envío de correos electrónicos al confirmar o cancelar un turno por parte del profesional.
-7. Carrito de reserva con bloqueo temporal del horario durante 10 minutos y liberación automática al vencer.
-8. Gestión de seña obligatoria del 30 % del precio del tratamiento para confirmar la reserva; devolución del 100 % si se cancela con al menos 24 horas de anticipación, sin devolución por cancelación tardía o inasistencia.
-9. Gestión administrativa del catálogo, la agenda y el programa de beneficios.
+| Funcionalidad | Estado actual |
+| --- | --- |
+| Catálogo con búsqueda, filtros, paginación y ordenamiento | Implementada para lecturas locales; usa consultas a MongoDB. OpenSearch no está conectado. |
+| Perfiles públicos, selección profesional y consulta de disponibilidad | Implementados; requieren asociación válida y agenda activa. |
+| Identidad y permisos por operación | Implementados para las rutas de identidad, administración del catálogo y reservas descritas en la documentación. |
+| Reserva, carrito de 10 minutos, seña del 30 %, confirmación y cancelación | Implementados para el recorrido local con adaptador Mercado Pago en modo test. |
+| Prevención de cruces y concurrencia | Implementada para el bloqueo/turno de un profesional y cubierta por la prueba de integración de Reservas. |
+| Interfaz web de registro, login, perfil, catálogo y reserva | Implementada y servida por Gateway/NGINX. |
+| Puntos por tratamientos completados, canjes y notificaciones por correo | Pendientes de implementación en los flujos de negocio. |
+| API consumida para búsqueda de sedes cercanas (Cocina Fantasma) | Pendiente de entrega del contrato/API del otro grupo. |
+| Consola administrativa web | No incluida; la gestión disponible se realiza por rutas protegidas. |
 
-Las reglas detalladas y los criterios de aceptación se documentarán en [SPEC.md](SPEC.md).
+Las reglas y la verificación por punto están en [SPEC.md](SPEC.md#13-estado-de-implementación-y-verificación). La operación local y el flujo demo están en [docs/LOCAL-DEV.md](docs/LOCAL-DEV.md) y [docs/RESERVAS-WEB.md](docs/RESERVAS-WEB.md).
 
 ## Flujo principal: reserva de un turno
 
 1. El cliente busca un tratamiento y consulta su información.
 2. Selecciona un profesional y un horario disponible.
 3. Solicita la reserva.
-4. El sistema valida que el profesional pueda atender el tratamiento, que no haya incompatibilidades con la agenda del profesional ni con otros turnos del cliente y que el horario siga disponible.
+4. El sistema valida que el profesional pueda atender el tratamiento, que el horario esté dentro de su agenda y que no se superponga con turnos o bloqueos vigentes de ese profesional.
 5. Al agregar el horario al carrito, lo bloquea durante 10 minutos; si el cliente no confirma, lo libera automáticamente.
 6. Para confirmar, exige el pago exitoso de una seña equivalente al 30 % del precio del tratamiento y transforma el bloqueo en reserva. Si se cancela con 24 horas o más de anticipación, se devuelve el 100 % de la seña; con menos de 24 horas o ante inasistencia, no se devuelve.
-7. La confirmación o cancelación realizada por el profesional genera un evento para enviar un correo al cliente.
-8. Una vez realizado el tratamiento, el profesional registra su finalización y se inicia la acreditación de puntos correspondiente.
+7. La cancelación libera el horario; si se solicita con al menos 24 horas de anticipación, se tramita la devolución de la seña.
 
-La confirmación de una reserva y la acreditación de puntos deberán contemplar concurrencia, duplicación de solicitudes y fallas parciales. Los puntos se registran con una clave única para evitar acreditaciones duplicadas. Los correos usan un intento inicial y hasta 3 reintentos automáticos con esperas crecientes; si siguen fallando, pasan a una cola de errores para revisión. Los bloqueos temporales del carrito también deberán respetar las reglas de incompatibilidad y expirar automáticamente.
+La acreditación de puntos por tratamientos completados, el envío de correos y las incompatibilidades entre tratamientos del mismo cliente pertenecen al alcance general, pero todavía no forman parte del flujo local implementado.
 
 ## Arquitectura y estado de implementación
 
@@ -58,6 +59,7 @@ El sistema cuenta con un **frontend web**, un **API Gateway** y microservicios c
 | Autenticación | Registro e inicio de sesión, identidad de la cuenta y autorización por roles. | 
 | Catálogo y Profesionales | Tratamientos, categorías, profesionales, precios, duraciones, palabras clave y puntos configurados. |
 | Reservas | Agenda, disponibilidad efectiva, creación, cancelación y finalización de turnos. |
+| Pagos | Adaptación de Checkout Pro, verificación de señas y solicitud de devoluciones en Mercado Pago test. |
 | Beneficios | Saldos, movimientos de puntos, canjes, aplicaciones y restituciones. |
 | API Gateway | Punto de entrada del frontend y enrutamiento hacia los servicios. |
 
@@ -145,11 +147,9 @@ Los datos se persisten en MongoDB Atlas, en las bases correspondientes a cada se
 
 **Nota:** Las variables de entorno y credenciales se configuran en Render y no deben incluirse en el repositorio.
 
-## Integración con otro grupo
+## Integración con otros grupos
 
-Se diseñará y documentará una capacidad de MELT para consumo externo mediante un contrato formal y versionado. La capacidad elegida es una API versionada de consulta de tratamientos con filtros, información descriptiva y precios. Su contrato y mock se prepararán en la documentación de integración. También se incorporará una capacidad provista por otro grupo según la asignación docente.
-
-Documentación prevista: [docs/contracts/README.md](docs/contracts/README.md).
+MELT publica la API versionada de catálogo para el Grupo 1 (Gimnasio); el contrato y el mock están en [docs/contracts/README.md](docs/contracts/README.md). MELT debe consumir la API del grupo de Cocina Fantasma para búsqueda de sedes cercanas adaptada a centros o profesionales. Esa integración sigue pendiente hasta que dicho grupo entregue su API y contrato.
 
 ## Documentación del proyecto
 
@@ -158,7 +158,7 @@ Documentación prevista: [docs/contracts/README.md](docs/contracts/README.md).
 - [Decisiones arquitectónicas — docs/adr/](docs/adr/)
 - [Contratos de integración — docs/contracts/](docs/contracts/)
 
-Los enlaces a documentos aún no creados comenzarán a funcionar cuando se incorporen al repositorio.
+La guía para ejecutar y probar el sistema localmente es [docs/LOCAL-DEV.md](docs/LOCAL-DEV.md).
 
 ## Organización del equipo
 
@@ -172,7 +172,9 @@ Los enlaces a documentos aún no creados comenzarán a funcionar cuando se incor
 
 ## Estado del proyecto
 
-Este documento corresponde a la **primera entrega de diseño**. La arquitectura, las tecnologías y las funcionalidades aquí descritas representan el alcance y las decisiones preliminares del equipo, no funcionalidades ya implementadas. Se actualizará durante el desarrollo para reflejar el estado real del sistema.
+El repositorio ya incluye una interfaz web conectada al gateway, autenticación, catálogo público de tratamientos y profesionales, permisos por operación en Reservas, agenda y disponibilidad, bloqueo temporal de carrito, checkout de seña y cancelaciones con la política de devolución. El estado verificable de la parte de identidad y reservas, las pruebas ejecutadas y las condiciones para una prueba real están en [SPEC.md, sección 13](SPEC.md#13-estado-de-implementación-y-verificación) y en la [guía de reservas web](docs/RESERVAS-WEB.md).
+
+La integración con el proveedor externo asignado (búsqueda de sedes cercanas) sigue pendiente de que el otro grupo publique su API y contrato. También siguen fuera del flujo implementado las funciones de puntos por tratamientos completados, canjes, notificaciones por correo, y las integraciones de negocio con RabbitMQ, OpenSearch, Memcached y Prometheus. Las pruebas locales usan Mercado Pago en modo test; esto no equivale a un despliegue ni a cobros de producción.
 
 
 ## Desarrollo local
