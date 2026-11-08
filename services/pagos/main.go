@@ -10,6 +10,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -44,6 +45,19 @@ type refundRequest struct {
 	Reason    string  `json:"motivo"`
 }
 
+type preferenceRequest struct {
+	Amount    float64 `json:"importe"`
+	Currency  string  `json:"moneda"`
+	Reference string  `json:"referencia"`
+	Title     string  `json:"titulo"`
+}
+
+type preferenceResponse struct {
+	ID               string `json:"id"`
+	InitPoint        string `json:"init_point"`
+	SandboxInitPoint string `json:"sandbox_init_point"`
+}
+
 type mpPayment struct {
 	ID                json.RawMessage `json:"id"`
 	Status            string          `json:"status"`
@@ -59,7 +73,70 @@ func (s *server) handler() http.Handler {
 	})
 	mux.HandleFunc("POST /payments/verify", s.verify)
 	mux.HandleFunc("POST /payments/refunds", s.refund)
+	mux.HandleFunc("POST /payments/preferences", s.createPreference)
 	return mux
+}
+
+func (s *server) createPreference(w http.ResponseWriter, r *http.Request) {
+	var req preferenceRequest
+	if err := decodeJSON(r, &req); err != nil || !validAmount(req.Amount) || req.Currency != "ARS" ||
+		!validReference(req.Reference) || strings.TrimSpace(req.Title) == "" || len(req.Title) > 120 {
+		writeError(w, http.StatusBadRequest, "Solicitud de pago inválida")
+		return
+	}
+	body := map[string]any{
+		"items": []map[string]any{{
+			"title": strings.TrimSpace(req.Title), "quantity": 1,
+			"currency_id": req.Currency, "unit_price": req.Amount,
+		}},
+		"external_reference": req.Reference,
+	}
+	var returns map[string]string
+	if returnURL := strings.TrimSpace(os.Getenv("MP_RETURN_URL")); returnURL != "" {
+		parsed, err := url.Parse(returnURL)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+			writeError(w, http.StatusServiceUnavailable, "MP_RETURN_URL debe ser una URL HTTPS pública")
+			return
+		}
+		returns = map[string]string{
+			"success": returnURL + "?pago=aprobado&referencia=" + url.QueryEscape(req.Reference),
+			"failure": returnURL + "?pago=rechazado&referencia=" + url.QueryEscape(req.Reference),
+			"pending": returnURL + "?pago=pendiente&referencia=" + url.QueryEscape(req.Reference),
+		}
+		body["back_urls"] = returns
+		body["auto_return"] = "approved"
+	}
+	encoded, _ := json.Marshal(body)
+	var result preferenceResponse
+	if err := s.request(r, http.MethodPost, "/checkout/preferences", encoded, "cart-"+req.Reference, &result); err != nil {
+		writeError(w, http.StatusBadGateway, "Mercado Pago no pudo iniciar el pago")
+		return
+	}
+	checkoutURL := result.InitPoint
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("MP_ENV")), "test") && result.SandboxInitPoint != "" {
+		checkoutURL = result.SandboxInitPoint
+	}
+	if result.ID == "" || checkoutURL == "" {
+		writeError(w, http.StatusBadGateway, "Mercado Pago no devolvió un enlace de pago")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{"preferenciaId": result.ID, "urlPago": checkoutURL})
+}
+
+func validAmount(amount float64) bool {
+	return amount > 0 && !math.IsNaN(amount) && !math.IsInf(amount, 0)
+}
+
+func validReference(reference string) bool {
+	if reference == "" || len(reference) > 128 {
+		return false
+	}
+	for _, char := range reference {
+		if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '-' || char == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *server) verify(w http.ResponseWriter, r *http.Request) {
@@ -153,8 +230,14 @@ func (s *server) request(r *http.Request, method, path string, body []byte, idem
 }
 
 func validPaymentID(id string) bool {
-	if id == "" { return false }
-	for _, ch := range id { if ch < 48 || ch > 57 { return false } }
+	if id == "" {
+		return false
+	}
+	for _, ch := range id {
+		if ch < 48 || ch > 57 {
+			return false
+		}
+	}
 	return true
 }
 
@@ -185,9 +268,9 @@ func main() {
 		baseURL = defaultMPBaseURL
 	}
 	s := &server{
-		token: strings.TrimSpace(os.Getenv("MP_ACCESS_TOKEN")),
+		token:   strings.TrimSpace(os.Getenv("MP_ACCESS_TOKEN")),
 		baseURL: baseURL,
-		client: &http.Client{Timeout: 8 * time.Second},
+		client:  &http.Client{Timeout: 8 * time.Second},
 	}
 	if os.Getenv("MP_ENV") != "test" {
 		log.Fatal("MP_ENV debe ser 'test'; este servicio está limitado al entorno de pruebas")

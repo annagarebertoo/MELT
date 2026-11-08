@@ -63,9 +63,22 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 	tratamiento := tratamientoCatalogo{ID: "facial-01", Nombre: "Higiene facial", DuracionMinutos: 60, ProfesionalesIDs: []string{"prof-1"}, Precio: 10000, Moneda: "ARS"}
 	catalogo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _ = json.NewEncoder(w).Encode(tratamiento) }))
 	defer catalogo.Close()
-	var verifyCalls, refundCalls int
+	var verifyCalls, refundCalls, preferenceCalls int
 	pagos := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/payments/preferences":
+			preferenceCalls++
+			var req struct {
+				Importe    float64 `json:"importe"`
+				Moneda     string  `json:"moneda"`
+				Referencia string  `json:"referencia"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Importe != 3000 || req.Moneda != "ARS" || req.Referencia == "" {
+				http.Error(w, "invalid preference", http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]string{"preferenciaId": "pref-test-1", "urlPago": "https://checkout.test/pay"})
 		case "/payments/verify":
 			verifyCalls++
 			var req verificacionPagoRequest
@@ -125,6 +138,9 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 			bloqueoID = result.Bloqueo.ID
 			if result.Sena.Porcentaje != 30 || result.Sena.Importe != 3000 {
 				t.Fatalf("seña inesperada: %+v", result.Sena)
+			}
+			if result.Bloqueo.URLPago != "https://checkout.test/pay" || result.Bloqueo.PreferenciaID != "pref-test-1" || preferenceCalls != 1 {
+				t.Fatalf("no se generó un enlace de pago asociado al carrito: %+v; preferencias=%d", result.Bloqueo, preferenceCalls)
 			}
 			restante := time.Until(result.Bloqueo.ExpiraEn)
 			if restante < 9*time.Minute || restante > 10*time.Minute {

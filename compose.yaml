@@ -23,6 +23,7 @@ services:
     environment:
       MONGODB_URI: mongodb://mongodb:27017
       PORT: "8081"
+      AUTH_URL: ${AUTH_URL:-http://auth:8084}
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
     depends_on:
       mongodb:
@@ -64,6 +65,7 @@ services:
       MP_ENV: "test"
       MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
       MP_BASE_URL: ${MP_BASE_URL:-https://api.mercadopago.com}
+      MP_RETURN_URL: ${MP_RETURN_URL:-}
     restart: unless-stopped
 
   auth:

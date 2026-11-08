@@ -20,20 +20,30 @@ import (
 )
 
 type Tratamiento struct {
-	ID              string   `bson:"id" json:"id"`
-	Nombre          string   `bson:"nombre" json:"nombre"`
-	Descripcion     string   `bson:"descripcion" json:"descripcion"`
-	Categoria       string   `bson:"categoria" json:"categoria"`
-	Precio          float64  `bson:"precio" json:"precio"`
-	Moneda          string   `bson:"moneda" json:"moneda"`
-	DuracionMinutos int      `bson:"duracionMinutos" json:"duracionMinutos"`
-	Imagenes        []string `bson:"imagenes" json:"imagenes"`
-	Keywords        []string `bson:"keywords" json:"keywords"`
+	ID               string   `bson:"id" json:"id"`
+	Nombre           string   `bson:"nombre" json:"nombre"`
+	Descripcion      string   `bson:"descripcion" json:"descripcion"`
+	Categoria        string   `bson:"categoria" json:"categoria"`
+	Precio           float64  `bson:"precio" json:"precio"`
+	Moneda           string   `bson:"moneda" json:"moneda"`
+	DuracionMinutos  int      `bson:"duracionMinutos" json:"duracionMinutos"`
+	Imagenes         []string `bson:"imagenes" json:"imagenes"`
+	Keywords         []string `bson:"keywords" json:"keywords"`
 	ProfesionalesIDs []string `bson:"profesionalesIds" json:"profesionalesIds"`
 }
 
+type Profesional struct {
+	ID              string   `bson:"id" json:"id"`
+	Nombre          string   `bson:"nombre" json:"nombre"`
+	Descripcion     string   `bson:"descripcion,omitempty" json:"descripcion,omitempty"`
+	TratamientosIDs []string `bson:"tratamientosIds" json:"tratamientosIds"`
+	Activo          bool     `bson:"activo" json:"activo"`
+}
+
 type Servidor struct {
-	coleccion *mongo.Collection
+	coleccion          *mongo.Collection
+	profesionales      *mongo.Collection
+	authVerifyAdminURL string
 }
 
 func main() {
@@ -76,6 +86,7 @@ func main() {
 	}
 
 	coleccion := cliente.Database("catalogo_db").Collection("tratamientos")
+	profesionales := cliente.Database("catalogo_db").Collection("profesionales")
 	_, err = coleccion.Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "id", Value: 1}},
 		Options: options.Index().SetUnique(true).SetName("uq_tratamientos_id"),
@@ -84,8 +95,20 @@ func main() {
 		slog.Error("mongodb_index_initialization_failed")
 		os.Exit(1)
 	}
+	_, err = profesionales.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "id", Value: 1}},
+		Options: options.Index().SetUnique(true).SetName("uq_profesionales_id"),
+	})
+	if err != nil {
+		slog.Error("professional_index_initialization_failed")
+		os.Exit(1)
+	}
 
-	servidor := &Servidor{coleccion: coleccion}
+	authURL := strings.TrimRight(strings.TrimSpace(os.Getenv("AUTH_URL")), "/")
+	if authURL == "" {
+		authURL = "http://auth:8084"
+	}
+	servidor := &Servidor{coleccion: coleccion, profesionales: profesionales, authVerifyAdminURL: authURL + "/verify-admin"}
 	router := crearRouter(servidor, func(ctx context.Context) error { return cliente.Ping(ctx, nil) })
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -133,8 +156,170 @@ func crearRouter(servidor *Servidor, ping func(context.Context) error) *gin.Engi
 
 	router.GET("/tratamientos", servidor.listarTratamientos)
 	router.GET("/tratamientos/:id", servidor.obtenerTratamiento)
-	router.POST("/tratamientos", servidor.crearTratamiento)
+	router.POST("/tratamientos", servidor.requiereAdmin(), servidor.crearTratamiento)
+	router.PUT("/tratamientos/:id", servidor.requiereAdmin(), servidor.actualizarTratamiento)
+	router.GET("/profesionales", servidor.listarProfesionales)
+	router.POST("/profesionales", servidor.requiereAdmin(), servidor.crearProfesional)
 	return router
+}
+
+func normalizarTratamiento(c *gin.Context, tratamiento *Tratamiento) bool {
+	tratamiento.ID = strings.TrimSpace(tratamiento.ID)
+	tratamiento.Nombre = strings.TrimSpace(tratamiento.Nombre)
+	tratamiento.Descripcion = strings.TrimSpace(tratamiento.Descripcion)
+	tratamiento.Categoria = strings.TrimSpace(tratamiento.Categoria)
+	for i := range tratamiento.Keywords {
+		tratamiento.Keywords[i] = strings.TrimSpace(tratamiento.Keywords[i])
+	}
+	for i := range tratamiento.ProfesionalesIDs {
+		tratamiento.ProfesionalesIDs[i] = strings.TrimSpace(tratamiento.ProfesionalesIDs[i])
+	}
+	if tratamiento.ID == "" || tratamiento.Nombre == "" || !categoriaValida(tratamiento.Categoria) ||
+		tratamiento.Descripcion == "" || tratamiento.Moneda != "ARS" || !precioValido(tratamiento.Precio) ||
+		tratamiento.DuracionMinutos <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_PARAMETER", "message": "ID, nombre, descripción y categoría son obligatorios; moneda debe ser ARS, precio no puede ser negativo y duración debe ser positiva."}})
+		return false
+	}
+	if tratamiento.Keywords == nil {
+		tratamiento.Keywords = []string{}
+	}
+	if tratamiento.Imagenes == nil {
+		tratamiento.Imagenes = []string{}
+	}
+	if tratamiento.ProfesionalesIDs == nil {
+		tratamiento.ProfesionalesIDs = []string{}
+	}
+	return true
+}
+
+func (s *Servidor) actualizarTratamiento(c *gin.Context) {
+	var tratamiento Tratamiento
+	if err := c.ShouldBindJSON(&tratamiento); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "DATOS_INVALIDOS", "message": "El cuerpo debe ser un JSON válido."}})
+		return
+	}
+	pathID := strings.TrimSpace(c.Param("id"))
+	if tratamiento.ID == "" {
+		tratamiento.ID = pathID
+	}
+	if tratamiento.ID != pathID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "ID_INCONSISTENTE", "message": "El ID del cuerpo debe coincidir con el ID de la ruta."}})
+		return
+	}
+	if !normalizarTratamiento(c, &tratamiento) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	result, err := s.coleccion.ReplaceOne(ctx, bson.D{{Key: "id", Value: pathID}}, tratamiento)
+	if err != nil {
+		responderErrorDB(c, err)
+		return
+	}
+	if result.MatchedCount == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "TRATAMIENTO_NOT_FOUND", "message": "No existe un tratamiento con el identificador solicitado."}})
+		return
+	}
+	c.JSON(http.StatusOK, tratamiento)
+}
+
+func (s *Servidor) requiereAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authorization := strings.TrimSpace(c.GetHeader("Authorization"))
+		if !strings.HasPrefix(authorization, "Bearer ") || s.authVerifyAdminURL == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "IDENTIDAD_REQUERIDA", "message": "Iniciá sesión con una cuenta administrativa."}})
+			return
+		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.authVerifyAdminURL, nil)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AUTENTICACION_NO_DISPONIBLE", "message": "No se pudo verificar la sesión."}})
+			return
+		}
+		req.Header.Set("Authorization", authorization)
+		resp, err := (&http.Client{Timeout: 3 * time.Second}).Do(req)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AUTENTICACION_NO_DISPONIBLE", "message": "No se pudo verificar la sesión."}})
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			c.AbortWithStatusJSON(resp.StatusCode, gin.H{"error": gin.H{"code": "PERMISOS_INSUFICIENTES", "message": "Se requiere rol de administrador."}})
+			return
+		}
+		if resp.StatusCode != http.StatusNoContent {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AUTENTICACION_NO_DISPONIBLE", "message": "No se pudo verificar la sesión."}})
+			return
+		}
+		c.Next()
+	}
+}
+
+func (s *Servidor) listarProfesionales(c *gin.Context) {
+	if s.profesionales == nil {
+		c.JSON(http.StatusOK, gin.H{"profesionales": []Profesional{}})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	filter := bson.D{{Key: "activo", Value: true}}
+	if treatmentID := strings.TrimSpace(c.Query("tratamientoId")); treatmentID != "" {
+		filter = append(filter, bson.E{Key: "tratamientosIds", Value: treatmentID})
+	}
+	cursor, err := s.profesionales.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "nombre", Value: 1}, {Key: "id", Value: 1}}))
+	if err != nil {
+		responderErrorDB(c, err)
+		return
+	}
+	defer cursor.Close(ctx)
+	items := make([]Profesional, 0)
+	if err := cursor.All(ctx, &items); err != nil {
+		responderErrorDB(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"profesionales": items})
+}
+
+func (s *Servidor) crearProfesional(c *gin.Context) {
+	if s.profesionales == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "El catálogo de profesionales no está disponible."})
+		return
+	}
+	var profesional Profesional
+	if err := c.ShouldBindJSON(&profesional); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "DATOS_INVALIDOS", "message": "Enviá un profesional en formato JSON válido."}})
+		return
+	}
+	profesional.ID = strings.TrimSpace(profesional.ID)
+	profesional.Nombre = strings.TrimSpace(profesional.Nombre)
+	profesional.Descripcion = strings.TrimSpace(profesional.Descripcion)
+	if profesional.ID == "" || profesional.Nombre == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "DATOS_INVALIDOS", "message": "El identificador y el nombre del profesional son obligatorios."}})
+		return
+	}
+	ids := make([]string, 0, len(profesional.TratamientosIDs))
+	seen := map[string]bool{}
+	for _, id := range profesional.TratamientosIDs {
+		id = strings.TrimSpace(id)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	profesional.TratamientosIDs = ids
+	profesional.Activo = true
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	if _, err := s.profesionales.InsertOne(ctx, profesional); err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "PROFESIONAL_EXISTENTE", "message": "Ya existe un profesional con ese identificador."}})
+			return
+		}
+		responderErrorDB(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, profesional)
 }
 
 func (s *Servidor) listarTratamientos(c *gin.Context) {
@@ -297,57 +482,12 @@ func (s *Servidor) crearTratamiento(c *gin.Context) {
 		return
 	}
 
-	tratamiento.ID = strings.TrimSpace(tratamiento.ID)
-	tratamiento.Nombre = strings.TrimSpace(tratamiento.Nombre)
-	tratamiento.Descripcion = strings.TrimSpace(tratamiento.Descripcion)
-	tratamiento.Categoria = strings.TrimSpace(tratamiento.Categoria)
-	for i := range tratamiento.Keywords {
-		tratamiento.Keywords[i] = strings.TrimSpace(tratamiento.Keywords[i])
-	}
-
-	if tratamiento.ID == "" ||
-		tratamiento.Nombre == "" ||
-		!categoriaValida(tratamiento.Categoria) ||
-		tratamiento.Descripcion == "" ||
-		tratamiento.Moneda != "ARS" ||
-		!precioValido(tratamiento.Precio) ||
-		tratamiento.DuracionMinutos <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"code":    "INVALID_PARAMETER",
-				"message": "ID, nombre y descripción son obligatorios; categoría debe ser Facial, Corporal, Depilación o Manos y uñas; moneda debe ser ARS, el precio no puede ser negativo/no finito y la duración debe ser positiva.",
-			},
-		})
+	if !normalizarTratamiento(c, &tratamiento) {
 		return
-	}
-	if tratamiento.Keywords == nil {
-		tratamiento.Keywords = []string{}
-	}
-	if tratamiento.Imagenes == nil {
-		tratamiento.Imagenes = []string{}
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://melt-tygp.onrender.com/verify-admin", nil)
-if err != nil {
-    c.JSON(http.StatusInternalServerError, gin.H{"error": "No se pudo verificar la autorización."})
-    return
-}
-
-req.Header.Set("Authorization", c.GetHeader("Authorization"))
-
-resp, err := http.DefaultClient.Do(req)
-if err != nil {
-    c.JSON(http.StatusServiceUnavailable, gin.H{"error": "No se pudo verificar la autorización."})
-    return
-}
-defer resp.Body.Close()
-
-if resp.StatusCode != http.StatusNoContent {
-    c.JSON(resp.StatusCode, gin.H{"error": "Se requiere rol de administrador."})
-    return
-}
 	if _, err := s.coleccion.InsertOne(ctx, tratamiento); err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			c.JSON(http.StatusConflict, gin.H{"error": "Ya existe un tratamiento con ese ID."})

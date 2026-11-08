@@ -1,14 +1,40 @@
 openapi: 3.0.3
 
 info:
-  title: API de Tratamientos MELT
-  description: API pública para consultar tratamientos del catálogo MELT.
+  title: API de Catálogo MELT
+  description: API pública para consultar tratamientos y profesionales del catálogo MELT.
   version: 1.0.0
 
 servers:
   - url: /api/v1
 
 paths:
+  /profesionales:
+    get:
+      summary: Listar profesionales compatibles
+      description: Devuelve perfiles públicos activos; se puede filtrar por un tratamiento.
+      parameters:
+        - name: tratamientoId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Profesionales disponibles.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [profesionales]
+                properties:
+                  profesionales:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Profesional'
+        '503':
+          description: Catálogo no disponible temporalmente.
+
   /tratamientos:
     get:
       summary: Listar y buscar tratamientos
@@ -271,6 +297,27 @@ components:
             - limpieza
             - limpieza profunda
             - higiene facial
+
+        profesionalesIds:
+          type: array
+          description: Identificadores de profesionales compatibles con el tratamiento.
+          items:
+            type: string
+
+    Profesional:
+      type: object
+      required: [id, nombre]
+      properties:
+        id:
+          type: string
+        nombre:
+          type: string
+        descripcion:
+          type: string
+        tratamientosIds:
+          type: array
+          items:
+            type: string
 
     TratamientosResponse:
       type: object

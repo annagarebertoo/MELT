@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -139,5 +140,50 @@ func TestTratamientoIncluyeProfesionalesAsociados(t *testing.T) {
 	tratamiento := Tratamiento{ID: "t1", ProfesionalesIDs: []string{"p1", "p2"}}
 	if len(tratamiento.ProfesionalesIDs) != 2 || tratamiento.ProfesionalesIDs[0] != "p1" {
 		t.Fatalf("no se conservaron los profesionales asociados: %#v", tratamiento.ProfesionalesIDs)
+	}
+}
+
+func TestProfesionalesEsRutaPublicaConListaVacia(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := crearRouter(&Servidor{}, func(context.Context) error { return nil })
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/profesionales?tratamientoId=t1", nil))
+	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != "{\"profesionales\":[]}" {
+		t.Fatalf("respuesta inesperada: status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestAltaCatalogoVerificaRolConAuthInterno(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/verify-admin" {
+			t.Errorf("ruta de Auth inesperada: %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") == "Bearer administrador" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer auth.Close()
+	s := &Servidor{authVerifyAdminURL: auth.URL + "/verify-admin"}
+	router := gin.New()
+	router.POST("/admin", s.requiereAdmin(), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	cases := []struct {
+		name, bearer string
+		want         int
+	}{{"sin sesión", "", http.StatusUnauthorized}, {"cliente", "Bearer cliente", http.StatusForbidden}, {"administrador", "Bearer administrador", http.StatusNoContent}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/admin", nil)
+			if tc.bearer != "" {
+				req.Header.Set("Authorization", tc.bearer)
+			}
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, req)
+			if recorder.Code != tc.want {
+				t.Fatalf("status=%d body=%s; esperado %d", recorder.Code, recorder.Body.String(), tc.want)
+			}
+		})
 	}
 }

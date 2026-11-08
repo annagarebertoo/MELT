@@ -35,6 +35,7 @@ docker compose down -v
 | Salud del gateway | http://localhost:8080/health |
 | Listado público de tratamientos (contrato v1) | http://localhost:8080/api/v1/tratamientos |
 | Detalle público de tratamiento (contrato v1) | http://localhost:8080/api/v1/tratamientos/{id} |
+| Perfiles públicos de profesionales | http://localhost:8080/api/v1/profesionales |
 | Registro externo con puntos del gimnasio | http://localhost:8080/api/v1/beneficios/registro-externo |
 | Listado mediante alias compatible | http://localhost:8080/api/v1/catalogo/tratamientos |
 | Búsqueda | http://localhost:8080/api/v1/catalogo/tratamientos?q=facial |
@@ -49,11 +50,12 @@ Credenciales de desarrollo por defecto: RabbitMQ `guest/guest`; Grafana `admin/a
 
 ## Alta de un tratamiento desde Postman
 
-La creación de tratamientos funciona en el servicio de Catálogo, a través de la ruta compatible `POST /api/v1/catalogo/tratamientos`. La ruta contractual `/api/v1/tratamientos` es pública y de solo lectura; el gateway bloquea POST en ese alias. No confundir el endpoint administrativo/local de carga con la API GET que consume otro grupo.
+La creación y edición de tratamientos funcionan a través de `POST /api/v1/catalogo/tratamientos` y `PUT /api/v1/catalogo/tratamientos/{id}`. Requieren `Authorization: Bearer <token-administrativo>`; el servicio Catálogo valida el rol con Auth por la red interna. La ruta contractual `/api/v1/tratamientos` es pública y de solo lectura.
 
 - Método: `POST`
 - URL: `http://localhost:8080/api/v1/catalogo/tratamientos`
 - Header: `Content-Type: application/json`
+- Header: `Authorization: Bearer <token-administrativo>`
 - Body: `raw` → `JSON`
 
 Ejemplo válido (cambiar el ID si ya existe; el campo es `duracionMinutos`, no `duracionMin`):
@@ -72,7 +74,15 @@ Ejemplo válido (cambiar el ID si ya existe; el campo es `duracionMinutos`, no `
 }
 ```
 
-Resultado esperado: `201 Created` y el tratamiento creado en el cuerpo de la respuesta. Si se repite un ID existente, la API responde `409 Conflict`. Los campos obligatorios incluyen `id`, `nombre`, `descripcion`, una `categoria` exactamente igual a `Facial`, `Corporal`, `Depilación` o `Manos y uñas`, `moneda: "ARS"`, un `precio` finito no negativo y `duracionMinutos` positivo. Si no se envían `imagenes` o `keywords`, el servicio los inicializa como arreglos vacíos.
+Resultado esperado: `201 Created` y el tratamiento creado en el cuerpo de la respuesta. Si se repite un ID existente, la API responde `409 Conflict`. Los campos obligatorios incluyen `id`, `nombre`, `descripcion`, una `categoria` exactamente igual a `Facial`, `Corporal`, `Depilación` o `Manos y uñas`, `moneda: "ARS"`, un `precio` finito no negativo y `duracionMinutos` positivo. Si no se envían arreglos, el servicio inicializa `imagenes`, `keywords` y `profesionalesIds` como vacíos.
+
+## Preparar y recorrer las reservas web
+
+Los perfiles activos se consultan en `GET /api/v1/profesionales?tratamientoId={id}`. Para habilitar un tratamiento, asociá el ID de un profesional tanto en el perfil (`tratamientosIds`) como en el tratamiento (`profesionalesIds`) y configurá su agenda con `PUT /api/v1/reservas/agenda`. Las tres operaciones de Catálogo requieren un token administrativo. Reservas valida el ID, la duración, la compatibilidad y el horario antes de crear un bloqueo.
+
+El flujo visual y los ejemplos de preparación de profesional, tratamiento y agenda están en [RESERVAS-WEB.md](RESERVAS-WEB.md). Para que haya pago de prueba, configura `MP_ACCESS_TOKEN` de prueba. El Checkout Pro genera un enlace por el 30 % y el ID del carrito se usa como referencia en la validación. Sin credenciales válidas no se retiene un horario.
+
+Al desplegar Catálogo fuera de Compose, definí `AUTH_URL` con la URL base interna o privada del servicio Auth, por ejemplo `https://melt-tygp.onrender.com`. En Compose, el servicio usa `http://auth:8084` como valor predeterminado. No configures la URL de Auth en el frontend.
 
 ## Escalar el catálogo
 

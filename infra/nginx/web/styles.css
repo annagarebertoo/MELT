@@ -156,6 +156,7 @@ body.menu-open{overflow:hidden}
 .hold-message,.payment-guidance{color:var(--muted);font-size:.75rem;line-height:1.55}
 .deposit-summary{display:flex;justify-content:space-between;align-items:center;margin:14px 0;padding:13px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:.75rem;color:var(--muted)}.deposit-summary strong{color:var(--chocolate);font-size:1.1rem}
 .payment-form .form-field{margin-top:17px}.release-button{display:block;margin:12px auto 0;text-decoration:underline;text-underline-offset:4px}
+.button-payment{display:flex;align-items:center;justify-content:center;min-height:45px;margin:10px 0 16px;padding:0 15px;background:#138b63;color:#fff;text-align:center}.button-payment:hover{background:#08734f}
 .button:disabled,.slot-button:disabled{cursor:not-allowed;opacity:.5}
 .booking-row{gap:14px}.booking-status{text-transform:capitalize;color:#6d7154!important}
 .site-footer{display:grid;grid-template-columns:1fr auto;align-items:end;gap:18px}.footer-brand .brand{letter-spacing:.28em}.footer-brand p{margin:8px 0 0;font-family:var(--serif);font-size:.95rem}.footer-links{display:flex;gap:20px;flex-wrap:wrap}.footer-links a{font-size:.72rem;color:rgba(248,243,233,.82)}.footer-links a:hover{text-decoration:underline;text-underline-offset:4px}.site-footer>span{grid-column:1/-1;padding-top:12px;border-top:1px solid rgba(248,243,233,.16)}

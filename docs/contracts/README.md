@@ -2,7 +2,7 @@
 
 ## Descripción
 
-La API pública de Tratamientos permite a otros componentes y grupos consultar el catálogo de tratamientos de MELT. Para la consigna de integración, el Grupo 1 (Gimnasio) es consumidor del catálogo del Grupo 5 (MELT).
+La API pública permite consultar tratamientos y perfiles profesionales activos de MELT. Para la consigna de integración, el Grupo 1 (Gimnasio) es consumidor del catálogo del Grupo 5 (MELT).
 
 La API de consulta está versionada como `v1`. La carga administrativa de tratamientos mediante POST existe en la ruta compatible de desarrollo, pero no forma parte del contrato público de solo lectura.
 
@@ -19,6 +19,12 @@ La versión del documento OpenAPI es `1.0.0` (OpenAPI `3.0.3`). La URL base cont
 Desde la actualización D8 del 23/10/2026, NGINX publica las rutas contractuales `/api/v1/tratamientos` y `/api/v1/tratamientos/{id}`, y conserva `/api/v1/catalogo/tratamientos` y su detalle como alias compatible. Ambos accesos GET consultan el mismo Catálogo y MongoDB, sin redirecciones ni cambios de esquema. El nuevo alias contractual es de solo lectura y NGINX bloquea POST en esa ruta.
 
 ## Endpoints públicos
+
+### Listar profesionales
+
+`GET /api/v1/profesionales?tratamientoId=trat-002`
+
+Devuelve los perfiles públicos activos, ordenados por nombre. El filtro `tratamientoId` limita el resultado a profesionales cuyo perfil y tratamiento estén asociados. La interfaz ofrece la intersección entre esos perfiles y `profesionalesIds` del tratamiento; una asociación incompleta no habilita horarios.
 
 ### Listar y buscar tratamientos
 
@@ -144,4 +150,10 @@ El servicio de autenticación se publica a través del gateway en `/api/v1/auth`
 
 El registro público siempre asigna el rol `cliente`; no permite que una persona se otorgue permisos internos. La creación de cuentas internas requiere sesión administrativa, y solo el superadministrador puede asignar roles administrativos. Las credenciales sensibles se configuran mediante variables de entorno, no en el repositorio.
 
-La autenticación todavía debe integrarse en cada endpoint de negocio que requiera sesión (por ejemplo, reservas, agenda, puntos y administración) cuando esos flujos estén implementados. La publicación de los endpoints de autenticación no significa que todas las rutas del sistema ya estén protegidas.
+El gateway verifica la sesión en las rutas privadas de Reservas y Beneficios y propaga identidad verificada. Reservas vuelve a aplicar permisos por operación y pertenencia del turno; Catálogo consulta Auth en la red interna antes de aceptar altas administrativas. Los GET de catálogo y perfiles profesionales son públicos.
+
+## Gestión de perfiles y asociación de profesionales
+
+Las operaciones `POST /api/v1/catalogo/profesionales`, `POST /api/v1/catalogo/tratamientos` y `PUT /api/v1/catalogo/tratamientos/{id}` son administrativas, no parte del contrato público de solo lectura. Requieren Bearer válido con rol administrador o superadministrador. Para habilitar reservas, el ID debe figurar en `profesionalesIds` del tratamiento, el perfil debe incluir ese tratamiento en `tratamientosIds` y Reservas debe tener una agenda activa para el mismo ID.
+
+La guía de [configuración y prueba del flujo web de reservas](../RESERVAS-WEB.md) documenta el orden de carga, la agenda y el pago de prueba.

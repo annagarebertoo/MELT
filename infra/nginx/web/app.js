@@ -1,5 +1,6 @@
 const API = "/api/v1";
 const TOKEN_KEY = "melt.session";
+const CART_KEY = "melt.pending-cart";
 const state = { page: 1, pageSize: 8, hasNext: false, search: "", category: "", priceMax: "", sort: "nombre", order: "asc", bookingTreatment: null, heldCartId: null, holdExpiresAt: null, holdTimer: null, cancelling: null, mode: "login" };
 
 const $ = (selector) => document.querySelector(selector);
@@ -7,7 +8,7 @@ const token = () => sessionStorage.getItem(TOKEN_KEY);
 const formatPrice = (amount) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(Number(amount || 0));
 const escapeHTML = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 const treatmentLabel = (item) => Number(item?.duracionMinutos) >= 5 ? `${item.nombre} · ${Number(item.duracionMinutos)} min` : `${item.nombre} · agenda en actualización`;
-const canBook = (item) => Number(item?.duracionMinutos) >= 5 && Array.isArray(item?.profesionalesIds) && item.profesionalesIds.length > 0;
+const canBook = (item) => Number(item?.duracionMinutos) >= 5 && Array.isArray(item?.profesionalesIds) && item.profesionalesIds.length > 0 && (window.professionalsByTreatment?.[item.id]?.length || 0) > 0;
 
 async function request(path, options = {}) {
   const headers = new Headers(options.headers || {});
@@ -67,15 +68,29 @@ function updateProfessionals() {
   state.bookingTreatment = treatment;
   const ids = Array.isArray(treatment?.profesionalesIds) ? treatment.profesionalesIds : [];
   const select = $("#booking-professional");
-  select.innerHTML = `<option value="">${ids.length ? "Elegí un profesional" : "Sin profesionales asignados"}</option>${ids.map((value, index) => `<option value="${escapeHTML(value)}">${escapeHTML(professionalLabel(value, index))}</option>`).join("")}`;
+  const profiles = window.professionalsByTreatment?.[id] || [];
+  select.innerHTML = `<option value="">${profiles.length ? "Elegí un profesional" : "Sin profesionales publicados"}</option>${profiles.map((person) => `<option value="${escapeHTML(person.id)}">${escapeHTML(person.nombre)}</option>`).join("")}`;
   const submit = $("#availability-form").querySelector("button[type=submit]");
   const valid = canBook(treatment);
   submit.disabled = !valid || !token();
   if (!treatment) setStatus("#availability-status", "Elegí un tratamiento para consultar la agenda.");
   else if (!Number(treatment.duracionMinutos) || Number(treatment.duracionMinutos) < 5) setStatus("#availability-status", "Este tratamiento todavía no tiene una duración válida. La agenda estará disponible cuando el catálogo se actualice.");
   else if (!ids.length) setStatus("#availability-status", "Este tratamiento todavía no tiene profesionales asignados. Consultá en recepción mientras se actualiza la agenda.");
+  else if (!profiles.length) setStatus("#availability-status", "Falta publicar el perfil del profesional asociado. La reserva quedará disponible cuando el catálogo se complete.");
   else setStatus("#availability-status", "Seleccioná profesional y fecha para consultar horarios.");
   updateSteps(1);
+}
+
+async function loadProfessionalProfiles(treatments) {
+  window.professionalsByTreatment = {};
+  await Promise.all(treatments.map(async (item) => {
+    if (!Array.isArray(item.profesionalesIds) || !item.profesionalesIds.length) return;
+    try {
+      const result = await request(`/profesionales?tratamientoId=${encodeURIComponent(item.id)}`);
+      const assigned = new Set(item.profesionalesIds);
+      window.professionalsByTreatment[item.id] = (result.profesionales || []).filter((person) => assigned.has(person.id));
+    } catch { window.professionalsByTreatment[item.id] = []; }
+  }));
 }
 
 function detailTreatment(item) {
@@ -85,10 +100,10 @@ function detailTreatment(item) {
   $("#detail-description").textContent = item.descripcion || "Un momento para vos, con atención personalizada.";
   $("#detail-duration").textContent = Number(item.duracionMinutos) >= 5 ? `${Number(item.duracionMinutos)} min` : "A confirmar";
   $("#detail-price").textContent = formatPrice(item.precio);
-  const keywords = Array.isArray(item.palabrasClave) ? item.palabrasClave : [];
+  const keywords = Array.isArray(item.keywords) ? item.keywords : [];
   $("#detail-keywords").innerHTML = keywords.length ? keywords.map((word) => `<span>${escapeHTML(word)}</span>`).join("") : "";
-  const ids = Array.isArray(item.profesionalesIds) ? item.profesionalesIds : [];
-  $("#detail-professionals").textContent = ids.length ? `${ids.length} profesional${ids.length === 1 ? "" : "es"} disponible${ids.length === 1 ? "" : "s"} en el catálogo` : "Profesionales: agenda en actualización";
+  const people = window.professionalsByTreatment?.[item.id] || [];
+  $("#detail-professionals").textContent = people.length ? `Atiende${people.length === 1 ? "" : "n"}: ${people.map((person) => person.nombre).join(", ")}` : "Profesionales: agenda en actualización";
   const available = canBook(item);
   $("#detail-availability").textContent = available ? "Consultá disponibilidad en tiempo real y elegí el horario que te quede mejor." : "La reserva online para este tratamiento estará disponible cuando el catálogo tenga duración y profesionales asignados.";
   const button = $("#detail-book");
@@ -125,6 +140,7 @@ async function loadTreatments() {
   try {
     const result = await request(`/tratamientos?${params}`);
     const treatments = result.tratamientos || [];
+    await loadProfessionalProfiles(treatments);
     window.treatments = treatments;
     const total = Number(result.pagination?.total ?? treatments.length);
     state.hasNext = state.page * state.pageSize < total;
@@ -250,14 +266,21 @@ async function loadBookings() {
     const bookings = result.turnos || [];
     const treatmentIds = [...new Set(bookings.map((booking) => booking.tratamientoId))];
     const names = new Map();
+    const professionalNames = new Map();
     await Promise.all(treatmentIds.map(async (id) => {
-      try { const item = await request(`/tratamientos/${encodeURIComponent(id)}`); names.set(id, item.nombre); } catch {}
+      try {
+        const item = await request(`/tratamientos/${encodeURIComponent(id)}`);
+        names.set(id, item.nombre);
+        const people = await request(`/profesionales?tratamientoId=${encodeURIComponent(id)}`);
+        for (const person of people.profesionales || []) professionalNames.set(person.id, person.nombre);
+      } catch {}
     }));
     list.innerHTML = bookings.map((booking) => {
       const date = new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(booking.inicio));
       const status = booking.estado === "confirmado" ? "Confirmado" : booking.estado;
       const amount = booking.sena != null ? `<small>Seña: ${formatPrice(booking.sena)}</small>` : "";
-      return `<article class="booking-row"><div><strong>${escapeHTML(names.get(booking.tratamientoId) || "Tratamiento")}</strong><span>${escapeHTML(date)} · ${escapeHTML(professionalLabel(booking.profesionalId, 0))}</span><small class="booking-status">${escapeHTML(status)}</small>${amount}</div>${booking.estado === "confirmado" ? `<button class="text-link cancel-booking" type="button" data-id="${escapeHTML(booking.id)}" data-start="${escapeHTML(booking.inicio)}">Cancelar turno</button>` : ""}</article>`;
+      const professional = professionalNames.get(booking.profesionalId) || professionalLabel(booking.profesionalId, 0);
+      return `<article class="booking-row"><div><strong>${escapeHTML(names.get(booking.tratamientoId) || "Tratamiento")}</strong><span>${escapeHTML(date)} · ${escapeHTML(professional)}</span><small class="booking-status">${escapeHTML(status)}</small>${amount}</div>${booking.estado === "confirmado" ? `<button class="text-link cancel-booking" type="button" data-id="${escapeHTML(booking.id)}" data-start="${escapeHTML(booking.inicio)}">Cancelar turno</button>` : ""}</article>`;
     }).join("") || `<p class="empty-state">Todavía no tenés reservas. Elegí un tratamiento y buscá un horario.</p>`;
     list.querySelectorAll(".cancel-booking").forEach((button) => button.addEventListener("click", () => askCancel(button.dataset.id, button.dataset.start)));
   } catch (error) { list.innerHTML = `<p class="form-status error-text">No pudimos cargar las reservas: ${escapeHTML(error.message)}</p>`; }
@@ -320,6 +343,7 @@ function clearHoldUI() {
   $("#hold-countdown").textContent = "10:00";
   $("#payment-form").classList.add("hidden");
   $("#payment-id").value = "";
+  sessionStorage.removeItem(CART_KEY);
 }
 
 function startCountdown(expiration) {
@@ -349,14 +373,44 @@ async function holdSlot(time) {
       body: JSON.stringify({ profesionalId: $("#booking-professional").value, tratamientoId: $("#booking-treatment").value, inicio: localStart.toISOString() })
     });
     state.heldCartId = result.bloqueo.id;
-    $("#hold-message").textContent = `Completá el pago antes de que termine el contador para confirmar tu horario.`;
+    $("#hold-message").textContent = `El horario está protegido durante diez minutos. Completá el pago antes de que venza el contador.`;
     $("#hold-amount").textContent = formatPrice(result.bloqueo.sena);
+    $("#checkout-link").href = result.bloqueo.urlPago || result.urlPago;
+    sessionStorage.setItem(CART_KEY, JSON.stringify({ id: result.bloqueo.id, expiresAt: result.bloqueo.expiraEn, urlPago: result.bloqueo.urlPago || result.urlPago, sena: result.bloqueo.sena }));
     $("#payment-form").classList.remove("hidden");
     $("#payment-id").focus();
     startCountdown(result.bloqueo.expiraEn);
     setStatus("#availability-status", "Horario guardado temporalmente en tu carrito.");
     updateSteps(3);
   } catch (error) { setStatus("#availability-status", error.message, true); }
+}
+
+function restorePendingCart() {
+  if (!token()) return;
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(CART_KEY) || "null");
+    if (!saved?.id || !saved?.expiresAt || new Date(saved.expiresAt).getTime() <= Date.now()) {
+      if (saved) {
+        sessionStorage.removeItem(CART_KEY);
+        setStatus("#availability-status", "El bloqueo anterior venció. Consultá nuevamente para elegir otro horario.");
+      }
+      return;
+    }
+    state.heldCartId = saved.id;
+    $("#hold-amount").textContent = formatPrice(saved.sena);
+    $("#checkout-link").href = saved.urlPago || "#";
+    $("#hold-message").textContent = "Tu carrito sigue activo. Completá el pago antes de que termine el contador.";
+    $("#payment-form").classList.remove("hidden");
+    startCountdown(saved.expiresAt);
+    updateSteps(3);
+    const paymentID = new URLSearchParams(window.location.search).get("payment_id") || new URLSearchParams(window.location.search).get("collection_id");
+    if (paymentID && /^\d+$/.test(paymentID)) {
+      $("#payment-id").value = paymentID;
+      setStatus("#availability-status", "Recibimos el regreso de Mercado Pago. Validá el ID para confirmar tu turno.");
+    }
+  } catch {
+    sessionStorage.removeItem(CART_KEY);
+  }
 }
 
 async function confirmBooking(event) {
@@ -449,6 +503,7 @@ function initialize() {
   updateAuthChrome();
   loadTreatments();
   loadAccount();
+  restorePendingCart();
 }
 
 initialize();

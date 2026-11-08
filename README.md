@@ -199,6 +199,7 @@ El servicio `pagos` adapta la API de Mercado Pago al contrato interno que consum
    MP_ENV=test
    MP_ACCESS_TOKEN=PEGAR_ACCESS_TOKEN_DE_PRUEBA
    MP_BASE_URL=https://api.mercadopago.com
+   MP_RETURN_URL=
    ```
 
 3. Levantá o reconstruí los servicios:
@@ -212,9 +213,10 @@ El servicio `pagos` adapta la API de Mercado Pago al contrato interno que consum
 ### Contrato interno
 
 - `POST /payments/verify`: consulta `GET /v1/payments/{id}` a Mercado Pago y sólo marca aprobado si coinciden estado `approved`, ID, importe, moneda `ARS` y `external_reference` con el ID del carrito.
+- `POST /payments/preferences`: crea un Checkout Pro por el importe exacto de la seña, con el ID del carrito como `external_reference`; devuelve el enlace sandbox de pago. Si se configura `MP_RETURN_URL`, debe ser una URL HTTPS pública y se agrega como destino de retorno.
 - `POST /payments/refunds`: crea una devolución parcial mediante `POST /v1/payments/{id}/refunds`, enviando el importe y el encabezado `X-Idempotency-Key` para evitar duplicados.
 - `GET /health`: chequeo de disponibilidad del adaptador.
 
-El pago que se verifica debe haberse creado en Mercado Pago con el importe exacto de la seña (30 %), moneda ARS y `external_reference` igual al ID del carrito generado por `POST /carrito/bloqueos`. El adaptador no crea el checkout ni inventa pagos; verifica pagos reales de prueba ya creados en la cuenta de pruebas.
+La interfaz ofrece el enlace Checkout Pro devuelto al crear el carrito. Después del pago, el cliente ingresa o recupera el ID de la operación para que MELT verifique el estado aprobado, el importe exacto de la seña (30 %), moneda ARS y `external_reference` igual al ID del carrito generado por `POST /carrito/bloqueos`.
 
 No guardes el Access Token en el repositorio, en el frontend ni en logs. Usá cuentas y credenciales de prueba de Mercado Pago; nunca uses credenciales productivas en esta configuración.
