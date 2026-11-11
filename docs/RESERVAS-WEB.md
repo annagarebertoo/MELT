@@ -48,7 +48,7 @@ El usuario administrador debe estar creado al iniciar Auth (`AUTH_ADMIN_EMAIL` y
 
    Usa un email nuevo y una contraseña local propia. Auth no devuelve contraseñas en las respuestas. Si el email ya existe, consulta su identidad con su propia sesión profesional o elige otro email de demostración.
 
-3. Crea un tratamiento de prueba asociado al ID, y un perfil público con la misma asociación. Este paso aplica a perfiles gestionados por API; los perfiles demo descritos arriba ya existen en la base local:
+3. Crea primero un tratamiento sin profesionales y luego el perfil público asociado a ese tratamiento. El CRUD sincroniza automáticamente ambos extremos de la asociación. Este paso aplica a perfiles gestionados por API; los perfiles demo descritos arriba ya existen en la base local:
 
    ```powershell
    $treatmentID = 'demo-facial-60'
@@ -62,7 +62,7 @@ El usuario administrador debe estar creado al iniciar Auth (`AUTH_ADMIN_EMAIL` y
      duracionMinutos = 60
      imagenes = @()
      keywords = @('demostración', 'facial')
-     profesionalesIds = @($professionalID)
+     profesionalesIds = @()
    }
    Invoke-RestMethod "$base/catalogo/tratamientos" -Method Post -Headers $headers -ContentType 'application/json' -Body ($treatment | ConvertTo-Json -Depth 5)
 

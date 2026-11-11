@@ -1,8 +1,8 @@
 # ADR-007: Caché del catálogo
 
-> **Cierre documental de Entrega 2:** se define al final la política inicial, con hipótesis y parámetros de diseño. La necesidad y mejora de rendimiento siguen sin medición.
+> **Estado actualizado 11/11/2026:** la caché local se implementó y midió; la evidencia y su alcance están al final.
 
-- **Estado:** Propuesto
+- **Estado:** Implementado localmente; falta validar con tráfico del entorno de despliegue.
 - **Fecha:** 2026-10-21
 
 ## Contexto
@@ -50,4 +50,8 @@ Se usará cache-aside en Catálogo: buscar respuesta pública del listado; en mi
 
 Si Memcached no responde, limitar el intento de caché a un objetivo inicial de 50 ms, registrar fallo y continuar hacia la fuente. No reintentar la caché dentro de esa misma solicitud ni bloquear una lectura válida por no poder guardar su respuesta. Si la fuente falla, conservar el error: no servir valores vencidos como un resultado actual. El fallback y su presupuesto son diseño, no código existente.
 
-Medir hits, misses, errores/timeouts, latencia de caché y fuente, lecturas evitadas, tasa de claves repetidas y antigüedad observada. Comparar con/sin caché sobre el mismo dataset y patrón. Criterio inicial de habilitación: observar consultas repetidas y una reducción de lecturas a la fuente sin aumento de errores ni incumplimiento del objetivo de frescura; si no se demuestra beneficio, mantenerla deshabilitada y revisar la necesidad. No se inventa un porcentaje de mejora.
+El endpoint `/metrics` expone hits, misses y errores; una comparación local de 100
+documentos y 30 lecturas por modo se repitió tres veces. La media observada fue
+4.97 ms/op sin caché y 3.13 ms/op con Memcached, con 30 hits y 1 miss de
+precalentamiento por corrida. La muestra local no justifica extrapolar ni dimensionar tráfico de
+producción. Ver el benchmark reproducible en `docs/CATALOGO-PROFESIONALES-ETAPA-1.md`.

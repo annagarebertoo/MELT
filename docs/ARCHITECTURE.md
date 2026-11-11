@@ -275,10 +275,10 @@ Los requisitos del sistema completo se conservan como compromisos de desarrollo.
 | Presentación grupal — fecha asignada en noviembre | Frontend completo, entrada con autenticación y control de tráfico, tres servicios operativos, capacidad propia pública e integración externa en un flujo importante. Integrar persistencia relacional y no relacional, dos estilos internos, mensajería, búsqueda y caché con evidencia y limitaciones documentadas. |
 | Defensa individual | Demostrar concurrencia y consistencia, pruebas unitarias e integración real, test de contrato, carga analizada, balanceo entre dos o más instancias con detección de indisponibilidad, fallas controladas, observabilidad y postmortem. |
 
-### 12.1. Compromisos técnicos pendientes de diseño y verificación
+### 12.1. Compromisos técnicos y estado de implementación
 
-- **Búsqueda:** filtros relevantes, paginación y ordenamiento; actualización ante cambios del catálogo y retraso máximo tolerable definido. OpenSearch es la propuesta, sin imponer ahora el mecanismo de reconstrucción.
-- **Caché:** al menos una lectura relevante, con justificación por necesidad observable y métricas de impacto. Memcached es la tecnología seleccionada; vigencia e invalidación se diseñarán y medirán posteriormente.
+- **Búsqueda:** Catálogo usa OpenSearch con reconstrucción desde MongoDB, alias por generación, búsquedas con filtros/paginación/orden y objetivo de frescura de 60 s. Validada localmente; ver `docs/CATALOGO-PROFESIONALES-ETAPA-1.md`.
+- **Caché:** Catálogo usa Memcached para listados públicos con TTL 30 s, clave por parámetros, invalidación con token de generación, fallback y contadores hit/miss. Benchmark local repetido en la documentación del módulo.
 - **Balanceo:** al menos un servicio en dos o más instancias, con reconocimiento de indisponibilidad y evidencia de distribución. Reservas es candidato; la configuración de NGINX y la demostración quedan para su etapa.
 - **Resiliencia:** identificar dependencias y comportamiento ante lentitud o falla; seleccionar al menos un mecanismo de protección y demostrarlo mediante una caída controlada. Tiempos, reintentos, circuit breakers y recuperación se evaluarán sin fijar una combinación prematura.
 - **Observabilidad:** logs estructurados, métricas y tableros que permitan comprender una operación. La instrumentación, trazas, alertas y almacenamiento se definirán en las etapas correspondientes.
@@ -335,6 +335,15 @@ Este snapshot describe la implementación local y complementa el diseño objetiv
 - El adaptador `pagos` crea preferencias y verifica/refunda operaciones en Mercado Pago test. Producción no está habilitada; el retorno automático requiere configurar una URL HTTPS pública.
 - La web se sirve desde NGINX y consume las rutas de catálogo, Auth, Reservas, Beneficios y Pagos del Gateway. Hay datos demo locales de tratamientos, profesionales y agendas; no se consideran datos comerciales ni cuentas de Auth. Ver `docs/RESERVAS-WEB.md`.
 - La API externa asignada a Cocina Fantasma (búsqueda de sedes cercanas) no está entregada todavía. Puntos por tratamientos completados, canjes, notificaciones por correo y consola administrativa tampoco forman parte de este flujo implementado.
+
+### Actualización de Catálogo — búsqueda y caché (11/11/2026)
+
+Catálogo sincroniza índices privados de tratamientos y profesionales desde MongoDB
+mediante reconstrucción periódica y alias. `q` consulta OpenSearch; el listado sin
+búsqueda textual permanece en MongoDB y usa Memcached cache-aside. OpenSearch o
+Memcached no son autoridad de los datos. Las pruebas reales de integración y el
+benchmark local están registrados en `docs/CATALOGO-PROFESIONALES-ETAPA-1.md`; no
+representan una medición ni despliegue de producción.
 
 ## Acreditación externa de puntos (implementación)
 

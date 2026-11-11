@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,6 +23,34 @@ func TestHealthEndpoint(t *testing.T) {
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("se esperaba status %d y se obtuvo %d", http.StatusOK, recorder.Code)
+	}
+}
+
+func TestSearchIndexFreshnessFailsClosedAfterTarget(t *testing.T) {
+	s := &Servidor{}
+	if s.searchIndexFresh() {
+		t.Fatal("index without successful build must be stale")
+	}
+	s.lastIndexSuccess.Store(time.Now().Unix())
+	if !s.searchIndexFresh() {
+		t.Fatal("recent successful generation must be searchable")
+	}
+	s.lastIndexSuccess.Store(time.Now().Add(-61 * time.Second).Unix())
+	if s.searchIndexFresh() {
+		t.Fatal("stale generation must not be served")
+	}
+}
+
+func TestMetricsEndpointReportsCatalogCounters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	s := &Servidor{}
+	s.searchFailures.Store(2)
+	s.indexFailures.Store(3)
+	router := crearRouter(s, func(context.Context) error { return nil })
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "catalog_search_failures_total 2") || !strings.Contains(recorder.Body.String(), "catalog_index_rebuild_failures_total 3") {
+		t.Fatalf("metrics endpoint did not expose expected counters: %d %s", recorder.Code, recorder.Body.String())
 	}
 }
 
@@ -115,27 +144,6 @@ func TestPrecioValido(t *testing.T) {
 	}
 }
 
-func TestCategoriaValida(t *testing.T) {
-	tests := []struct {
-		categoria string
-		want      bool
-	}{
-		{"Facial", true},
-		{"corporal", false},
-		{"Depilación", true},
-		{"Manos y uñas", true},
-		{"Capilar", false},
-		{"", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.categoria, func(t *testing.T) {
-			if got := categoriaValida(tt.categoria); got != tt.want {
-				t.Fatalf("categoriaValida(%q) = %v; esperado %v", tt.categoria, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestTratamientoIncluyeProfesionalesAsociados(t *testing.T) {
 	tratamiento := Tratamiento{ID: "t1", ProfesionalesIDs: []string{"p1", "p2"}}
 	if len(tratamiento.ProfesionalesIDs) != 2 || tratamiento.ProfesionalesIDs[0] != "p1" {
@@ -143,12 +151,12 @@ func TestTratamientoIncluyeProfesionalesAsociados(t *testing.T) {
 	}
 }
 
-func TestProfesionalesEsRutaPublicaConListaVacia(t *testing.T) {
+func TestProfesionalesSinAlmacenRespondeNoDisponible(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := crearRouter(&Servidor{}, func(context.Context) error { return nil })
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/profesionales?tratamientoId=t1", nil))
-	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != "{\"profesionales\":[]}" {
+	if recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), "CATALOGO_NO_DISPONIBLE") {
 		t.Fatalf("respuesta inesperada: status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
