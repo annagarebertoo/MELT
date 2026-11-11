@@ -118,8 +118,14 @@ func TestMongoPersistenciaConcurrenciaYRollback(t *testing.T) {
 	if err != nil || !repetido || canjeRepetido.ID != canje.ID {
 		t.Fatalf("canje repetido: %+v repetido=%v err=%v", canjeRepetido, repetido, err)
 	}
-	if _, _, err := a.consultar(ctx, "u"); err != nil {
-		t.Fatal("consultar saldo tras canje", err)
+	if _, _, err := a.canjear(ctx, "otro-usuario", "desc-10", "canje-uno"); !errors.Is(err, errConflicto) {
+		t.Fatalf("la clave de idempotencia debe detectar otro usuario: %v", err)
+	}
+	if _, _, err := a.canjear(ctx, "sin-saldo", "desc-10", "canje-sin-saldo"); !errors.Is(err, errSaldoInsuficiente) {
+		t.Fatalf("se aceptó un canje sin saldo: %v", err)
+	}
+	if saldo, _, err := a.consultar(ctx, "u"); err != nil || saldo != 260 {
+		t.Fatalf("el canje debe descontar puntos una sola vez: saldo=%d err=%v", saldo, err)
 	}
 	if err := a.guardarRegla(ctx, ReglaTratamiento{TratamientoID: "facial", Puntos: 5}); err != nil {
 		t.Fatal("guardar regla de tratamiento", err)
@@ -133,6 +139,9 @@ func TestMongoPersistenciaConcurrenciaYRollback(t *testing.T) {
 	if count, err := a.movimientos.CountDocuments(ctx, bson.M{"_id": "evento:tratamiento-realizado:evento-facial-1"}); err != nil || count != 1 {
 		t.Fatalf("acreditación de tratamiento duplicada: count=%d err=%v", count, err)
 	}
+	if saldo, _, err := a.consultar(ctx, "u"); err != nil || saldo != 265 {
+		t.Fatalf("el tratamiento debe acreditar puntos una sola vez: saldo=%d err=%v", saldo, err)
+	}
 	if _, err := a.reservarCanje(ctx, canje.ID, "u", "turno-test", "facial", 1000); err != nil {
 		t.Fatal("reservar canje", err)
 	}
@@ -142,8 +151,20 @@ func TestMongoPersistenciaConcurrenciaYRollback(t *testing.T) {
 	if _, err := a.actualizarCanje(ctx, canje.ID, "u", "turno-test", "restituir"); err != nil {
 		t.Fatal("restituir canje", err)
 	}
+	if _, err := a.actualizarCanje(ctx, canje.ID, "u", "turno-test", "restituir"); err != nil {
+		t.Fatal("repetir restitución de canje", err)
+	}
 	if count, err := a.movimientos.CountDocuments(ctx, bson.M{"_id": "restitucion:beneficio:turno-test", "tipo": "restitucion_beneficio"}); err != nil || count != 1 {
 		t.Fatalf("movimiento de restitución: count=%d err=%v", count, err)
+	}
+	if _, err := a.reservarCanje(ctx, canje.ID, "u", "turno-expirado", "facial", 1000); err != nil {
+		t.Fatal("reservar canje antes de vencimiento", err)
+	}
+	if _, err := a.canjes.UpdateOne(ctx, bson.M{"_id": canje.ID}, bson.M{"$set": bson.M{"reservaExpiraEn": time.Now().Add(-time.Minute)}}); err != nil {
+		t.Fatal("vencer reserva de canje", err)
+	}
+	if _, err := a.reservarCanje(ctx, canje.ID, "u", "turno-nuevo", "facial", 1000); err != nil {
+		t.Fatal("reutilizar beneficio con reserva vencida", err)
 	}
 	// Otro usuario sin email: no debe heredar la vieja restricción de regalo.
 	if _, _, err = a.acreditar(ctx, AcreditarRequest{"otro-usuario", "otro", 10}); err != nil {

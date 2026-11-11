@@ -50,11 +50,16 @@ services:
       MONGODB_URI: mongodb://mongodb:27017
       MELT_TIMEZONE: ${MELT_TIMEZONE:-America/Argentina/Buenos_Aires}
       PAGOS_URL: ${PAGOS_URL:-http://pagos:8085}
+      BENEFICIOS_URL: http://beneficios:8083
+      MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
       mongodb:
         condition: service_healthy
       pagos:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
 
   pagos:
@@ -96,8 +101,11 @@ services:
       BENEFICIOS_PARTNER_KEY: ${BENEFICIOS_PARTNER_KEY:-}
       MONGODB_URI: mongodb://mongodb:27017
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
       mongodb:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
 

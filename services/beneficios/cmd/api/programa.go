@@ -43,17 +43,18 @@ type ReglaTratamiento struct {
 }
 
 type Canje struct {
-	ID             string     `bson:"_id" json:"id"`
-	SolicitudID    string     `bson:"solicitudId" json:"solicitudId"`
-	UsuarioID      string     `bson:"usuarioId" json:"usuarioId"`
-	Recompensa     Recompensa `bson:"recompensa" json:"recompensa"`
-	Estado         string     `bson:"estado" json:"estado"` // disponible | reservado | aplicado
-	ReservaID      string     `bson:"reservaId,omitempty" json:"reservaId,omitempty"`
-	PrecioOriginal float64    `bson:"precioOriginal,omitempty" json:"precioOriginal,omitempty"`
-	Descuento      float64    `bson:"descuento,omitempty" json:"descuento,omitempty"`
-	PrecioFinal    float64    `bson:"precioFinal,omitempty" json:"precioFinal,omitempty"`
-	CreadoEn       time.Time  `bson:"creadoEn" json:"creadoEn"`
-	AplicadoEn     *time.Time `bson:"aplicadoEn,omitempty" json:"aplicadoEn,omitempty"`
+	ID              string     `bson:"_id" json:"id"`
+	SolicitudID     string     `bson:"solicitudId" json:"solicitudId"`
+	UsuarioID       string     `bson:"usuarioId" json:"usuarioId"`
+	Recompensa      Recompensa `bson:"recompensa" json:"recompensa"`
+	Estado          string     `bson:"estado" json:"estado"` // disponible | reservado | aplicado
+	ReservaID       string     `bson:"reservaId,omitempty" json:"reservaId,omitempty"`
+	PrecioOriginal  float64    `bson:"precioOriginal,omitempty" json:"precioOriginal,omitempty"`
+	Descuento       float64    `bson:"descuento,omitempty" json:"descuento,omitempty"`
+	PrecioFinal     float64    `bson:"precioFinal,omitempty" json:"precioFinal,omitempty"`
+	ReservaExpiraEn *time.Time `bson:"reservaExpiraEn,omitempty" json:"reservaExpiraEn,omitempty"`
+	CreadoEn        time.Time  `bson:"creadoEn" json:"creadoEn"`
+	AplicadoEn      *time.Time `bson:"aplicadoEn,omitempty" json:"aplicadoEn,omitempty"`
 }
 
 type programaStore interface {
@@ -201,6 +202,11 @@ func (a *almacenMongo) canjear(ctx context.Context, userID, rewardID, requestID 
 }
 
 func (a *almacenMongo) listarCanjes(ctx context.Context, userID string) ([]Canje, error) {
+	now := time.Now().UTC()
+	_, err := a.canjes.UpdateMany(ctx, bson.M{"usuarioId": userID, "estado": "reservado", "reservaExpiraEn": bson.M{"$lte": now}}, bson.M{"$set": bson.M{"estado": "disponible", "reservaId": "", "reservaExpiraEn": nil, "precioOriginal": 0, "descuento": 0, "precioFinal": 0}})
+	if err != nil {
+		return nil, err
+	}
 	cur, err := a.canjes.Find(ctx, bson.M{"usuarioId": userID}, options.Find().SetSort(bson.D{{Key: "creadoEn", Value: -1}}))
 	if err != nil {
 		return nil, err
@@ -218,13 +224,23 @@ func (a *almacenMongo) reservarCanje(ctx context.Context, canjeID, userID, reser
 		}
 		return item, err
 	}
-	if item.Estado == "reservado" || item.Estado == "aplicado" {
+	reemplazaReservaVencida := false
+	if item.Estado == "aplicado" {
 		if item.ReservaID != reservaID {
 			return item, errCanjeNoDisponible
 		}
 		return item, nil
 	}
-	if item.Estado != "disponible" {
+	if item.Estado == "reservado" {
+		if item.ReservaID == reservaID {
+			return item, nil
+		}
+		if item.ReservaExpiraEn == nil || item.ReservaExpiraEn.After(time.Now()) {
+			return item, errCanjeNoDisponible
+		}
+		reemplazaReservaVencida = true
+	}
+	if item.Estado != "disponible" && !reemplazaReservaVencida {
 		return item, errCanjeNoDisponible
 	}
 	if item.Recompensa.Tipo == "tratamiento_gratis" && item.Recompensa.TratamientoID != tratamientoID {
@@ -239,9 +255,14 @@ func (a *almacenMongo) reservarCanje(ctx context.Context, canjeID, userID, reser
 	} else {
 		descuento = math.Round(precio*float64(item.Recompensa.Porcentaje)) / 100
 	}
-	item.Estado, item.ReservaID = "reservado", reservaID
+	expiresAt := time.Now().UTC().Add(10 * time.Minute).Truncate(time.Millisecond)
+	item.Estado, item.ReservaID, item.ReservaExpiraEn = "reservado", reservaID, &expiresAt
 	item.PrecioOriginal, item.Descuento, item.PrecioFinal = precio, descuento, math.Max(0, precio-descuento)
-	res, err := a.canjes.UpdateOne(ctx, bson.M{"_id": canjeID, "usuarioId": userID, "estado": "disponible"}, bson.M{"$set": bson.M{"estado": item.Estado, "reservaId": reservaID, "precioOriginal": item.PrecioOriginal, "descuento": item.Descuento, "precioFinal": item.PrecioFinal}})
+	filter := bson.M{"_id": canjeID, "usuarioId": userID, "estado": "disponible"}
+	if reemplazaReservaVencida {
+		filter = bson.M{"_id": canjeID, "usuarioId": userID, "estado": "reservado", "reservaExpiraEn": bson.M{"$lte": time.Now()}}
+	}
+	res, err := a.canjes.UpdateOne(ctx, filter, bson.M{"$set": bson.M{"estado": item.Estado, "reservaId": reservaID, "reservaExpiraEn": expiresAt, "precioOriginal": item.PrecioOriginal, "descuento": item.Descuento, "precioFinal": item.PrecioFinal}})
 	if err != nil {
 		return item, err
 	}
@@ -261,6 +282,9 @@ func (a *almacenMongo) actualizarCanje(ctx context.Context, canjeID, userID, res
 			return item, errCanjeNoDisponible
 		}
 		return item, err
+	}
+	if accion == "restituir" && item.Estado == "disponible" {
+		return item, nil
 	}
 	if item.ReservaID != reservaID {
 		return item, errCanjeNoDisponible
@@ -287,7 +311,7 @@ func (a *almacenMongo) actualizarCanje(ctx context.Context, canjeID, userID, res
 				return nil, errCanjeNoDisponible
 			}
 			filter := bson.M{"_id": canjeID, "usuarioId": userID, "reservaId": reservaID, "estado": "aplicado"}
-			set := bson.M{"estado": "disponible", "reservaId": "", "precioOriginal": 0, "descuento": 0, "precioFinal": 0}
+			set := bson.M{"estado": "disponible", "reservaId": "", "reservaExpiraEn": nil, "precioOriginal": 0, "descuento": 0, "precioFinal": 0}
 			updated, e := a.canjes.UpdateOne(tx, filter, bson.M{"$set": set})
 			if e != nil {
 				return nil, e
@@ -314,7 +338,7 @@ func (a *almacenMongo) actualizarCanje(ctx context.Context, canjeID, userID, res
 			return item, errCanjeNoDisponible
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
-		set = bson.M{"estado": "aplicado", "aplicadoEn": now}
+		set = bson.M{"estado": "aplicado", "aplicadoEn": now, "reservaExpiraEn": nil}
 	case "liberar":
 		if item.Estado == "disponible" {
 			return item, nil
@@ -322,7 +346,7 @@ func (a *almacenMongo) actualizarCanje(ctx context.Context, canjeID, userID, res
 		if item.Estado != "reservado" {
 			return item, errCanjeNoDisponible
 		}
-		set = bson.M{"estado": "disponible", "reservaId": "", "precioOriginal": 0, "descuento": 0, "precioFinal": 0}
+		set = bson.M{"estado": "disponible", "reservaId": "", "reservaExpiraEn": nil, "precioOriginal": 0, "descuento": 0, "precioFinal": 0}
 	default:
 		return item, errors.New("acción desconocida")
 	}

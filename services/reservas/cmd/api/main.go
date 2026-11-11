@@ -35,30 +35,40 @@ type agendaSemanal struct {
 }
 
 type turno struct {
-	ID                string    `bson:"_id" json:"id"`
-	ClienteID         string    `bson:"clienteId" json:"clienteId"`
-	ProfesionalID     string    `bson:"profesionalId" json:"profesionalId"`
-	TratamientoID     string    `bson:"tratamientoId" json:"tratamientoId"`
-	Inicio            time.Time `bson:"inicio" json:"inicio"`
-	Fin               time.Time `bson:"fin" json:"fin"`
-	Estado            string    `bson:"estado" json:"estado"`
-	CreadoEn          time.Time `bson:"creadoEn" json:"creadoEn"`
-	PrecioTratamiento float64   `bson:"precioTratamiento" json:"precioTratamiento"`
-	Sena              float64   `bson:"sena" json:"sena"`
-	PagoID            string    `bson:"pagoId,omitempty" json:"pagoId,omitempty"`
-	EstadoPago        string    `bson:"estadoPago,omitempty" json:"estadoPago,omitempty"`
-	ImporteDevolucion float64   `bson:"importeDevolucion,omitempty" json:"importeDevolucion,omitempty"`
-	EstadoDevolucion  string    `bson:"estadoDevolucion,omitempty" json:"estadoDevolucion,omitempty"`
+	ID                      string     `bson:"_id" json:"id"`
+	ClienteID               string     `bson:"clienteId" json:"clienteId"`
+	ProfesionalID           string     `bson:"profesionalId" json:"profesionalId"`
+	TratamientoID           string     `bson:"tratamientoId" json:"tratamientoId"`
+	Inicio                  time.Time  `bson:"inicio" json:"inicio"`
+	Fin                     time.Time  `bson:"fin" json:"fin"`
+	Estado                  string     `bson:"estado" json:"estado"`
+	CreadoEn                time.Time  `bson:"creadoEn" json:"creadoEn"`
+	PrecioTratamiento       float64    `bson:"precioTratamiento" json:"precioTratamiento"`
+	Sena                    float64    `bson:"sena" json:"sena"`
+	PagoID                  string     `bson:"pagoId,omitempty" json:"pagoId,omitempty"`
+	EstadoPago              string     `bson:"estadoPago,omitempty" json:"estadoPago,omitempty"`
+	ImporteDevolucion       float64    `bson:"importeDevolucion,omitempty" json:"importeDevolucion,omitempty"`
+	EstadoDevolucion        string     `bson:"estadoDevolucion,omitempty" json:"estadoDevolucion,omitempty"`
+	TratamientoRealizadoEn  *time.Time `bson:"tratamientoRealizadoEn,omitempty" json:"tratamientoRealizadoEn,omitempty"`
+	TratamientoRealizadoPor string     `bson:"tratamientoRealizadoPor,omitempty" json:"tratamientoRealizadoPor,omitempty"`
+	BeneficioCanjeID        string     `bson:"beneficioCanjeId,omitempty" json:"beneficioCanjeId,omitempty"`
+	DescuentoBeneficio      float64    `bson:"descuentoBeneficio,omitempty" json:"descuentoBeneficio,omitempty"`
+	PrecioFinal             float64    `bson:"precioFinal,omitempty" json:"precioFinal,omitempty"`
 }
 
 type servidorReservas struct {
-	agendas     *mongo.Collection
-	turnos      *mongo.Collection
-	bloqueos    *mongo.Collection
-	carritos    *mongo.Collection
-	catalogoURL string
-	pagosURL    string
-	httpClient  *http.Client
+	mongo         *mongo.Client
+	agendas       *mongo.Collection
+	turnos        *mongo.Collection
+	bloqueos      *mongo.Collection
+	carritos      *mongo.Collection
+	outbox        *mongo.Collection
+	catalogoURL   string
+	pagosURL      string
+	beneficiosURL string
+	internalKey   string
+	rabbitURL     string
+	httpClient    *http.Client
 }
 
 type tratamientoCatalogo struct {
@@ -127,6 +137,7 @@ var permisosPorOperacion = map[string]map[string]bool{
 	"reservas.confirmar-bloqueo-carrito": {"cliente": true},
 	"reservas.liberar-bloqueo-carrito":   {"cliente": true},
 	"reservas.reintentar-devolucion":     {"cliente": true, "recepcion": true, "administrador": true, "superadministrador": true},
+	"reservas.completar-tratamiento":     {"profesional": true},
 }
 
 func main() {
@@ -149,7 +160,12 @@ func main() {
 	if catalogoURL == "" {
 		catalogoURL = "http://catalogo-profesionales:8081"
 	}
-	s := &servidorReservas{agendas: db.Collection("agendas_semanales"), turnos: db.Collection("turnos"), bloqueos: db.Collection("bloqueos_turnos"), carritos: db.Collection("carritos_bloqueos"), catalogoURL: catalogoURL, pagosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("PAGOS_URL")), "/"), httpClient: &http.Client{Timeout: 7 * time.Second}}
+	beneficiosURL := strings.TrimRight(strings.TrimSpace(os.Getenv("BENEFICIOS_URL")), "/")
+	if beneficiosURL == "" {
+		beneficiosURL = "http://beneficios:8083"
+	}
+	rabbitURL := strings.TrimSpace(os.Getenv("RABBITMQ_URL"))
+	s := &servidorReservas{mongo: client, agendas: db.Collection("agendas_semanales"), turnos: db.Collection("turnos"), bloqueos: db.Collection("bloqueos_turnos"), carritos: db.Collection("carritos_bloqueos"), outbox: db.Collection("outbox_eventos"), catalogoURL: catalogoURL, pagosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("PAGOS_URL")), "/"), beneficiosURL: beneficiosURL, internalKey: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY")), rabbitURL: rabbitURL, httpClient: &http.Client{Timeout: 7 * time.Second}}
 	_, err = s.agendas.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "profesionalId", Value: 1}, {Key: "diaSemana", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_agenda_profesional_dia")})
 	if err != nil {
 		log.Fatal("no se pudo crear índice de agenda")
@@ -170,6 +186,13 @@ func main() {
 	if err != nil {
 		log.Fatal("no se pudo crear índice TTL de carritos")
 	}
+	_, err = s.outbox.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "publicadoEn", Value: 1}, {Key: "creadoEn", Value: 1}}})
+	if err != nil {
+		log.Fatal("no se pudo crear índice de eventos pendientes")
+	}
+	publisherCtx, cancelPublisher := context.WithCancel(context.Background())
+	defer cancelPublisher()
+	go s.publicarEventos(publisherCtx)
 	if err := s.router().Run(":8082"); err != nil {
 		log.Fatal("no se pudo iniciar Reservas")
 	}
@@ -189,6 +212,7 @@ func (s *servidorReservas) router() *gin.Engine {
 	r.POST("/turnos", requiereIdentidad(), requierePermiso("reservas.crear"), s.confirmarTurnoDesdeCarrito)
 	r.DELETE("/turnos/:id", requiereIdentidad(), requierePermiso("reservas.cancelar-turno"), s.cancelarTurno)
 	r.POST("/turnos/:id/devolucion/reintentar", requiereIdentidad(), requierePermiso("reservas.reintentar-devolucion"), s.reintentarDevolucion)
+	r.POST("/turnos/:id/completar", requiereIdentidad(), requierePermiso("reservas.completar-tratamiento"), s.completarTratamiento)
 	return r
 }
 
@@ -581,13 +605,12 @@ func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 			estadoDevolucion = "pendiente"
 		}
 	}
-	res, err := s.turnos.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "estado", Value: "confirmado"}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estado", Value: "cancelado"}, {Key: "importeDevolucion", Value: devolucion}, {Key: "estadoDevolucion", Value: estadoDevolucion}}}})
-	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo cancelar el turno"})
-		return
-	}
-	if res.MatchedCount != 1 {
-		c.JSON(http.StatusConflict, gin.H{"error": "el turno ya no está confirmado"})
+	if err := s.cancelarConEvento(ctx, t, devolucion, estadoDevolucion); err != nil {
+		if errors.Is(err, errTurnoNoConfirmado) {
+			c.JSON(http.StatusConflict, gin.H{"error": "el turno ya no está confirmado"})
+			return
+		}
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "CANCELACION_NO_REGISTRADA", "message": "No se pudo guardar la cancelación de forma segura."}})
 		return
 	}
 	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key: "turnoId", Value: id}})
@@ -603,27 +626,31 @@ func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 }
 
 type bloqueoCarrito struct {
-	ID            string    `bson:"_id" json:"id"`
-	ClienteID     string    `bson:"clienteId" json:"clienteId"`
-	ProfesionalID string    `bson:"profesionalId" json:"profesionalId"`
-	TratamientoID string    `bson:"tratamientoId" json:"tratamientoId"`
-	Inicio        time.Time `bson:"inicio" json:"inicio"`
-	Fin           time.Time `bson:"fin" json:"fin"`
-	Precio        float64   `bson:"precio" json:"precio"`
-	Moneda        string    `bson:"moneda" json:"moneda"`
-	Sena          float64   `bson:"sena" json:"sena"`
-	Estado        string    `bson:"estado" json:"estado"`
-	ExpiraEn      time.Time `bson:"expiraEn" json:"expiraEn"`
-	TurnoID       string    `bson:"turnoId,omitempty" json:"turnoId,omitempty"`
-	PagoID        string    `bson:"pagoId,omitempty" json:"pagoId,omitempty"`
-	PreferenciaID string    `bson:"preferenciaId,omitempty" json:"preferenciaId,omitempty"`
-	URLPago       string    `bson:"urlPago,omitempty" json:"urlPago,omitempty"`
+	ID                 string    `bson:"_id" json:"id"`
+	ClienteID          string    `bson:"clienteId" json:"clienteId"`
+	ProfesionalID      string    `bson:"profesionalId" json:"profesionalId"`
+	TratamientoID      string    `bson:"tratamientoId" json:"tratamientoId"`
+	Inicio             time.Time `bson:"inicio" json:"inicio"`
+	Fin                time.Time `bson:"fin" json:"fin"`
+	Precio             float64   `bson:"precio" json:"precio"`
+	Moneda             string    `bson:"moneda" json:"moneda"`
+	Sena               float64   `bson:"sena" json:"sena"`
+	BeneficioCanjeID   string    `bson:"beneficioCanjeId,omitempty" json:"beneficioCanjeId,omitempty"`
+	DescuentoBeneficio float64   `bson:"descuentoBeneficio,omitempty" json:"descuentoBeneficio,omitempty"`
+	PrecioFinal        float64   `bson:"precioFinal,omitempty" json:"precioFinal,omitempty"`
+	Estado             string    `bson:"estado" json:"estado"`
+	ExpiraEn           time.Time `bson:"expiraEn" json:"expiraEn"`
+	TurnoID            string    `bson:"turnoId,omitempty" json:"turnoId,omitempty"`
+	PagoID             string    `bson:"pagoId,omitempty" json:"pagoId,omitempty"`
+	PreferenciaID      string    `bson:"preferenciaId,omitempty" json:"preferenciaId,omitempty"`
+	URLPago            string    `bson:"urlPago,omitempty" json:"urlPago,omitempty"`
 }
 
 type solicitudCarrito struct {
-	ProfesionalID string `json:"profesionalId" binding:"required"`
-	TratamientoID string `json:"tratamientoId" binding:"required"`
-	Inicio        string `json:"inicio" binding:"required"`
+	ProfesionalID    string `json:"profesionalId" binding:"required"`
+	TratamientoID    string `json:"tratamientoId" binding:"required"`
+	Inicio           string `json:"inicio" binding:"required"`
+	BeneficioCanjeID string `json:"beneficioCanjeId,omitempty"`
 }
 
 type confirmarCarritoRequest struct {
@@ -716,6 +743,10 @@ func (s *servidorReservas) crearPreferenciaPago(ctx context.Context, importe flo
 func (s *servidorReservas) descartarBloqueoPendiente(id, clienteID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+	var cart bloqueoCarrito
+	if s.carritos.FindOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "clienteId", Value: clienteID}}).Decode(&cart) == nil {
+		s.liberarBeneficio(ctx, cart.BeneficioCanjeID, clienteID, id)
+	}
 	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key: "turnoId", Value: id}})
 	_, _ = s.carritos.DeleteOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "clienteId", Value: clienteID}, {Key: "estado", Value: "pendiente_pago"}})
 }
@@ -780,13 +811,25 @@ func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
 	}
 	id := bson.NewObjectID().Hex()
 	expira := now.Add(10 * time.Minute)
-	doc := bloqueoCarrito{ID: id, ClienteID: u.ID, ProfesionalID: req.ProfesionalID, TratamientoID: t.ID, Inicio: start.UTC(), Fin: end.UTC(), Precio: t.Precio, Moneda: "ARS", Sena: importeSena(t.Precio), Estado: "pendiente_pago", ExpiraEn: expira}
+	doc := bloqueoCarrito{ID: id, ClienteID: u.ID, ProfesionalID: req.ProfesionalID, TratamientoID: t.ID, Inicio: start.UTC(), Fin: end.UTC(), Precio: t.Precio, PrecioFinal: t.Precio, Moneda: "ARS", Sena: importeSena(t.Precio), Estado: "pendiente_pago", ExpiraEn: expira}
+	if req.BeneficioCanjeID != "" {
+		canje, reserveErr := s.reservarBeneficio(ctx, strings.TrimSpace(req.BeneficioCanjeID), u.ID, id, t.ID, t.Precio)
+		if reserveErr != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "BENEFICIO_NO_DISPONIBLE", "message": "No pudimos reservar ese beneficio para este tratamiento."}})
+			return
+		}
+		doc.BeneficioCanjeID = canje.ID
+		doc.DescuentoBeneficio = canje.Descuento
+		doc.PrecioFinal = canje.PrecioFinal
+		doc.Sena = importeSena(canje.PrecioFinal)
+	}
 	bloqueos := make([]interface{}, 0, t.DuracionMinutos)
 	for minuto := start.UTC().Unix() / 60; minuto < end.UTC().Unix()/60; minuto++ {
 		bloqueos = append(bloqueos, bloqueoTurno{ProfesionalID: req.ProfesionalID, Minuto: minuto, TurnoID: id, ExpiraEn: &expira})
 	}
 	if _, err := s.bloqueos.InsertMany(ctx, bloqueos); err != nil {
 		_, _ = s.bloqueos.DeleteMany(context.Background(), bson.D{{Key: "turnoId", Value: id}})
+		s.liberarBeneficio(context.Background(), doc.BeneficioCanjeID, u.ID, id)
 		if mongo.IsDuplicateKeyError(err) {
 			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "HORARIO_OCUPADO", "message": "Ese horario ya está reservado o bloqueado por otro carrito."}})
 			return
@@ -796,18 +839,21 @@ func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
 	}
 	if _, err := s.carritos.InsertOne(ctx, doc); err != nil {
 		_, _ = s.bloqueos.DeleteMany(context.Background(), bson.D{{Key: "turnoId", Value: id}})
+		s.liberarBeneficio(context.Background(), doc.BeneficioCanjeID, u.ID, id)
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo guardar el carrito"})
 		return
 	}
 	preferenceID, checkoutURL, err := s.crearPreferenciaPago(ctx, doc.Sena, doc.Moneda, doc.ID, "Seña MELT · "+t.Nombre)
 	if err != nil {
 		s.descartarBloqueoPendiente(id, u.ID)
+		s.liberarBeneficio(context.Background(), doc.BeneficioCanjeID, u.ID, id)
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "PAGO_NO_DISPONIBLE", "message": "No pudimos iniciar el pago. No se retuvo el horario; intentá nuevamente más tarde."}})
 		return
 	}
 	doc.PreferenciaID, doc.URLPago = preferenceID, checkoutURL
 	if _, err := s.carritos.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "clienteId", Value: u.ID}, {Key: "estado", Value: "pendiente_pago"}}, bson.D{{Key: "$set", Value: bson.D{{Key: "preferenciaId", Value: preferenceID}, {Key: "urlPago", Value: checkoutURL}}}}); err != nil {
 		s.descartarBloqueoPendiente(id, u.ID)
+		s.liberarBeneficio(context.Background(), doc.BeneficioCanjeID, u.ID, id)
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "PAGO_NO_DISPONIBLE", "message": "No pudimos guardar el enlace de pago. No se retuvo el horario; intentá nuevamente."}})
 		return
 	}
@@ -819,6 +865,11 @@ func (s *servidorReservas) liberarBloqueoCarrito(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
+	var cart bloqueoCarrito
+	if err := s.carritos.FindOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "clienteId", Value: u.ID}}).Decode(&cart); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "CARRITO_NO_ENCONTRADO", "message": "No encontramos ese carrito."}})
+		return
+	}
 	res, err := s.carritos.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "clienteId", Value: u.ID}, {Key: "estado", Value: "pendiente_pago"}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estado", Value: "liberado"}, {Key: "expiraEn", Value: time.Now().UTC()}}}})
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo liberar el carrito"})
@@ -829,6 +880,7 @@ func (s *servidorReservas) liberarBloqueoCarrito(c *gin.Context) {
 		return
 	}
 	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key: "turnoId", Value: id}})
+	s.liberarBeneficio(ctx, cart.BeneficioCanjeID, u.ID, id)
 	c.Status(http.StatusNoContent)
 }
 
@@ -872,14 +924,20 @@ func (s *servidorReservas) confirmarBloqueoCarrito(c *gin.Context) {
 	}
 	// La reserva sólo se confirma si el proveedor valida el pago por el importe exacto.
 	now := time.Now().UTC()
-	doc := turno{ID: bson.NewObjectID().Hex(), ClienteID: cart.ClienteID, ProfesionalID: cart.ProfesionalID, TratamientoID: cart.TratamientoID, Inicio: cart.Inicio, Fin: cart.Fin, Estado: "confirmado", CreadoEn: now, PrecioTratamiento: cart.Precio, Sena: cart.Sena, PagoID: req.PagoID, EstadoPago: "aprobado"}
+	doc := turno{ID: bson.NewObjectID().Hex(), ClienteID: cart.ClienteID, ProfesionalID: cart.ProfesionalID, TratamientoID: cart.TratamientoID, Inicio: cart.Inicio, Fin: cart.Fin, Estado: "confirmado", CreadoEn: now, PrecioTratamiento: cart.Precio, Sena: cart.Sena, PagoID: req.PagoID, EstadoPago: "aprobado", BeneficioCanjeID: cart.BeneficioCanjeID, DescuentoBeneficio: cart.DescuentoBeneficio, PrecioFinal: cart.PrecioFinal}
 	res, err := s.carritos.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "estado", Value: "pendiente_pago"}, {Key: "expiraEn", Value: bson.D{{Key: "$gt", Value: now}}}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estado", Value: "confirmando"}, {Key: "pagoId", Value: req.PagoID}}}})
 	if err != nil || res.MatchedCount != 1 {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CARRITO_PROCESADO", "message": "El carrito venció o ya está siendo confirmado."}})
 		return
 	}
+	if err = s.actualizarBeneficio(ctx, cart.BeneficioCanjeID, cart.ClienteID, id, "aplicar"); err != nil {
+		_, _ = s.carritos.UpdateOne(context.Background(), bson.D{{Key: "_id", Value: id}, {Key: "estado", Value: "confirmando"}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estado", Value: "pendiente_pago"}}}, {Key: "$unset", Value: bson.D{{Key: "pagoId", Value: ""}}}})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "BENEFICIO_NO_APLICADO", "message": "El beneficio no se pudo aplicar. Podés reintentar la confirmación."}})
+		return
+	}
 	if _, err = s.turnos.InsertOne(ctx, doc); err != nil {
 		_, _ = s.carritos.UpdateOne(context.Background(), bson.D{{Key: "_id", Value: id}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estado", Value: "pendiente_pago"}}}, {Key: "$unset", Value: bson.D{{Key: "pagoId", Value: ""}}}})
+		_ = s.actualizarBeneficio(context.Background(), cart.BeneficioCanjeID, cart.ClienteID, id, "restituir")
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "se verificó el pago pero no se pudo confirmar el turno; contactá soporte con el identificador del pago"})
 		return
 	}

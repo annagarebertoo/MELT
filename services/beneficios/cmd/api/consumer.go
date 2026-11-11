@@ -194,7 +194,7 @@ func (w *consumidorPrograma) failPermanently(ctx context.Context, ch *amqp091.Ch
 		event.Tipo = delivery.Type
 	}
 	failure := mensajeFallido{ID: event.EventID, Evento: event, Error: reason, Intentos: attempts, Estado: "pendiente", CreadoEn: time.Now().UTC().Truncate(time.Millisecond)}
-	_, err := w.almacen.fallidos.UpdateOne(ctx, bson.M{"_id": failure.ID}, bson.M{"$setOnInsert": failure}, options.UpdateOne().SetUpsert(true))
+	_, err := w.almacen.fallidos.UpdateOne(ctx, bson.M{"_id": failure.ID}, bson.M{"$set": bson.M{"evento": failure.Evento, "error": failure.Error, "intentos": failure.Intentos, "estado": failure.Estado}, "$setOnInsert": bson.M{"creadoEn": failure.CreadoEn}}, options.UpdateOne().SetUpsert(true))
 	if err != nil {
 		_ = delivery.Nack(false, true)
 		return err
