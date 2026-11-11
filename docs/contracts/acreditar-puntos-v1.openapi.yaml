@@ -11,6 +11,8 @@ info:
     caso crea una operación pendiente y devuelve registroUrl con token seguro.
     Un enlace no decide puntos: solo vincula una acreditación ya recibida.
 servers:
+  - url: https://melt-gateway-prueba.onrender.com/api/v1
+    description: Entorno público del proyecto académico.
   - url: http://localhost:8080/api/v1
     description: Gateway local; usar HTTPS en el despliegue externo.
 paths:

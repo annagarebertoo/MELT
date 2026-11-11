@@ -1,5 +1,8 @@
 # Acreditación externa de puntos
 
+Entrega pública del proyecto: [guía para Gimnasio](INTEGRACION-GIMNASIO.md).
+Resultados reales del despliegue: [pruebas en Render](PRUEBAS-RENDER-ACREDITACION.md).
+
 ## Configuración
 
 Generar secretos distintos para `AUTH_JWT_SECRET`, `MELT_INTERNAL_KEY` y
