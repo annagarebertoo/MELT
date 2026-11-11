@@ -251,7 +251,7 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 		t.Fatalf("la liberación manual no devolvió el horario: %v", reopened.Horarios)
 	}
 
-	completable := turno{ID: "turno-realizado-test", ClienteID: "cliente-test", ProfesionalID: "prof-1", TratamientoID: "facial-01", Inicio: inicioLocal, Fin: inicioLocal.Add(time.Hour), Estado: "confirmado", CreadoEn: time.Now().UTC(), PrecioTratamiento: 10000, Sena: 3000}
+	completable := turno{ID: "turno-realizado-test", ClienteID: "cliente-test", ProfesionalID: "prof-1", TratamientoID: "facial-01", Inicio: inicioLocal, Fin: inicioLocal.Add(time.Hour), Estado: "confirmado", CreadoEn: time.Now().UTC(), PrecioTratamiento: 10000, Sena: 3000, BeneficioCanjeID: "canje-test", BeneficioReservaID: "carrito-test"}
 	if _, err := turnos.InsertOne(ctx, completable); err != nil {
 		t.Fatal("no se pudo preparar el turno para probar la confirmación profesional")
 	}
@@ -266,6 +266,10 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 	var eventCount int64
 	if eventCount, err = outbox.CountDocuments(ctx, bson.M{"_id": "tratamiento-realizado:" + completable.ID}); err != nil || eventCount != 1 {
 		t.Fatalf("se esperaba un único evento outbox, cantidad=%d error=%v", eventCount, err)
+	}
+	var event eventoOutbox
+	if err := outbox.FindOne(ctx, bson.M{"_id": "tratamiento-realizado:" + completable.ID}).Decode(&event); err != nil || event.Payload["beneficioReservaId"] != "carrito-test" {
+		t.Fatalf("el evento debe incluir el id del carrito usado por el canje: payload=%v error=%v", event.Payload, err)
 	}
 	wrongProfessional := integrationRequestAs(router, http.MethodPost, "/turnos/"+completable.ID+"/completar", "", "otro-profesional", "profesional")
 	if wrongProfessional.Code != http.StatusForbidden {

@@ -23,15 +23,16 @@ const (
 )
 
 type EventoDominio struct {
-	EventID       string    `json:"eventId" bson:"eventId"`
-	Tipo          string    `json:"tipo" bson:"tipo"`
-	TurnoID       string    `json:"turnoId" bson:"turnoId"`
-	UsuarioID     string    `json:"usuarioId" bson:"usuarioId"`
-	ProfesionalID string    `json:"profesionalId" bson:"profesionalId"`
-	TratamientoID string    `json:"tratamientoId" bson:"tratamientoId"`
-	BeneficioID   string    `json:"beneficioCanjeId" bson:"beneficioCanjeId"`
-	RealizadoEn   time.Time `json:"realizadoEn,omitempty" bson:"realizadoEn,omitempty"`
-	CanceladoEn   time.Time `json:"canceladoEn,omitempty" bson:"canceladoEn,omitempty"`
+	EventID            string    `json:"eventId" bson:"eventId"`
+	Tipo               string    `json:"tipo" bson:"tipo"`
+	TurnoID            string    `json:"turnoId" bson:"turnoId"`
+	UsuarioID          string    `json:"usuarioId" bson:"usuarioId"`
+	ProfesionalID      string    `json:"profesionalId" bson:"profesionalId"`
+	TratamientoID      string    `json:"tratamientoId" bson:"tratamientoId"`
+	BeneficioID        string    `json:"beneficioCanjeId" bson:"beneficioCanjeId"`
+	BeneficioReservaID string    `json:"beneficioReservaId" bson:"beneficioReservaId"`
+	RealizadoEn        time.Time `json:"realizadoEn,omitempty" bson:"realizadoEn,omitempty"`
+	CanceladoEn        time.Time `json:"canceladoEn,omitempty" bson:"canceladoEn,omitempty"`
 }
 
 type mensajeFallido struct {
@@ -157,7 +158,11 @@ func (w *consumidorPrograma) process(ctx context.Context, event EventoDominio) e
 		if event.BeneficioID == "" {
 			return nil
 		}
-		_, err := w.almacen.actualizarCanje(ctx, event.BeneficioID, event.UsuarioID, event.TurnoID, "restituir")
+		reservaID := event.BeneficioReservaID
+		if reservaID == "" {
+			reservaID = event.TurnoID
+		}
+		_, err := w.almacen.actualizarCanje(ctx, event.BeneficioID, event.UsuarioID, reservaID, "restituir")
 		return err
 	default:
 		return fmt.Errorf("tipo de evento no admitido: %s", event.Tipo)

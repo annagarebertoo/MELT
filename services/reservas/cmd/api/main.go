@@ -52,6 +52,7 @@ type turno struct {
 	TratamientoRealizadoEn  *time.Time `bson:"tratamientoRealizadoEn,omitempty" json:"tratamientoRealizadoEn,omitempty"`
 	TratamientoRealizadoPor string     `bson:"tratamientoRealizadoPor,omitempty" json:"tratamientoRealizadoPor,omitempty"`
 	BeneficioCanjeID        string     `bson:"beneficioCanjeId,omitempty" json:"beneficioCanjeId,omitempty"`
+	BeneficioReservaID      string     `bson:"beneficioReservaId,omitempty" json:"beneficioReservaId,omitempty"`
 	DescuentoBeneficio      float64    `bson:"descuentoBeneficio,omitempty" json:"descuentoBeneficio,omitempty"`
 	PrecioFinal             float64    `bson:"precioFinal,omitempty" json:"precioFinal,omitempty"`
 }
@@ -930,7 +931,7 @@ func (s *servidorReservas) confirmarBloqueoCarrito(c *gin.Context) {
 	}
 	// La reserva sólo se confirma si el proveedor valida el pago por el importe exacto.
 	now := time.Now().UTC()
-	doc := turno{ID: bson.NewObjectID().Hex(), ClienteID: cart.ClienteID, ProfesionalID: cart.ProfesionalID, TratamientoID: cart.TratamientoID, Inicio: cart.Inicio, Fin: cart.Fin, Estado: "confirmado", CreadoEn: now, PrecioTratamiento: cart.Precio, Sena: cart.Sena, PagoID: req.PagoID, EstadoPago: "aprobado", BeneficioCanjeID: cart.BeneficioCanjeID, DescuentoBeneficio: cart.DescuentoBeneficio, PrecioFinal: cart.PrecioFinal}
+	doc := turno{ID: bson.NewObjectID().Hex(), ClienteID: cart.ClienteID, ProfesionalID: cart.ProfesionalID, TratamientoID: cart.TratamientoID, Inicio: cart.Inicio, Fin: cart.Fin, Estado: "confirmado", CreadoEn: now, PrecioTratamiento: cart.Precio, Sena: cart.Sena, PagoID: req.PagoID, EstadoPago: "aprobado", BeneficioCanjeID: cart.BeneficioCanjeID, BeneficioReservaID: id, DescuentoBeneficio: cart.DescuentoBeneficio, PrecioFinal: cart.PrecioFinal}
 	res, err := s.carritos.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "estado", Value: "pendiente_pago"}, {Key: "expiraEn", Value: bson.D{{Key: "$gt", Value: now}}}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estado", Value: "confirmando"}, {Key: "pagoId", Value: req.PagoID}}}})
 	if err != nil || res.MatchedCount != 1 {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CARRITO_PROCESADO", "message": "El carrito venció o ya está siendo confirmado."}})

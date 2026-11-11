@@ -142,29 +142,32 @@ func TestMongoPersistenciaConcurrenciaYRollback(t *testing.T) {
 	if saldo, _, err := a.consultar(ctx, "u"); err != nil || saldo != 265 {
 		t.Fatalf("el tratamiento debe acreditar puntos una sola vez: saldo=%d err=%v", saldo, err)
 	}
-	if _, err := a.reservarCanje(ctx, canje.ID, "u", "turno-test", "facial", 1000); err != nil {
+	const carritoID = "carrito-test"
+	if _, err := a.reservarCanje(ctx, canje.ID, "u", carritoID, "facial", 1000); err != nil {
 		t.Fatal("reservar canje", err)
 	}
 	if _, err := a.canjes.UpdateOne(ctx, bson.M{"_id": canje.ID}, bson.M{"$set": bson.M{"reservaExpiraEn": time.Now().Add(-time.Minute)}}); err != nil {
 		t.Fatal("vencer la reserva de prueba", err)
 	}
-	if _, err := a.reservarCanje(ctx, canje.ID, "u", "turno-test", "facial", 1000); err != nil {
+	if _, err := a.reservarCanje(ctx, canje.ID, "u", carritoID, "facial", 1000); err != nil {
 		t.Fatal("renovar la misma reserva antes de confirmar el pago", err)
 	}
 	var canjeConReserva Canje
 	if err := a.canjes.FindOne(ctx, bson.M{"_id": canje.ID}).Decode(&canjeConReserva); err != nil || canjeConReserva.ReservaExpiraEn == nil || !canjeConReserva.ReservaExpiraEn.After(time.Now()) {
 		t.Fatalf("la reserva del mismo carrito debe renovarse: %+v err=%v", canjeConReserva.ReservaExpiraEn, err)
 	}
-	if _, err := a.actualizarCanje(ctx, canje.ID, "u", "turno-test", "aplicar"); err != nil {
+	if _, err := a.actualizarCanje(ctx, canje.ID, "u", carritoID, "aplicar"); err != nil {
 		t.Fatal("aplicar canje", err)
 	}
-	if _, err := a.actualizarCanje(ctx, canje.ID, "u", "turno-test", "restituir"); err != nil {
-		t.Fatal("restituir canje", err)
+	consumidor := consumidorPrograma{almacen: a}
+	eventoCancelacion := EventoDominio{EventID: "turno-cancelado:turno-test", Tipo: "turno.cancelado", TurnoID: "turno-test", UsuarioID: "u", BeneficioID: canje.ID, BeneficioReservaID: carritoID}
+	if err := consumidor.process(ctx, eventoCancelacion); err != nil {
+		t.Fatal("restituir beneficio al cancelar turno", err)
 	}
-	if _, err := a.actualizarCanje(ctx, canje.ID, "u", "turno-test", "restituir"); err != nil {
-		t.Fatal("repetir restitución de canje", err)
+	if err := consumidor.process(ctx, eventoCancelacion); err != nil {
+		t.Fatal("repetir evento de cancelación", err)
 	}
-	if count, err := a.movimientos.CountDocuments(ctx, bson.M{"_id": "restitucion:beneficio:turno-test", "tipo": "restitucion_beneficio"}); err != nil || count != 1 {
+	if count, err := a.movimientos.CountDocuments(ctx, bson.M{"_id": "restitucion:beneficio:" + carritoID, "tipo": "restitucion_beneficio"}); err != nil || count != 1 {
 		t.Fatalf("movimiento de restitución: count=%d err=%v", count, err)
 	}
 	if _, err := a.reservarCanje(ctx, canje.ID, "u", "turno-expirado", "facial", 1000); err != nil {

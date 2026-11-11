@@ -94,7 +94,7 @@ func (s *servidorReservas) registrarRealizacion(ctx context.Context, turnoID, pr
 		}
 		item.Estado, item.TratamientoRealizadoPor = "completado", profesionalID
 		item.TratamientoRealizadoEn = &now
-		payload := bson.M{"eventId": eventID, "turnoId": item.ID, "usuarioId": item.ClienteID, "profesionalId": item.ProfesionalID, "tratamientoId": item.TratamientoID, "realizadoEn": now, "beneficioCanjeId": item.BeneficioCanjeID}
+		payload := bson.M{"eventId": eventID, "turnoId": item.ID, "usuarioId": item.ClienteID, "profesionalId": item.ProfesionalID, "tratamientoId": item.TratamientoID, "realizadoEn": now, "beneficioCanjeId": item.BeneficioCanjeID, "beneficioReservaId": item.BeneficioReservaID}
 		if _, e = s.outbox.InsertOne(tx, eventoOutbox{ID: eventID, Tipo: "tratamiento.realizado", RoutingKey: "tratamiento.realizado", Payload: payload, CreadoEn: now}); e != nil {
 			return nil, e
 		}
@@ -126,7 +126,7 @@ func (s *servidorReservas) cancelarConEvento(ctx context.Context, t turno, devol
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
 		eventID := "turno-cancelado:" + t.ID
-		payload := bson.M{"eventId": eventID, "turnoId": t.ID, "usuarioId": t.ClienteID, "profesionalId": t.ProfesionalID, "tratamientoId": t.TratamientoID, "canceladoEn": now, "beneficioCanjeId": t.BeneficioCanjeID}
+		payload := bson.M{"eventId": eventID, "turnoId": t.ID, "usuarioId": t.ClienteID, "profesionalId": t.ProfesionalID, "tratamientoId": t.TratamientoID, "canceladoEn": now, "beneficioCanjeId": t.BeneficioCanjeID, "beneficioReservaId": t.BeneficioReservaID}
 		_, e = s.outbox.InsertOne(tx, eventoOutbox{ID: eventID, Tipo: "turno.cancelado", RoutingKey: "turno.cancelado", Payload: payload, CreadoEn: now})
 		return nil, e
 	}, options.Transaction().SetReadConcern(readconcern.Snapshot()).SetWriteConcern(writeconcern.Majority()))

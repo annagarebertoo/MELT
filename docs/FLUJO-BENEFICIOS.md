@@ -22,7 +22,8 @@ Ejemplo de evento:
   "profesionalId": "profesional-789",
   "tratamientoId": "facial-01",
   "realizadoEn": "2026-11-11T12:00:00Z",
-  "beneficioCanjeId": "canje-abc"
+  "beneficioCanjeId": "canje-abc",
+  "beneficioReservaId": "carrito-def"
 }
 ```
 
