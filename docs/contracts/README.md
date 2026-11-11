@@ -11,7 +11,7 @@ La API de consulta está versionada como `v1`. La carga administrativa de tratam
 Versión actual: `v1`
 
 Contrato OpenAPI del catálogo: `tratamientos-v1.openapi.yaml`  
-Contrato OpenAPI del registro externo: `registro-externo-v1.openapi.yaml`  
+Contrato OpenAPI de acreditación externa: `acreditar-puntos-v1.openapi.yaml`
 Contrato OpenAPI de autenticación: `autenticacion-v1.openapi.yaml`
 
 La versión del documento OpenAPI es `1.0.0` (OpenAPI `3.0.3`). La URL base contractual es `/api/v1`; en el entorno local se utiliza **`http://localhost:8080/api/v1`**. La URL de Internet sigue pendiente: localhost no permite el acceso desde otro grupo. Antes de la integración real, el Grupo 5 debe publicar el gateway en una dirección accesible por el Grupo 1 y comunicar esa URL.
@@ -100,42 +100,27 @@ Los errores de la API pública usan la estructura:
 
 La ruta POST de carga de tratamientos responde actualmente con algunos errores de formato diferentes (por ejemplo, cuerpo JSON inválido o ID duplicado). Esa operación no está cubierta por el contrato público OpenAPI v1.
 
-## Integración con Grupo 1 — Gimnasio
+## Acreditación externa de puntos
 
-La integración contempla dos capacidades de MELT:
+`POST /api/v1/beneficios/acreditar-puntos` requiere `X-Partner-Key` y un JSON con
+`solicitudId`, `usuarioId` y `puntos` (entero positivo). El consumidor determina la
+cantidad. MELT verifica el usuario activo con Auth y suma al saldo existente.
 
-- **Catálogo público:** el grupo puede consultar tratamientos mediante GET /api/v1/tratamientos y GET /api/v1/tratamientos/{id}. No requiere autenticación.
-- **Registro referido con puntos:** el gimnasio dirige a las personas al formulario de alta de MELT usando un enlace con el código acordado, por ejemplo https://melt.example/registro?referencia=GIMNASIO_MELT. El frontend debe conservar ese valor y enviarlo como codigoReferido en POST /api/v1/auth/registro.
+- `201`: nueva operación confirmada; `200`: repetición idéntica, devuelve el resultado original.
+- `400`: datos inválidos; `401`: clave ausente/incorrecta; `404`: usuario inexistente/inactivo.
+- `409`: solicitudId ya usado con otro usuario o cantidad; `415`: Content-Type distinto de application/json; `422`: saldo fuera de rango.
+- `503`: servicio no configurado o dependencia no disponible; reintentar con el mismo solicitudId.
 
-### Regla de puntos
+El identificador de solicitud es global entre consumidores y se conserva sin vencimiento.
+La respuesta incluye solicitudId, usuarioId, puntos, saldoPuntos, tipo y creadoEn.
+El saldo de una respuesta repetida corresponde a esa operación, no al saldo actual.
+Las repeticiones confirmadas se resuelven antes de consultar Auth, incluso si la cuenta fue desactivada.
 
-- Una cuenta nueva creada con el código de gimnasio válido recibe **100 puntos**.
-- El alta normal, sin código o con código incorrecto, no recibe puntos de referido.
-- Una cuenta existente no puede obtener el regalo retroactivamente.
-- La acreditación se vincula al ID de usuario de Auth y tiene índice único para evitar duplicados.
-- El monto se configura con PUNTOS_REGISTRO_GIMNASIO (100 por defecto); no existe conversión a pesos.
-- Si Beneficios no está disponible durante el alta, Auth informa pendiente_reintento_en_login y vuelve a intentar acreditar cuando esa persona inicia sesión. La operación interna es idempotente.
-
-### Contrato de registro
-
-POST /api/v1/auth/registro
-
-```json
-{
-  "nombre": "Cliente de prueba",
-  "email": "cliente@example.com",
-  "password": "una-clave-segura",
-  "codigoReferido": "GIMNASIO_MELT"
-}
-```
-
-La respuesta 201 incluye beneficioRegistro: acreditado, pendiente_reintento_en_login o no_aplica. El código no reemplaza el alta normal ni permite que el cliente elija la cantidad de puntos.
-
-Auth se comunica con Beneficios por la red interna de Docker usando MELT_INTERNAL_KEY. El endpoint POST /internal/registro-gym no se publica en el gateway; no debe ser llamado directamente por el frontend ni por el gimnasio.
-
-### Acceso compartido
-
-La URL localhost sirve solo para pruebas en la computadora donde corre Docker. Para que el Grupo 1 integre el sistema, MELT debe desplegar el gateway en una URL HTTPS accesible desde fuera de la red local y compartir la URL base y el contrato OpenAPI. No se debe compartir MELT_INTERNAL_KEY, AUTH_JWT_SECRET ni credenciales de Mercado Pago.
+Contrato completo: [acreditar-puntos-v1.openapi.yaml](acreditar-puntos-v1.openapi.yaml).
+Operación, migración y pruebas: [ACREDITACION-PUNTOS.md](../ACREDITACION-PUNTOS.md).
+El contrato `registro-externo-v1.openapi.yaml` se conserva como histórico retirado;
+sus endpoints ya no se publican. Registro y login no acreditan puntos.
+El catálogo público y la API externa consumida por MELT conservan sus contratos.
 
 ## Mock
 
@@ -152,7 +137,7 @@ El servicio de autenticación se publica a través del gateway en `/api/v1/auth`
 
 El registro público siempre asigna el rol `cliente`; no permite que una persona se otorgue permisos internos. La creación de cuentas internas requiere sesión administrativa, y solo el superadministrador puede asignar roles administrativos. Las credenciales sensibles se configuran mediante variables de entorno, no en el repositorio.
 
-El gateway verifica la sesión en las rutas privadas de Reservas y Beneficios y propaga identidad verificada. Reservas vuelve a aplicar permisos por operación y pertenencia del turno; Catálogo consulta Auth en la red interna antes de aceptar altas administrativas. Los GET de catálogo y perfiles profesionales son públicos.
+El gateway verifica la sesión en las rutas privadas de Reservas y Beneficios. Propaga identidad verificada a Reservas; Beneficios verifica además el Bearer con Auth e ignora los headers de identidad de la solicitud. Reservas vuelve a aplicar permisos por operación y pertenencia del turno; Catálogo consulta Auth en la red interna antes de aceptar altas administrativas. Los GET de catálogo y perfiles profesionales son públicos.
 
 ## Gestión de perfiles y asociación de profesionales
 

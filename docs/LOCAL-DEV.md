@@ -36,7 +36,7 @@ docker compose down -v
 | Listado público de tratamientos (contrato v1) | http://localhost:8080/api/v1/tratamientos |
 | Detalle público de tratamiento (contrato v1) | http://localhost:8080/api/v1/tratamientos/{id} |
 | Perfiles públicos de profesionales | http://localhost:8080/api/v1/profesionales |
-| Registro externo con puntos del gimnasio | http://localhost:8080/api/v1/beneficios/registro-externo |
+| Acreditación externa de puntos | http://localhost:8080/api/v1/beneficios/acreditar-puntos |
 | Listado mediante alias compatible | http://localhost:8080/api/v1/catalogo/tratamientos |
 | Búsqueda | http://localhost:8080/api/v1/catalogo/tratamientos?q=facial |
 | Filtro por categoría | http://localhost:8080/api/v1/catalogo/tratamientos?categoria=Facial |
@@ -121,58 +121,11 @@ La cobertura automatizada no reemplaza una comprobación de pago sandbox con las
 El catálogo y los perfiles profesionales persisten en MongoDB (`catalogo_db.tratamientos` y `catalogo_db.profesionales`). Reservas persiste agendas, turnos, bloqueos y carritos en MongoDB (`reservas_db`). La búsqueda actual es simple en MongoDB, con filtro, paginación y ordenamiento; OpenSearch no está integrado. El POST de administración de catálogo es una ruta privada compatible; la API pública contractual v1 expone lectura. La web local en `http://localhost:8080` permite explorar catálogo, registrarse, iniciar sesión, consultar perfil/puntos, revisar disponibilidad, crear el carrito, pagar la seña en modo test y cancelar reservas. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados, pero sus integraciones de negocio siguen pendientes. También están pendientes la API externa de búsqueda de sedes cercanas del grupo de Cocina Fantasma, notificaciones por correo, canjes de puntos y pruebas de carga.
 
 
-## Integración de registro y puntos del gimnasio
+## Acreditación externa de puntos
 
-Esta integración ya no utiliza planes ni membresías. El gimnasio comparte un enlace hacia el formulario de MELT con el código de referido. El frontend conserva ese código y lo envía en el alta como codigoReferido.
-
-Regla: cada cuenta nueva que se registra con el código correcto recibe 100 puntos (configurable). Los registros normales no reciben puntos. El regalo se acredita una sola vez por usuario y queda vinculado al ID de Auth. Una cuenta existente no recibe puntos retroactivos.
-
-### Configuración
-
-Copiá .env.example a .env y completá los valores locales. No subas .env al repositorio.
-
-```powershell
-Copy-Item .env.example .env
-$env:AUTH_JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
-$env:CODIGO_GIMNASIO = "GIMNASIO_MELT_DEV"
-$env:MELT_INTERNAL_KEY = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
-$env:PUNTOS_REGISTRO_GIMNASIO = "100"
-docker compose config
-docker compose up --build -d
-```
-
-También podés guardar CODIGO_GIMNASIO, MELT_INTERNAL_KEY y PUNTOS_REGISTRO_GIMNASIO en .env. La clave interna debe ser un secreto largo compartido únicamente por Auth y Beneficios. El servicio de Beneficios no expone su endpoint interno a través del gateway.
-
-### Registro referido desde el frontend
-
-El enlace que entrega el gimnasio puede tener esta forma (reemplazar dominio y código al desplegar):
-
-https://melt.example/registro?referencia=GIMNASIO_MELT
-
-El frontend debe leer referencia de la URL y enviar ese valor en el JSON del registro:
-
-```json
-{
-  "nombre": "Cliente de prueba",
-  "email": "cliente@example.com",
-  "password": "una-clave-segura",
-  "codigoReferido": "GIMNASIO_MELT"
-}
-```
-
-Endpoint: POST http://localhost:8080/api/v1/auth/registro
-
-Respuesta esperada: 201 Created. El campo beneficioRegistro indica acreditado, pendiente_reintento_en_login o no_aplica. Si Beneficios está temporalmente caído, Auth conserva el origen referido y vuelve a intentar la acreditación cuando la persona inicia sesión. Beneficios aplica una clave única por usuario para no duplicar el regalo.
-
-### Consulta del saldo
-
-Después del login, el frontend consulta GET http://localhost:8080/api/v1/beneficios/mis-puntos con Authorization: Bearer <token>. El saldo se busca por el ID de usuario verificado, no solo por email.
-
-El gimnasio no debe llamar directamente a /internal/registro-gym ni recibir MELT_INTERNAL_KEY. Esa ruta es exclusivamente interna entre microservicios.
-
-### Contrato y límites
-
-El contrato de registro está documentado en docs/contracts/autenticacion-v1.openapi.yaml. La URL localhost es solo local: para compartir la API con el otro grupo hay que desplegar el gateway en HTTPS y comunicar una URL pública. No se deben compartir secretos JWT, claves internas ni credenciales de pago.
+Ver [ACREDITACION-PUNTOS.md](ACREDITACION-PUNTOS.md) para configuración,
+contrato, pruebas y migración. Registro y login son independientes de Beneficios.
+El saldo e historial se consultan con `GET /api/v1/beneficios/mis-puntos` y Bearer.
 
 ## Autenticación y cuentas
 
@@ -214,13 +167,13 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
   -d '{"email":"cliente@example.com","password":"una-clave-segura"}'
 ```
 
-**Límites de esta primera versión:** el token es stateless, por lo que cerrar sesión en el frontend no revoca un token ya emitido; vence automáticamente. Todavía no hay recuperación de contraseña por email ni verificación de email. NGINX verifica la sesión para las rutas privadas de Reservas y Beneficios y propaga el ID, email y roles devueltos por Auth; las cabeceras que manda el cliente se sobrescriben en esas rutas.
+**Límites de esta primera versión:** el token es stateless, por lo que cerrar sesión en el frontend no revoca un token ya emitido; vence automáticamente. Todavía no hay recuperación de contraseña por email ni verificación de email. NGINX verifica la sesión para las rutas privadas de Reservas y Beneficios. En Reservas propaga el ID, email y roles devueltos por Auth y sobrescribe las cabeceras del cliente. Hacia Beneficios reenvía Authorization y elimina los headers `X-Auth-User-*`; Beneficios verifica además el Bearer directamente con Auth.
 
 - `GET /api/v1/reservas/me`: endpoint de integración que devuelve la identidad verificada propagada por el gateway. Las operaciones de reservas aplican identidad, permisos por operación y comprobaciones de propiedad del recurso.
-- `GET /api/v1/beneficios/mis-puntos`: requiere sesión y rol `cliente`; consulta el saldo del registro de Beneficios asociado al email verificado. Si no hay registro, devuelve saldo cero.
-- `POST /api/v1/beneficios/registro-externo`: conserva la autenticación independiente mediante `X-Partner-Key` para el sistema externo del gimnasio.
+- `GET /api/v1/beneficios/mis-puntos`: requiere sesión y rol `cliente`; consulta el saldo y movimientos de Beneficios asociados al `usuarioId` verificado por Auth a partir del token Bearer. Si no hay registro, devuelve saldo cero.
+- `POST /api/v1/beneficios/acreditar-puntos`: conserva la autenticación independiente mediante `X-Partner-Key` para el sistema externo del gimnasio.
 
-La acreditación del regalo del gimnasio queda vinculada al ID de usuario de Auth. La API de Beneficios aún no implementa un catálogo completo de movimientos ni canjes; el saldo inicial de este regalo sí queda persistido e idempotente. Solo el superadministrador puede asignar roles administrativos.
+La acreditación externa acumula saldo y persiste movimientos por ID de usuario de Auth. Canjes y reglas por tratamientos continúan pendientes. Solo el superadministrador puede asignar roles administrativos.
 
 Para ejecutar la prueba de integración de login, cabeceras falsificadas, rutas privadas y permisos por rol en un entorno con Docker Compose levantado, usá `bash scripts/smoke-auth-gateway.sh`. GitHub Actions ejecuta esta misma prueba en el job `gateway-integration`.
 

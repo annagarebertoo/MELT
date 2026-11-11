@@ -64,18 +64,50 @@ jobs:
       AUTH_JWT_SECRET: ci-integration-secret-at-least-32-characters-long
       AUTH_ADMIN_EMAIL: admin.integracion@melt.test
       AUTH_ADMIN_PASSWORD: Integration-Admin-123!
-      CODIGO_GIMNASIO: GIMNASIO_CI_TEST
       MELT_INTERNAL_KEY: ci-internal-secret-at-least-32-characters
-      PUNTOS_REGISTRO_GIMNASIO: "100"
+      BENEFICIOS_PARTNER_KEY: ci-partner-key-only-for-tests
     steps:
       - uses: actions/checkout@v4
       - name: Levantar gateway y servicios necesarios
         run: docker compose up --build -d gateway
-      - name: Probar login, sesión, gateway y permisos por rol
-        run: bash scripts/smoke-auth-gateway.sh
+      - name: Probar sesión, gateway, contrato y acceso directo a Beneficios
+        run: |
+          docker run --rm --network melt_default -v "$PWD/scripts:/scripts:ro" \
+            -e BASE_URL=http://gateway -e BENEFICIOS_DIRECT_URL=http://beneficios:8083 \
+            -e BENEFICIOS_PARTNER_KEY -e AUTH_ADMIN_EMAIL -e AUTH_ADMIN_PASSWORD \
+            alpine:3.22 sh -c 'apk add --no-cache bash curl jq >/dev/null && bash /scripts/smoke-auth-gateway.sh'
       - name: Diagnóstico si falla la integración
         if: failure()
         run: docker compose logs --no-color gateway auth reservas beneficios mongodb
       - name: Detener entorno
         if: always()
         run: docker compose down -v
+
+  beneficios-transactions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/beneficios/go.mod
+          cache-dependency-path: services/beneficios/go.sum
+      - name: MongoDB replica set aislado
+        run: |
+          docker run -d --name puntos-mongo -p 27028:27017 mongo:7 --replSet test-rs --bind_ip_all
+          for i in $(seq 1 30); do
+            docker exec puntos-mongo mongosh --quiet --eval "db.adminCommand({ping:1})" && break
+            sleep 2
+          done
+          docker exec puntos-mongo mongosh --quiet --eval "rs.initiate({_id:'test-rs',members:[{_id:0,host:'localhost:27017'}]})"
+          for i in $(seq 1 30); do
+            docker exec puntos-mongo mongosh --quiet --eval "if (!db.hello().isWritablePrimary) quit(1)" && break
+            sleep 2
+          done
+      - name: Pruebas transaccionales y concurrencia
+        working-directory: services/beneficios
+        env:
+          BENEFICIOS_TEST_MONGODB_URI: mongodb://localhost:27028/?directConnection=true&replicaSet=test-rs
+        run: go test -race ./...
+      - name: Detener MongoDB temporal
+        if: always()
+        run: docker rm -f puntos-mongo

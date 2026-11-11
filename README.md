@@ -99,6 +99,8 @@ En PowerShell:
 
 ```powershell
 $env:AUTH_JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+$env:MELT_INTERNAL_KEY = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+$env:BENEFICIOS_PARTNER_KEY = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
 docker compose config
 docker compose up --build -d
 docker compose ps
@@ -132,16 +134,9 @@ El Gateway centraliza el acceso a los servicios y gestiona la autenticación de 
 
 ### Verificación del despliegue
 
-Se realizaron pruebas de integración sobre los servicios publicados:
-
-- Verificación del estado del Gateway mediante `/health`.
-- Registro e inicio de sesión de usuarios.
-- Validación del código de registro del gimnasio.
-- Acreditación de 100 puntos de bienvenida.
-- Consulta del saldo de puntos mediante el Gateway.
-- Verificación de que los puntos no se acrediten nuevamente al iniciar sesión.
-- Registro de usuarios sin código de gimnasio.
-- Verificación del rechazo de solicitudes sin autenticación.
+El despliegue publicado puede corresponder a una versión anterior. Esta rama incorpora
+la acreditación externa y requiere actualizar Auth, Beneficios y Gateway en conjunto;
+las pruebas locales no acreditan el estado de Render.
 
 Los datos se persisten en MongoDB Atlas, en las bases correspondientes a cada servicio.
 
@@ -222,3 +217,16 @@ El servicio `pagos` adapta la API de Mercado Pago al contrato interno que consum
 La interfaz ofrece el enlace Checkout Pro devuelto al crear el carrito. Después del pago, el cliente ingresa o recupera el ID de la operación para que MELT verifique el estado aprobado, el importe exacto de la seña (30 %), moneda ARS y `external_reference` igual al ID del carrito generado por `POST /carrito/bloqueos`.
 
 No guardes el Access Token en el repositorio, en el frontend ni en logs. Usá cuentas y credenciales de prueba de Mercado Pago; nunca uses credenciales productivas en esta configuración.
+
+## API de acreditación externa
+
+`POST /api/v1/beneficios/acreditar-puntos` recibe `solicitudId`, `usuarioId` y
+`puntos` y exige `X-Partner-Key`. Verifica la cuenta en Auth, acumula puntos y
+registra el movimiento mediante una transacción MongoDB. Repetir una solicitud
+no duplica puntos; reutilizar su ID con otros datos devuelve 409.
+Registro y login ya no generan acreditaciones.
+
+Configurar `BENEFICIOS_PARTNER_KEY`, `MELT_INTERNAL_KEY` y `AUTH_URL` de Beneficios.
+MongoDB debe ser replica set (Compose lo inicializa); Atlas admite transacciones.
+Ver [guía y migración](docs/ACREDITACION-PUNTOS.md) y
+[contrato OpenAPI](docs/contracts/acreditar-puntos-v1.openapi.yaml).

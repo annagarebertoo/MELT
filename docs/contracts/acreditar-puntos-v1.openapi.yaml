@@ -1,0 +1,164 @@
+openapi: 3.0.3
+info:
+  title: MELT - Acreditación externa de puntos
+  version: 1.0.0
+  description: >-
+    API servidor a servidor. El consumidor calcula la cantidad; MELT valida al
+    usuario activo en Auth, acumula saldo y registra un movimiento atómico.
+    solicitudId es global y no vence. Las repeticiones devuelven el resultado original.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Gateway local; usar HTTPS en el despliegue externo.
+paths:
+  /beneficios/acreditar-puntos:
+    post:
+      operationId: acreditarPuntosExternos
+      summary: Acreditar puntos a una cuenta existente
+      security:
+        - PartnerKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Acreditacion'
+            example:
+              solicitudId: op-001
+              usuarioId: '123'
+              puntos: 200
+      responses:
+        '201':
+          description: Operación nueva confirmada y persistida junto al movimiento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Movimiento'
+              example:
+                solicitudId: op-001
+                usuarioId: '123'
+                puntos: 200
+                saldoPuntos: 250
+                tipo: acreditacion_externa
+                creadoEn: '2026-11-10T18:00:00Z'
+        '200':
+          description: >-
+            solicitudId repetido con el mismo usuario y puntos. No acredita otra vez.
+            Devuelve el movimiento original y su saldo resultante, incluso si hubo
+            operaciones posteriores. El saldo actual se consulta con mis-puntos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Movimiento'
+        '400':
+          description: >-
+            DATOS_INVALIDOS. Campos obligatorios, JSON único sin propiedades adicionales,
+            máximo 4096 bytes, nombres de campos exactos sin duplicados, identificadores de 1 a 128 caracteres Unicode sin espacios
+            extremos, puntos enteros positivos hasta 9007199254740991.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: PARTNER_NO_AUTORIZADO. Falta la clave o es incorrecta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: USUARIO_NO_EXISTE. Usuario inexistente o inactivo en Auth.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: SOLICITUD_EN_CONFLICTO. solicitudId usado con otro usuario o cantidad.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: SOLICITUD_EN_CONFLICTO
+                  message: solicitudId ya se utilizó con otros datos.
+        '415':
+          description: CONTENT_TYPE_INVALIDO. Se requiere application/json; admite parámetros como charset=utf-8.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: SALDO_FUERA_DE_RANGO. El saldo resultante supera 9007199254740991.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: >-
+            BENEFICIOS_NO_DISPONIBLE o AUTH_NO_DISPONIBLE. Configuración incompleta,
+            dependencia caída o resultado incierto. Reintentar con el MISMO solicitudId
+            y los mismos datos; nunca generar un ID nuevo para un reintento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  securitySchemes:
+    PartnerKey:
+      type: apiKey
+      in: header
+      name: X-Partner-Key
+      description: Secreto BENEFICIOS_PARTNER_KEY compartido solo con el servidor consumidor.
+  schemas:
+    Acreditacion:
+      type: object
+      additionalProperties: false
+      required: [solicitudId, usuarioId, puntos]
+      properties:
+        solicitudId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: ID global de operación; máximo 128 caracteres Unicode, sin espacios extremos.
+        usuarioId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: ID opaco de Auth; máximo 128 caracteres Unicode, sin espacios extremos.
+        puntos:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9007199254740991
+    Movimiento:
+      type: object
+      required: [solicitudId, usuarioId, puntos, saldoPuntos, tipo, creadoEn]
+      properties:
+        solicitudId:
+          type: string
+        usuarioId:
+          type: string
+        puntos:
+          type: integer
+          format: int64
+        saldoPuntos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+        tipo:
+          type: string
+          enum: [acreditacion_externa]
+        creadoEn:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string

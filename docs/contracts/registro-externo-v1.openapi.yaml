@@ -1,3 +1,5 @@
+# HISTÓRICO RETIRADO: no implementado por la versión actual.
+# Reemplazado por acreditar-puntos-v1.openapi.yaml.
 openapi: 3.0.3
 info:
   title: MELT - Registro externo del gimnasio
@@ -12,6 +14,7 @@ servers:
 paths:
   /beneficios/registro-externo:
     post:
+      deprecated: true
       summary: Registrar un alta referida por el gimnasio
       operationId: registrarAltaExterna
       security:

@@ -78,14 +78,10 @@ services:
       AUTH_TOKEN_TTL_MINUTES: ${AUTH_TOKEN_TTL_MINUTES:-15}
       AUTH_ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL:-}
       AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-}
-      BENEFICIOS_URL: http://beneficios:8083
-      CODIGO_GIMNASIO: ${CODIGO_GIMNASIO:?Defini CODIGO_GIMNASIO para los enlaces del gimnasio}
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
     depends_on:
       mongodb:
         condition: service_healthy
-      beneficios:
-        condition: service_started
     restart: unless-stopped
 
   beneficios:
@@ -93,11 +89,9 @@ services:
       context: ./services/beneficios
     environment:
       PORT: "8083"
+      AUTH_URL: http://auth:8084
+      BENEFICIOS_PARTNER_KEY: ${BENEFICIOS_PARTNER_KEY:-}
       MONGODB_URI: mongodb://mongodb:27017
-      CODIGO_GIMNASIO: ${CODIGO_GIMNASIO:-}
-      CLAVE_API_GIMNASIO: ${CLAVE_API_GIMNASIO:-}
-      PUNTOS_POR_PLAN_MEMBRESIA: ${PUNTOS_POR_PLAN_MEMBRESIA:-}
-      PUNTOS_REGISTRO_GIMNASIO: ${PUNTOS_REGISTRO_GIMNASIO:-100}
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
     depends_on:
       mongodb:
@@ -106,12 +100,13 @@ services:
 
   mongodb:
     image: mongo:7
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "27017:27017"
     volumes:
       - melt_mongodb_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "try { if (!rs.status().ok || !db.hello().isWritablePrimary) quit(1) } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongodb:27017'}]}); quit(1) }"]
       interval: 10s
       timeout: 5s
       retries: 5
