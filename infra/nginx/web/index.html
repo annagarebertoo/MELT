@@ -8,6 +8,7 @@
     <title>MELT | Fundite con tu esencia</title>
     <link rel="stylesheet" href="/styles.css">
     <script src="/app.js" defer></script>
+    <script src="/ghostkitchen.js" defer></script>
   </head>
   <body>
     <header class="site-header">
@@ -23,7 +24,7 @@
     <aside class="site-menu" id="site-menu" aria-hidden="true" aria-label="Menú principal" inert>
       <div class="site-menu-top"><span class="brand">MELT</span><button id="menu-close" type="button" aria-label="Cerrar menú">×</button></div>
       <nav aria-label="Navegación principal">
-        <a href="#inicio">Inicio</a><a href="#seleccion">Selección MELT</a><a href="#tratamientos">Tratamientos</a><a href="#reservas">Reservar turno</a><a href="#cuenta">Mi cuenta</a>
+        <a href="#inicio">Inicio</a><a href="#seleccion">Selección MELT</a><a href="#tratamientos">Tratamientos</a><a href="#profesionales">Profesionales</a><a href="#reservas">Reservar turno</a><a href="#cuenta">Mi cuenta</a><a id="catalog-admin-link" class="hidden" href="#catalog-admin">Administrar catálogo</a>
       </nav>
       <p>Tu tiempo, tu ritual.</p>
     </aside>
@@ -60,9 +61,11 @@
           <div><p class="eyebrow">Encontrá tu próximo ritual</p><h2>Tratamientos</h2></div>
           <p class="section-description">Explorá el catálogo vigente, compará duración y precio, y elegí tu próximo momento.</p>
         </div>
+        <p id="category-status" class="category-status" aria-live="polite"></p>
+        <nav id="category-navigation" class="category-navigation" aria-label="Explorar categorías"></nav>
         <form id="search-form" class="search-bar">
           <label class="search-field"><span class="sr-only">Buscar tratamientos</span><span aria-hidden="true">⌕</span><input id="search-query" type="search" placeholder="¿Qué te gustaría hacer?" autocomplete="off"></label>
-          <label><span class="sr-only">Categoría</span><select id="search-category"><option value="">Todas las categorías</option><option>Facial</option><option>Corporal</option><option>Depilación</option><option>Manos y uñas</option></select></label>
+          <label><span class="sr-only">Categoría</span><select id="search-category"><option value="">Todas las categorías</option></select></label>
           <label class="price-filter"><span class="sr-only">Precio máximo</span><span>$</span><input id="search-price" type="number" min="0" placeholder="Precio máx."></label>
           <label class="sort-filter"><span class="sr-only">Ordenar resultados</span><select id="search-sort"><option value="nombre:asc">Orden: A–Z</option><option value="precio:asc">Menor precio</option><option value="precio:desc">Mayor precio</option></select></label>
           <button class="button button-dark" type="submit">Aplicar filtros</button>
@@ -71,6 +74,19 @@
         <p id="catalog-status" class="status-line" aria-live="polite"></p>
         <div id="treatments-list" class="treatment-grid" aria-live="polite"></div>
         <div class="pagination"><button class="button button-outline" id="previous-page" disabled>← Anterior</button><span id="page-label">Página 1</span><button class="button button-outline" id="next-page">Siguiente →</button></div>
+      </section>
+
+      <section class="section professionals-section" id="profesionales" aria-labelledby="professionals-title">
+        <div id="professionals-list-view">
+          <div class="professional-intro"><p class="eyebrow">El corazón de MELT</p><h2 id="professionals-title">Nuestros profesionales</h2><p>Personas que combinan conocimiento, sensibilidad y una escucha atenta.</p></div>
+          <div class="professionals-carousel-heading"><h3 id="professionals-count">Profesionales para acompañarte</h3><div class="featured-controls"><button type="button" id="professionals-prev" aria-label="Profesionales anteriores">←</button><button type="button" id="professionals-next" aria-label="Profesionales siguientes">→</button></div></div>
+          <p id="professionals-status" class="status-line" aria-live="polite">Cargando profesionales…</p>
+          <div id="professionals-list" class="professionals-grid" aria-live="polite"></div>
+        </div>
+        <div id="professional-profile" class="professional-profile hidden" aria-live="polite" aria-labelledby="professional-profile-name">
+          <button class="text-link professional-back" type="button" data-professional-back>← Volver a profesionales</button>
+          <div id="professional-profile-content"></div>
+        </div>
       </section>
 
       <section class="booking-band" id="reservas">
@@ -88,6 +104,9 @@
           <li data-booking-step="2"><span>02</span><b>Buscá un horario</b></li>
           <li data-booking-step="3"><span>03</span><b>Confirmá tu seña</b></li>
         </ol>
+        <div id="invitation-panel" class="booking-guest-note hidden" role="status" aria-live="polite">
+          <div><strong>Puntos para tu cuenta MELT</strong><p id="invitation-details"></p><button id="discard-invitation" class="text-button" type="button">Continuar sin invitación</button></div>
+        </div>
         <div id="auth-panel" class="account-layout">
           <div class="account-card">
             <div class="tab-list" role="tablist" aria-label="Acceso a la cuenta">
@@ -106,7 +125,7 @@
             <div class="profile-top"><div class="avatar" id="profile-initials">M</div><div><p class="eyebrow">Tu espacio MELT</p><h3 id="profile-name">Hola</h3></div></div>
             <p id="profile-email" class="muted"></p>
             <div class="points-box"><span>Tu saldo de beneficios</span><strong><span id="points-balance">—</span> <small>puntos</small></strong></div>
-            <div class="profile-actions"><button id="refresh-account" class="button button-outline" type="button">Actualizar</button><button id="profile-reservations" class="text-button" type="button">Ver mis turnos ↓</button><button id="logout-button" class="text-button" type="button">Cerrar sesión</button></div>
+            <div class="profile-actions"><button id="refresh-account" class="button button-outline" type="button">Actualizar</button><button id="profile-reservations" class="text-button" type="button">Ver mis turnos ↓</button><button id="profile-ghostkitchen" class="text-button hidden" type="button">Cocinas GhostKitchen cercanas ↓</button><button id="logout-button" class="text-button" type="button">Cerrar sesión</button></div>
           </div>
           <div class="calendar-card">
             <div><p class="eyebrow">Disponibilidad</p><h3>Elegí tu turno</h3></div>
@@ -115,6 +134,7 @@
             <form id="availability-form" class="calendar-form">
               <label class="form-field">Tratamiento<select id="booking-treatment" required><option value="">Elegí un tratamiento</option></select></label>
               <label class="form-field">Profesional<select id="booking-professional" required><option value="">Elegí un profesional</option></select></label>
+              <label class="form-field">Beneficio (opcional)<select id="booking-benefit"><option value="">Sin beneficio</option></select></label>
               <label class="form-field">Fecha<input id="booking-date" type="date" required></label>
               <button class="button button-dark full-width" type="submit">Ver horarios</button>
             </form>
@@ -133,15 +153,113 @@
             </form>
           </div>
         </div>
+        <section id="points-panel" class="benefits-area hidden" aria-labelledby="points-title">
+          <div class="section-heading"><div><p class="eyebrow">Tu recorrido MELT</p><h2 id="points-title">Puntos y recompensas</h2></div><button id="refresh-benefits" class="button button-outline" type="button">Actualizar</button></div>
+          <div class="benefits-columns">
+            <div class="benefit-card"><h3>Historial de puntos</h3><div id="points-history" class="movement-list" aria-live="polite"></div></div>
+            <div class="benefit-card"><h3>Catálogo de recompensas</h3><div id="rewards-list" class="rewards-list" aria-live="polite"></div></div>
+          </div>
+          <div class="benefit-card redeemed-card"><h3>Mis canjes</h3><div id="my-rewards" class="movement-list" aria-live="polite"></div></div>
+        </section>
+        <section id="ghostkitchen-panel" class="benefits-area ghostkitchen-area hidden" aria-labelledby="ghostkitchen-title">
+          <div class="section-heading"><div><p class="eyebrow">Una opción rica cerca tuyo</p><h2 id="ghostkitchen-title">Cocinas GhostKitchen cercanas</h2></div><button id="ghostkitchen-retry" class="button button-outline" type="button">Actualizar</button></div>
+          <p class="section-description">Consultá la cocina más cercana y explorá sus restaurantes y platos disponibles.</p>
+          <div class="ghostkitchen-location-card">
+            <div><strong>Buscá por ubicación</strong><p>Podés compartir tu ubicación o ingresar las coordenadas manualmente.</p></div>
+            <button id="ghostkitchen-geolocate" class="button button-dark" type="button">Usar mi ubicación</button>
+            <form id="ghostkitchen-location-form" class="ghostkitchen-coordinates">
+              <label class="form-field">Latitud<input id="ghostkitchen-lat" type="number" min="-90" max="90" step="any" required placeholder="-31.4262"></label>
+              <label class="form-field">Longitud<input id="ghostkitchen-lng" type="number" min="-180" max="180" step="any" required placeholder="-64.1883"></label>
+              <button class="button button-outline" type="submit">Buscar cocina</button>
+            </form>
+          </div>
+          <p id="ghostkitchen-status" class="form-status" aria-live="polite"></p>
+          <div id="ghostkitchen-sede" class="ghostkitchen-sede"></div>
+          <form id="ghostkitchen-filters" class="ghostkitchen-filters hidden">
+            <label class="form-field">Buscar platos<input name="q" type="search" maxlength="100" placeholder="Nombre o descripción"></label>
+            <label class="form-field">Categoría<select name="categoria"><option value="">Todas las categorías</option><option>Hamburguesas</option><option>Sushi</option><option>Pizza</option><option>Pastas</option><option>Postres</option></select></label>
+            <label class="form-field">Etiqueta alimentaria<select name="etiqueta"><option value="">Todas las etiquetas</option><option>Vegano</option><option>Vegetariano</option><option>Sin TACC</option><option>Picante</option></select></label>
+            <label class="form-field">Restaurante<select id="ghostkitchen-restaurant" name="restauranteId"><option value="">Todos los restaurantes</option></select></label>
+            <label class="form-field">Precio máximo<input name="precioMax" type="number" min="0" step="1" placeholder="ARS"></label>
+            <label class="form-field">Ordenar<select name="orden"><option value="relevancia">Relevancia</option><option value="precio_asc">Menor precio</option><option value="precio_desc">Mayor precio</option></select></label>
+            <label class="ghostkitchen-availability"><input name="soloDisponibles" type="checkbox" checked> Mostrar solo disponibles</label>
+            <button class="button button-dark" type="submit">Aplicar filtros</button>
+          </form>
+          <div id="ghostkitchen-results" class="ghostkitchen-grid" aria-live="polite"></div>
+          <div id="ghostkitchen-pagination" class="pagination hidden"><button id="ghostkitchen-prev" class="button button-outline" type="button">← Anterior</button><span id="ghostkitchen-page">Página 1</span><button id="ghostkitchen-next" class="button button-outline" type="button">Siguiente →</button></div>
+          <p class="ghostkitchen-note">La disponibilidad es orientativa y no garantiza una reserva ni una compra.</p>
+        </section>        <section id="professional-panel" class="benefits-area hidden" aria-labelledby="professional-title">
+          <div class="section-heading"><div><p class="eyebrow">Atención profesional</p><h2 id="professional-title">Mis tratamientos</h2></div><button id="refresh-professional-turns" class="button button-outline" type="button">Actualizar</button></div>
+          <p class="muted">Cuando termines un turno, confirmalo para registrar la realización y habilitar la acreditación de puntos.</p>
+          <div id="professional-turns" class="movement-list" aria-live="polite"></div>
+        </section>
+        <section id="admin-panel" class="benefits-area hidden" aria-labelledby="admin-title">
+          <div class="section-heading"><div><p class="eyebrow">Administración MELT</p><h2 id="admin-title">Reglas y recompensas</h2></div><button id="refresh-admin" class="button button-outline" type="button">Actualizar</button></div>
+          <section id="catalog-admin" class="catalog-admin" aria-labelledby="catalog-admin-title">
+            <div class="section-heading"><div><p class="eyebrow">Catálogo y profesionales</p><h3 id="catalog-admin-title">Administrar catálogo</h3></div><button id="refresh-catalog-admin" class="button button-outline" type="button">Actualizar listas</button></div>
+            <p id="catalog-admin-access" class="form-status" aria-live="polite"></p>
+            <div class="benefits-columns catalog-admin-columns">
+              <form id="admin-category-form" class="benefit-card admin-form"><h4>Categorías</h4>
+                <label class="form-field">ID<input name="id" required maxlength="128" placeholder="facial"></label>
+                <label class="form-field">Nombre<input name="nombre" required maxlength="100"></label>
+                <label class="form-field">Descripción<textarea name="descripcion" maxlength="1000" rows="2"></textarea></label>
+                <button class="button button-dark" type="submit">Guardar categoría</button><button class="text-link hidden" type="button" data-admin-cancel="category">Cancelar edición</button><p class="form-status" data-admin-status="category" aria-live="polite"></p>
+                <div class="movement-list" data-admin-list="categories"></div>
+              </form>
+              <form id="admin-treatment-form" class="benefit-card admin-form"><h4>Tratamientos</h4>
+                <label class="form-field">ID<input name="id" required maxlength="128" placeholder="limpieza-facial"></label>
+                <label class="form-field">Nombre<input name="nombre" required maxlength="200"></label>
+                <label class="form-field">Descripción<textarea name="descripcion" required maxlength="5000" rows="2"></textarea></label>
+                <label class="form-field">Categoría<select name="categoria" required></select></label>
+                <label class="form-field">Precio (ARS)<input name="precio" type="number" min="0" step="0.01" required></label>
+                <label class="form-field">Duración (minutos)<input name="duracionMinutos" type="number" min="5" max="480" step="1" required></label>
+                <label class="form-field">Palabras clave (separadas por coma)<input name="keywords"></label>
+                <label class="form-field">Imágenes (URLs separadas por coma)<input name="imagenes"></label>
+                <button class="button button-dark" type="submit">Guardar tratamiento</button><button class="text-link hidden" type="button" data-admin-cancel="treatment">Cancelar edición</button><p class="form-status" data-admin-status="treatment" aria-live="polite"></p>
+                <div class="movement-list" data-admin-list="treatments"></div>
+              </form>
+              <form id="admin-professional-form" class="benefit-card admin-form"><h4>Profesionales</h4>
+                <label class="form-field">ID<input name="id" required maxlength="128" placeholder="profesional-01"></label>
+                <label class="form-field">Nombre<input name="nombre" required maxlength="200"></label>
+                <label class="form-field">Descripción<textarea name="descripcion" maxlength="5000" rows="2"></textarea></label>
+                <div class="form-field"><span>Tratamientos asociados</span><div id="admin-professional-treatments" class="catalog-admin-checkboxes" aria-label="Tratamientos asociados"></div></div>
+                <button class="button button-dark" type="submit">Guardar profesional</button><button class="text-link hidden" type="button" data-admin-cancel="professional">Cancelar edición</button><p class="form-status" data-admin-status="professional" aria-live="polite"></p>
+                <div class="movement-list" data-admin-list="professionals"></div>
+              </form>
+            </div>
+          </section>
+          <div class="benefits-columns">
+            <form id="reward-admin-form" class="benefit-card admin-form"><h3>Crear o actualizar recompensa</h3>
+              <label class="form-field">Identificador<input name="id" required maxlength="128" placeholder="descuento-10"></label>
+              <label class="form-field">Nombre<input name="nombre" required maxlength="120"></label>
+              <label class="form-field">Descripción<textarea name="descripcion" maxlength="500" rows="2"></textarea></label>
+              <label class="form-field">Modalidad<select name="tipo"><option value="descuento_porcentaje">Descuento porcentual</option><option value="tratamiento_gratis">Tratamiento gratis</option></select></label>
+              <label class="form-field">Puntos necesarios<input name="costoPuntos" type="number" min="1" step="1" required></label>
+              <label class="form-field">Porcentaje<input name="porcentaje" type="number" min="1" max="100" step="1"></label>
+              <label class="form-field">ID de tratamiento<input name="tratamientoId" maxlength="128"></label>
+              <label class="check-field"><input name="activa" type="checkbox" checked> Disponible para canjear</label>
+              <button class="button button-dark" type="submit">Guardar recompensa</button><p id="reward-admin-status" class="form-status" aria-live="polite"></p>
+            </form>
+            <form id="rule-admin-form" class="benefit-card admin-form"><h3>Puntos por tratamiento realizado</h3>
+              <label class="form-field">ID de tratamiento<input name="tratamientoId" required maxlength="128"></label>
+              <label class="form-field">Puntos a acreditar<input name="puntos" type="number" min="0" step="1" required></label>
+              <button class="button button-dark" type="submit">Guardar regla</button><p id="rule-admin-status" class="form-status" aria-live="polite"></p>
+              <h4>Reglas actuales</h4><div id="rules-list" class="movement-list"></div>
+            </form>
+          </div>
+          <div id="admin-rewards-list" class="movement-list"></div>
+          <div class="benefit-card redeemed-card"><h3>Mensajes que requieren revisión</h3><div id="failed-messages" class="movement-list"></div></div>
+        </section>
         <div id="my-bookings" class="bookings-panel hidden"><div class="bookings-heading"><div><p class="eyebrow">Tus próximos encuentros</p><h3>Mis reservas</h3></div><button id="refresh-bookings" class="button button-outline" type="button">Actualizar</button></div><div id="bookings-list"></div></div>
       </section>
     </main>
 
-    <footer class="site-footer"><div class="footer-brand"><a class="brand" href="#inicio">MELT</a><p>Cuidarte también es hacerte un espacio.</p></div><div class="footer-links"><a href="#seleccion">Selección</a><a href="#tratamientos">Tratamientos</a><a href="#reservas">Reservas</a><a href="#cuenta">Mi cuenta</a></div><span>© MELT · Centro de estética</span></footer>
+    <footer class="site-footer"><div class="footer-brand"><a class="brand" href="#inicio">MELT</a><p>Cuidarte también es hacerte un espacio.</p></div><div class="footer-links"><a href="#seleccion">Selección</a><a href="#tratamientos">Tratamientos</a><a href="#profesionales">Profesionales</a><a href="#reservas">Reservas</a><a href="#cuenta">Mi cuenta</a></div><span>© MELT · Centro de estética</span></footer>
     <dialog class="treatment-dialog" id="treatment-dialog" aria-labelledby="detail-title">
       <form method="dialog" class="dialog-top"><span class="eyebrow">Un ritual MELT</span><button class="dialog-close" aria-label="Cerrar detalle">×</button></form>
       <div class="dialog-layout"><div class="dialog-visual" id="detail-visual" aria-hidden="true"><span id="detail-initial">M</span></div><div class="dialog-copy"><p class="eyebrow" id="detail-category"></p><h2 id="detail-title"></h2><p class="dialog-description" id="detail-description"></p><div class="dialog-meta"><div><span>Duración</span><strong id="detail-duration"></strong></div><div><span>Precio</span><strong id="detail-price"></strong></div></div><div class="detail-keywords" id="detail-keywords"></div><div class="detail-professionals" id="detail-professionals"></div><p id="detail-availability" class="detail-availability"></p><button class="button button-dark" id="detail-book" type="button">Elegir horario <span aria-hidden="true">↗</span></button></div></div>
     </dialog>
+    <dialog class="treatment-dialog ghostkitchen-detail-dialog" id="ghostkitchen-detail-dialog" aria-labelledby="ghostkitchen-detail-title"><form method="dialog" class="dialog-top"><span class="eyebrow">Detalle del plato</span><button class="dialog-close" aria-label="Cerrar detalle">×</button></form><div class="dialog-copy"><p class="eyebrow" id="ghostkitchen-detail-restaurant"></p><h2 id="ghostkitchen-detail-title"></h2><p id="ghostkitchen-detail-description" class="dialog-description"></p><div class="dialog-meta"><div><span>Precio</span><strong id="ghostkitchen-detail-price"></strong></div><div><span>Disponibilidad</span><strong id="ghostkitchen-detail-availability"></strong></div></div><div id="ghostkitchen-detail-tags" class="detail-keywords"></div><p id="ghostkitchen-detail-updated" class="muted"></p></div></dialog>
     <dialog class="confirm-dialog" id="cancel-dialog" aria-labelledby="cancel-title"><form method="dialog" class="cancel-dialog-card"><button class="dialog-close" aria-label="Cerrar">×</button><p class="eyebrow">Gestioná tu turno</p><h2 id="cancel-title">¿Querés cancelar esta reserva?</h2><p id="cancel-policy"></p><div class="cancel-actions"><button class="button button-outline" value="cancel">Mantener turno</button><button class="button button-dark" id="confirm-cancel" value="confirm">Cancelar turno</button></div></form></dialog>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </body>

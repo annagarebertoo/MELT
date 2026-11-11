@@ -22,12 +22,21 @@ services:
       context: ./services/catalogo-profesionales
     environment:
       MONGODB_URI: mongodb://mongodb:27017
+      CATALOGO_MONGODB_DATABASE: ${CATALOGO_MONGODB_DATABASE:-catalogo_db}
+      PROFESIONALES_MONGODB_DATABASE: ${PROFESIONALES_MONGODB_DATABASE:-}
       PORT: "8081"
       AUTH_URL: ${AUTH_URL:-http://auth:8084}
+      OPENSEARCH_URL: ${OPENSEARCH_URL:-http://opensearch:9200}
+      MEMCACHED_ADDRESS: ${MEMCACHED_ADDRESS:-memcached:11211}
+      MEMCACHED_NAMESPACE: ${MEMCACHED_NAMESPACE:-melt:catalogo}
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
     depends_on:
       mongodb:
         condition: service_healthy
+      opensearch:
+        condition: service_started
+      memcached:
+        condition: service_started
     deploy:
       replicas: 2
     restart: unless-stopped
@@ -50,11 +59,16 @@ services:
       MONGODB_URI: mongodb://mongodb:27017
       MELT_TIMEZONE: ${MELT_TIMEZONE:-America/Argentina/Buenos_Aires}
       PAGOS_URL: ${PAGOS_URL:-http://pagos:8085}
+      BENEFICIOS_URL: http://beneficios:8083
+      MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
       mongodb:
         condition: service_healthy
       pagos:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
 
   pagos:
@@ -75,6 +89,7 @@ services:
       PORT: "8084"
       MONGODB_URI: mongodb://mongodb:27017
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Defini AUTH_JWT_SECRET en tu entorno}
+      BENEFICIOS_URL: http://beneficios:8083
       AUTH_TOKEN_TTL_MINUTES: ${AUTH_TOKEN_TTL_MINUTES:-15}
       AUTH_ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL:-}
       AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-}
@@ -90,11 +105,18 @@ services:
     environment:
       PORT: "8083"
       AUTH_URL: http://auth:8084
+      BENEFICIOS_INVITATION_SECRET: ${BENEFICIOS_INVITATION_SECRET:-}
+      MELT_PUBLIC_URL: ${MELT_PUBLIC_URL:-http://localhost:8080}
       BENEFICIOS_PARTNER_KEY: ${BENEFICIOS_PARTNER_KEY:-}
       MONGODB_URI: mongodb://mongodb:27017
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
+      GHOSTKITCHEN_API_KEY: ${GHOSTKITCHEN_API_KEY:-}
+      GHOSTKITCHEN_BASE_URL: ${GHOSTKITCHEN_BASE_URL:-}
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
       mongodb:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
 
@@ -169,6 +191,7 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.5.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-lifecycle"]
     ports:
       - "9090:9090"
     volumes:

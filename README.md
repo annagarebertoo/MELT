@@ -26,7 +26,7 @@ Facilitar la organización de la agenda del centro, brindar a los clientes un me
 
 | Funcionalidad | Estado actual |
 | --- | --- |
-| Catálogo con búsqueda, filtros, paginación y ordenamiento | Implementada para lecturas locales; usa consultas a MongoDB. OpenSearch no está conectado. |
+| Catálogo con búsqueda, filtros, paginación y ordenamiento | Búsqueda textual en OpenSearch con reconstrucción asíncrona desde MongoDB; lista pública cacheada en Memcached con invalidación por generación. |
 | Perfiles públicos, selección profesional y consulta de disponibilidad | Implementados; requieren asociación válida y agenda activa. |
 | Identidad y permisos por operación | Implementados para las rutas de identidad, administración del catálogo y reservas descritas en la documentación. |
 | Reserva, carrito de 10 minutos, seña del 30 %, confirmación y cancelación | Implementados para el recorrido local con adaptador Mercado Pago en modo test. |
@@ -89,7 +89,7 @@ La arquitectura interna de los microservicios combinará al menos dos estilos tr
 
 El servicio de autenticación se publica por el gateway en `/api/v1/auth`. Permite registrar clientes, iniciar sesión y consultar la cuenta actual. Las cuentas internas se crean con permisos administrativos; el registro público no permite elegir roles. Ver [guía local](docs/LOCAL-DEV.md) y [contrato OpenAPI](docs/contracts/autenticacion-v1.openapi.yaml).
 
-Las rutas de negocio protegidas integran autenticación y permisos por operación. Reservas aplica una matriz de roles con denegación por defecto y comprueba además la propiedad de turnos y agendas en cada handler. La recuperación de contraseña y la verificación de email quedan pendientes.
+Las rutas de negocio protegidas integran autenticación y permisos por operación. Reservas aplica una matriz de roles con denegación por defecto y comprueba además la propiedad de turnos y agendas en cada handler. La recuperación de contraseña y la verificación general de email quedan pendientes; el flujo de invitaciones verifica la dirección mediante el enlace seguro entregado al destinatario.
 
 ## Ejecución local
 
@@ -169,7 +169,7 @@ La guía para ejecutar y probar el sistema localmente es [docs/LOCAL-DEV.md](doc
 
 El repositorio ya incluye una interfaz web conectada al gateway, autenticación, catálogo público de tratamientos y profesionales, permisos por operación en Reservas, agenda y disponibilidad, bloqueo temporal de carrito, checkout de seña y cancelaciones con la política de devolución. El estado verificable de la parte de identidad y reservas, las pruebas ejecutadas y las condiciones para una prueba real están en [SPEC.md, sección 13](SPEC.md#13-estado-de-implementación-y-verificación) y en la [guía de reservas web](docs/RESERVAS-WEB.md).
 
-La integración con el proveedor externo asignado (búsqueda de sedes cercanas) sigue pendiente de que el otro grupo publique su API y contrato. También siguen fuera del flujo implementado las funciones de puntos por tratamientos completados, canjes, notificaciones por correo, y las integraciones de negocio con RabbitMQ, OpenSearch, Memcached y Prometheus. Las pruebas locales usan Mercado Pago en modo test; esto no equivale a un despliegue ni a cobros de producción.
+La integración con el proveedor externo asignado (búsqueda de sedes cercanas) sigue pendiente de que el otro grupo publique su API y contrato. También siguen pendientes los puntos por tratamientos completados, canjes y notificaciones por correo. OpenSearch, Memcached y las métricas de Catálogo se integraron para exploración y se verificaron localmente; esto no equivale a un despliegue. Las pruebas locales usan Mercado Pago en modo test; esto no equivale a cobros de producción.
 
 
 ## Desarrollo local
@@ -182,7 +182,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-El estado de resiliencia y el procedimiento para registrar evidencia real se encuentran en [docs/POSTMORTEM.md](docs/POSTMORTEM.md). No se deben interpretar las configuraciones declaradas como pruebas ejecutadas: las integraciones de búsqueda, caché, mensajería y métricas de negocio siguen pendientes.
+El estado de resiliencia y el procedimiento para registrar evidencia real se encuentran en [docs/POSTMORTEM.md](docs/POSTMORTEM.md). No se deben interpretar las configuraciones declaradas como pruebas ejecutadas: búsqueda y caché de Catálogo se probaron localmente, mientras que las integraciones de mensajería y métricas de negocio siguen pendientes de su evidencia de extremo a extremo.
 
 
 ## Pagos de reservas con Mercado Pago (modo pruebas)
@@ -224,9 +224,9 @@ No guardes el Access Token en el repositorio, en el frontend ni en logs. Usá cu
 `puntos` y exige `X-Partner-Key`. Verifica la cuenta en Auth, acumula puntos y
 registra el movimiento mediante una transacción MongoDB. Repetir una solicitud
 no duplica puntos; reutilizar su ID con otros datos devuelve 409.
-Registro y login ya no generan acreditaciones.
+El registro normal y el login no regalan puntos. Por email se puede guardar una acreditación pendiente y devolver un enlace seguro; el registro desde ese enlace vincula y acredita automáticamente. Una cuenta existente sin email verificado confirma el enlace con su sesión. El consumidor entrega el enlace privadamente al destinatario.
 
-Configurar `BENEFICIOS_PARTNER_KEY`, `MELT_INTERNAL_KEY` y `AUTH_URL` de Beneficios.
+Configurar `BENEFICIOS_PARTNER_KEY`, `MELT_INTERNAL_KEY`, `AUTH_URL`, `BENEFICIOS_INVITATION_SECRET` y `MELT_PUBLIC_URL` en Beneficios; `BENEFICIOS_URL` en Auth.
 MongoDB debe ser replica set (Compose lo inicializa); Atlas admite transacciones.
 Ver [guía y migración](docs/ACREDITACION-PUNTOS.md) y
 [contrato OpenAPI](docs/contracts/acreditar-puntos-v1.openapi.yaml).

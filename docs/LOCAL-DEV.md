@@ -124,7 +124,7 @@ El catálogo y los perfiles profesionales persisten en MongoDB (`catalogo_db.tra
 ## Acreditación externa de puntos
 
 Ver [ACREDITACION-PUNTOS.md](ACREDITACION-PUNTOS.md) para configuración,
-contrato, pruebas y migración. Registro y login son independientes de Beneficios.
+contrato, pruebas y migración. Registro ordinario y login son independientes de Beneficios; el registro con invitación requiere validar el enlace.
 El saldo e historial se consultan con `GET /api/v1/beneficios/mis-puntos` y Bearer.
 
 ## Autenticación y cuentas
@@ -231,3 +231,8 @@ go test -p=1 -count=1 -run TestReservasMongoIntegrationFlujoCompleto ./...
 ```
 
 La prueba crea y elimina una base de datos de nombre único; no toca `reservas_db`.
+
+
+### Flujo por email y registro seguro
+
+La API v1.1 admite `email` en lugar de `usuarioId`, `referencia` en lugar de `solicitudId` y `descripcion` opcional, en `/api/v1/beneficios/acreditaciones` o `/acreditar-puntos`. Sin cuenta verificada devuelve 202 con un enlace de registro; al registrarse o iniciar sesión desde ese enlace se vincula y acredita una sola vez. El consumidor entrega el enlace privadamente al destinatario. Configurar `BENEFICIOS_INVITATION_SECRET` y `MELT_PUBLIC_URL` en Beneficios y `BENEFICIOS_URL` en Auth. No hay reglas de membresías ni canje manual de códigos. Ver [manual completo](ACREDITACION-PUNTOS.md) para contrato, seguridad, vencimiento, recuperación y pruebas.

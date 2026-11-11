@@ -1,8 +1,8 @@
 # ADR-006: Búsqueda de tratamientos
 
-> **Cierre documental de Entrega 2:** se concreta al final una estrategia y un objetivo verificable. No se presenta OpenSearch como integrado ni el objetivo como medido.
+> **Estado actualizado 11/11/2026:** la integración local y sus pruebas se describen al final. El objetivo de frescura es técnico y no una garantía de producción.
 
-- **Estado:** Propuesto
+- **Estado:** Implementado localmente; falta validar en el entorno de despliegue.
 - **Fecha:** 2026-10-21
 
 ## Contexto
@@ -50,4 +50,8 @@ La estrategia inicial será **reconstrucción periódica asíncrona desde MongoD
 
 Una generación fallida no reemplaza a la última válida. Registrar error, duración y antigüedad; reintentar en el siguiente ciclo sin duplicar documentos. Si no existe una generación válida o la antigüedad supera el objetivo, responder indisponibilidad controlada en el futuro flujo de búsqueda, sin presentar resultados antiguos como vigentes. El catálogo y su detalle conservan MongoDB como autoridad. No se incorpora un fallback silencioso que cambie la semántica de búsqueda.
 
-Medir generación activa, última reconstrucción exitosa, errores, duración, documentos fuente/indexados y retraso de visibilidad. La prueba posterior modificará un dato autorizado, comprobará su aparición dentro del objetivo y verificará recuperación de una generación fallida. El diseño no implementa esas modificaciones ni las declara probadas hoy.
+Catálogo expone por `/metrics` la marca temporal de última generación válida, fallos
+de reconstrucción y objetivo de frescura. El objetivo se aplica con respuesta 503
+cuando el índice supera 60 s. Las pruebas de módulo verifican alta/edición/baja,
+reconstrucción fallida sin reemplazar la generación válida, recuperación y consulta
+real con OpenSearch local. No acreditan ese SLA en producción.

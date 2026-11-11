@@ -275,10 +275,10 @@ Los requisitos del sistema completo se conservan como compromisos de desarrollo.
 | Presentación grupal — fecha asignada en noviembre | Frontend completo, entrada con autenticación y control de tráfico, tres servicios operativos, capacidad propia pública e integración externa en un flujo importante. Integrar persistencia relacional y no relacional, dos estilos internos, mensajería, búsqueda y caché con evidencia y limitaciones documentadas. |
 | Defensa individual | Demostrar concurrencia y consistencia, pruebas unitarias e integración real, test de contrato, carga analizada, balanceo entre dos o más instancias con detección de indisponibilidad, fallas controladas, observabilidad y postmortem. |
 
-### 12.1. Compromisos técnicos pendientes de diseño y verificación
+### 12.1. Compromisos técnicos y estado de implementación
 
-- **Búsqueda:** filtros relevantes, paginación y ordenamiento; actualización ante cambios del catálogo y retraso máximo tolerable definido. OpenSearch es la propuesta, sin imponer ahora el mecanismo de reconstrucción.
-- **Caché:** al menos una lectura relevante, con justificación por necesidad observable y métricas de impacto. Memcached es la tecnología seleccionada; vigencia e invalidación se diseñarán y medirán posteriormente.
+- **Búsqueda:** Catálogo usa OpenSearch con reconstrucción desde MongoDB, alias por generación, búsquedas con filtros/paginación/orden y objetivo de frescura de 60 s. Validada localmente; ver `docs/CATALOGO-PROFESIONALES-ETAPA-1.md`.
+- **Caché:** Catálogo usa Memcached para listados públicos con TTL 30 s, clave por parámetros, invalidación con token de generación, fallback y contadores hit/miss. Benchmark local repetido en la documentación del módulo.
 - **Balanceo:** al menos un servicio en dos o más instancias, con reconocimiento de indisponibilidad y evidencia de distribución. Reservas es candidato; la configuración de NGINX y la demostración quedan para su etapa.
 - **Resiliencia:** identificar dependencias y comportamiento ante lentitud o falla; seleccionar al menos un mecanismo de protección y demostrarlo mediante una caída controlada. Tiempos, reintentos, circuit breakers y recuperación se evaluarán sin fijar una combinación prematura.
 - **Observabilidad:** logs estructurados, métricas y tableros que permitan comprender una operación. La instrumentación, trazas, alertas y almacenamiento se definirán en las etapas correspondientes.
@@ -323,7 +323,7 @@ Los roles definidos son `cliente`, `profesional`, `recepcion`, `administrador` y
 
 El contrato está en [`docs/contracts/autenticacion-v1.openapi.yaml`](contracts/autenticacion-v1.openapi.yaml), y la ejecución local en [`docs/LOCAL-DEV.md`](LOCAL-DEV.md). `AUTH_JWT_SECRET` y las credenciales opcionales del superadministrador inicial se inyectan por entorno; no deben guardarse en el repositorio.
 
-**Límites conocidos:** no hay recuperación de contraseña ni verificación de email; los tokens emitidos no tienen revocación inmediata. Reservas aplica autenticación, permisos por operación y autorización por recurso; Catálogo protege las operaciones administrativas mediante verificación de rol contra Auth. Beneficios conserva la autenticación independiente de la integración externa mediante clave de partner.
+**Límites conocidos:** no hay recuperación de contraseña ni verificación general de email (las invitaciones sí verifican el destinatario mediante enlace seguro); los tokens emitidos no tienen revocación inmediata. Reservas aplica autenticación, permisos por operación y autorización por recurso; Catálogo protege las operaciones administrativas mediante verificación de rol contra Auth. Beneficios conserva la autenticación independiente de la integración externa mediante clave de partner.
 
 ### Estado implementado de identidad, catálogo y reservas (8/11/2026)
 
@@ -335,6 +335,15 @@ Este snapshot describe la implementación local y complementa el diseño objetiv
 - El adaptador `pagos` crea preferencias y verifica/refunda operaciones en Mercado Pago test. Producción no está habilitada; el retorno automático requiere configurar una URL HTTPS pública.
 - La web se sirve desde NGINX y consume las rutas de catálogo, Auth, Reservas, Beneficios y Pagos del Gateway. Hay datos demo locales de tratamientos, profesionales y agendas; no se consideran datos comerciales ni cuentas de Auth. Ver `docs/RESERVAS-WEB.md`.
 - La API externa asignada a Cocina Fantasma (búsqueda de sedes cercanas) no está entregada todavía. Puntos por tratamientos completados, canjes, notificaciones por correo y consola administrativa tampoco forman parte de este flujo implementado.
+
+### Actualización de Catálogo — búsqueda y caché (11/11/2026)
+
+Catálogo sincroniza índices privados de tratamientos y profesionales desde MongoDB
+mediante reconstrucción periódica y alias. `q` consulta OpenSearch; el listado sin
+búsqueda textual permanece en MongoDB y usa Memcached cache-aside. OpenSearch o
+Memcached no son autoridad de los datos. Las pruebas reales de integración y el
+benchmark local están registrados en `docs/CATALOGO-PROFESIONALES-ETAPA-1.md`; no
+representan una medición ni despliegue de producción.
 
 ## Acreditación externa de puntos (implementación)
 
@@ -349,7 +358,7 @@ Auth ofrece `GET /internal/usuarios/:id`, protegido con `MELT_INTERNAL_KEY` y si
 datos personales en la respuesta; Beneficios lo consulta vía `AUTH_URL`. NGINX
 bloquea el prefijo interno en ambos servicios. El POST público exige la clave
 `BENEFICIOS_PARTNER_KEY` mediante `X-Partner-Key`; el frontend no recibe secretos.
-Registro y login no dependen de Beneficios. MongoDB requiere replica set.
+Registro ordinario y login no dependen de Beneficios; el registro con invitación valida el enlace y conserva una entrega recuperable si la acreditación queda pendiente. MongoDB requiere replica set.
 Ver [migración y límites](ACREDITACION-PUNTOS.md).
 
 ### Protección de la consulta de puntos
@@ -359,3 +368,8 @@ valida el Bearer mediante `/verify` de Auth y exige el rol cliente confirmado
 por Auth. Se comprueba así la cuenta activa también en accesos directos al servicio.
 NGINX local y Render reenvían Authorization y eliminan los headers X-Auth-User-* hacia
 Beneficios. La clave de partner se conserva exclusivamente para la acreditación externa.
+
+
+### Flujo por email y registro seguro
+
+La API v1.1 admite `email` en lugar de `usuarioId`, `referencia` en lugar de `solicitudId` y `descripcion` opcional, en `/api/v1/beneficios/acreditaciones` o `/acreditar-puntos`. Sin cuenta verificada devuelve 202 con un enlace de registro; al registrarse o iniciar sesión desde ese enlace se vincula y acredita una sola vez. El consumidor entrega el enlace privadamente al destinatario. Configurar `BENEFICIOS_INVITATION_SECRET` y `MELT_PUBLIC_URL` en Beneficios y `BENEFICIOS_URL` en Auth. No hay reglas de membresías ni canje manual de códigos. Ver [manual completo](ACREDITACION-PUNTOS.md) para contrato, seguridad, vencimiento, recuperación y pruebas.

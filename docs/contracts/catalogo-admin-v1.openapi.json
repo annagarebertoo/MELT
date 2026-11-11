@@ -1,0 +1,1190 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Administración de Catálogo y Profesionales MELT",
+    "version": "1.0.0",
+    "description": "Operaciones administrativas CRUD protegidas por Auth /verify-admin. Consultas y bajas no alteran Reservas. JSON sensible a mayúsculas, sin propiedades repetidas ni null. GET /tratamientos y sus filtros se documentan en tratamientos-v1.openapi.yaml."
+  },
+  "servers": [
+    {
+      "url": "/api/v1/catalogo",
+      "description": "Gateway existente, sin cambios de rutas."
+    }
+  ],
+  "paths": {
+    "/categorias": {
+      "post": {
+        "summary": "Crear categoria",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoriaCrear"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Creado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Categoria"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "get": {
+        "summary": "Listar categorias activos",
+        "responses": {
+          "200": {
+            "description": "Lista ordenada por nombre e ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "categorias"
+                  ],
+                  "properties": {
+                    "categorias": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Categoria"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/categorias/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+          }
+        }
+      ],
+      "get": {
+        "summary": "Consultar categoria activo",
+        "responses": {
+          "200": {
+            "description": "Recurso encontrado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Categoria"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "put": {
+        "summary": "Reemplazar categoria",
+        "description": "Reemplazo completo: las listas omitidas se vacían. El ID no puede cambiar. Profesional activo es true si se omite.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoriaEditar"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actualizado y asociaciones sincronizadas.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Categoria"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Dar de baja categoria",
+        "description": "Baja lógica, conserva documento e ID. Segunda baja responde 404. Categoría con tratamientos vigentes responde 409.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Baja aplicada, sin cuerpo."
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/profesionales": {
+      "post": {
+        "summary": "Crear profesional",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfesionalCrear"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Creado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profesional"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "get": {
+        "summary": "Listar profesionales activos",
+        "responses": {
+          "200": {
+            "description": "Lista ordenada por nombre e ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "profesionales"
+                  ],
+                  "properties": {
+                    "profesionales": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Profesional"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          }
+        },
+        "parameters": [
+          {
+            "name": "tratamientoId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+            }
+          }
+        ]
+      }
+    },
+    "/profesionales/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+          }
+        }
+      ],
+      "get": {
+        "summary": "Consultar profesional activo",
+        "responses": {
+          "200": {
+            "description": "Recurso encontrado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profesional"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "put": {
+        "summary": "Reemplazar profesional",
+        "description": "Reemplazo completo: las listas omitidas se vacían. El ID no puede cambiar. Profesional activo es true si se omite.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfesionalEditar"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actualizado y asociaciones sincronizadas.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profesional"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Dar de baja profesional",
+        "description": "Baja lógica, conserva documento e ID. Segunda baja responde 404. Categoría con tratamientos vigentes responde 409.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Baja aplicada, sin cuerpo."
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/tratamientos": {
+      "post": {
+        "summary": "Crear tratamiento",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TratamientoCrear"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Creado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tratamiento"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/tratamientos/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+          }
+        }
+      ],
+      "get": {
+        "summary": "Consultar tratamiento activo",
+        "responses": {
+          "200": {
+            "description": "Recurso encontrado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tratamiento"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "put": {
+        "summary": "Reemplazar tratamiento",
+        "description": "Reemplazo completo: las listas omitidas se vacían. El ID no puede cambiar. Profesional activo es true si se omite.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TratamientoEditar"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actualizado y asociaciones sincronizadas.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tratamiento"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Dar de baja tratamiento",
+        "description": "Baja lógica, conserva documento e ID. Segunda baja responde 404. Categoría con tratamientos vigentes responde 409.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Baja aplicada, sin cuerpo."
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "CategoriaCrear": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "descripcion": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "nombre",
+          "id"
+        ]
+      },
+      "CategoriaEditar": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "descripcion": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "nombre"
+        ]
+      },
+      "Categoria": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "descripcion": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "id",
+          "nombre"
+        ]
+      },
+      "ProfesionalCrear": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "descripcion": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "tratamientosIds": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+            },
+            "default": []
+          },
+          "activo": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "nombre",
+          "id"
+        ]
+      },
+      "ProfesionalEditar": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "descripcion": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "tratamientosIds": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+            },
+            "default": []
+          },
+          "activo": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "nombre"
+        ]
+      },
+      "Profesional": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "descripcion": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "tratamientosIds": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+            },
+            "default": []
+          },
+          "activo": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "id",
+          "nombre"
+        ]
+      },
+      "TratamientoCrear": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "descripcion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          },
+          "categoria": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Nombre exacto de una categoría activa."
+          },
+          "precio": {
+            "type": "number",
+            "minimum": 0
+          },
+          "moneda": {
+            "type": "string",
+            "enum": [
+              "ARS"
+            ]
+          },
+          "duracionMinutos": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 480
+          },
+          "imagenes": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048,
+              "pattern": "^https?://",
+              "description": "URL HTTP(S) absoluta, sin credenciales."
+            },
+            "default": []
+          },
+          "keywords": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "default": []
+          },
+          "profesionalesIds": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+            },
+            "default": []
+          }
+        },
+        "required": [
+          "nombre",
+          "descripcion",
+          "categoria",
+          "precio",
+          "moneda",
+          "duracionMinutos",
+          "id"
+        ]
+      },
+      "TratamientoEditar": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "descripcion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          },
+          "categoria": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Nombre exacto de una categoría activa."
+          },
+          "precio": {
+            "type": "number",
+            "minimum": 0
+          },
+          "moneda": {
+            "type": "string",
+            "enum": [
+              "ARS"
+            ]
+          },
+          "duracionMinutos": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 480
+          },
+          "imagenes": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048,
+              "pattern": "^https?://",
+              "description": "URL HTTP(S) absoluta, sin credenciales."
+            },
+            "default": []
+          },
+          "keywords": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "default": []
+          },
+          "profesionalesIds": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+            },
+            "default": []
+          }
+        },
+        "required": [
+          "nombre",
+          "descripcion",
+          "categoria",
+          "precio",
+          "moneda",
+          "duracionMinutos"
+        ]
+      },
+      "Tratamiento": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "descripcion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          },
+          "categoria": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Nombre exacto de una categoría activa."
+          },
+          "precio": {
+            "type": "number",
+            "minimum": 0
+          },
+          "moneda": {
+            "type": "string",
+            "enum": [
+              "ARS"
+            ]
+          },
+          "duracionMinutos": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Los nuevos tratamientos se validan entre 5 y 480 minutos. Datos anteriores se conservan."
+          },
+          "imagenes": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048,
+              "pattern": "^https?://",
+              "description": "URL HTTP(S) absoluta, sin credenciales."
+            },
+            "default": []
+          },
+          "keywords": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "default": []
+          },
+          "profesionalesIds": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "ID opaco Unicode de 1–128 caracteres, sin espacios extremos, controles, /, barra inversa, ? ni #. No admite . ni .. solos."
+            },
+            "default": []
+          }
+        },
+        "required": [
+          "id",
+          "nombre"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Error503": {
+        "description": "MongoDB/transacción o Auth no disponible.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error400": {
+        "description": "JSON, campos, identificador o asociación inválidos.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error401": {
+        "description": "Sin sesión Bearer.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error403": {
+        "description": "Sin rol administrativo.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error404": {
+        "description": "Recurso o categoría activa inexistente.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error409": {
+        "description": "Identificador/nombre reservado, categoría en uso o límite de 200 asociaciones de un recurso relacionado.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error413": {
+        "description": "Cuerpo mayor a 64 KiB.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error415": {
+        "description": "Se requiere application/json.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

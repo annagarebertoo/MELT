@@ -8,8 +8,15 @@ import (
 
 // Los nombres son exactos: encoding/json sobre un struct también aceptaría
 // variantes como PUNTOS. Se rechazan además claves duplicadas y campos ajenos.
-func decodificarAcreditacion(body io.Reader) (AcreditarRequest, error) {
-	var req AcreditarRequest
+type entradaAcreditacion struct {
+	AcreditarRequest
+	Email       string
+	Descripcion string
+	Referencia  string
+}
+
+func decodificarAcreditacion(body io.Reader) (entradaAcreditacion, error) {
+	var req entradaAcreditacion
 	dec := json.NewDecoder(body)
 	token, err := dec.Token()
 	if err != nil || token != json.Delim('{') {
@@ -28,9 +35,15 @@ func decodificarAcreditacion(body io.Reader) (AcreditarRequest, error) {
 		vistos[nombre] = true
 		switch nombre {
 		case "solicitudId":
-			err = dec.Decode(&req.SolicitudID)
+			req.SolicitudID, err = decodificarTexto(dec)
+		case "referencia":
+			req.Referencia, err = decodificarTexto(dec)
+		case "email":
+			req.Email, err = decodificarTexto(dec)
+		case "descripcion":
+			req.Descripcion, err = decodificarTexto(dec)
 		case "usuarioId":
-			err = dec.Decode(&req.UsuarioID)
+			req.UsuarioID, err = decodificarTexto(dec)
 		case "puntos":
 			err = dec.Decode(&req.Puntos)
 		default:
@@ -43,11 +56,26 @@ func decodificarAcreditacion(body io.Reader) (AcreditarRequest, error) {
 	if _, err = dec.Token(); err != nil {
 		return req, err
 	}
-	if len(vistos) != 3 {
+	if !vistos["puntos"] || vistos["solicitudId"] == vistos["referencia"] || vistos["usuarioId"] == vistos["email"] {
 		return req, errors.New("faltan campos obligatorios")
 	}
 	if dec.Decode(new(any)) != io.EOF {
 		return req, errors.New("se requiere un único objeto JSON")
 	}
+	if vistos["referencia"] {
+		req.SolicitudID = req.Referencia
+	}
 	return req, nil
+}
+
+func decodificarTexto(dec *json.Decoder) (string, error) {
+	token, err := dec.Token()
+	if err != nil {
+		return "", err
+	}
+	value, ok := token.(string)
+	if !ok {
+		return "", errors.New("se requiere texto")
+	}
+	return value, nil
 }
