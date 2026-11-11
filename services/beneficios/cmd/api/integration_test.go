@@ -145,6 +145,16 @@ func TestMongoPersistenciaConcurrenciaYRollback(t *testing.T) {
 	if _, err := a.reservarCanje(ctx, canje.ID, "u", "turno-test", "facial", 1000); err != nil {
 		t.Fatal("reservar canje", err)
 	}
+	if _, err := a.canjes.UpdateOne(ctx, bson.M{"_id": canje.ID}, bson.M{"$set": bson.M{"reservaExpiraEn": time.Now().Add(-time.Minute)}}); err != nil {
+		t.Fatal("vencer la reserva de prueba", err)
+	}
+	if _, err := a.reservarCanje(ctx, canje.ID, "u", "turno-test", "facial", 1000); err != nil {
+		t.Fatal("renovar la misma reserva antes de confirmar el pago", err)
+	}
+	var canjeConReserva Canje
+	if err := a.canjes.FindOne(ctx, bson.M{"_id": canje.ID}).Decode(&canjeConReserva); err != nil || canjeConReserva.ReservaExpiraEn == nil || !canjeConReserva.ReservaExpiraEn.After(time.Now()) {
+		t.Fatalf("la reserva del mismo carrito debe renovarse: %+v err=%v", canjeConReserva.ReservaExpiraEn, err)
+	}
 	if _, err := a.actualizarCanje(ctx, canje.ID, "u", "turno-test", "aplicar"); err != nil {
 		t.Fatal("aplicar canje", err)
 	}

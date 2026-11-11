@@ -233,6 +233,12 @@ func (a *almacenMongo) reservarCanje(ctx context.Context, canjeID, userID, reser
 	}
 	if item.Estado == "reservado" {
 		if item.ReservaID == reservaID {
+			expiresAt := time.Now().UTC().Add(10 * time.Minute).Truncate(time.Millisecond)
+			updated, err := a.canjes.UpdateOne(ctx, bson.M{"_id": canjeID, "usuarioId": userID, "estado": "reservado", "reservaId": reservaID}, bson.M{"$set": bson.M{"reservaExpiraEn": expiresAt}})
+			if err != nil || updated.MatchedCount != 1 {
+				return item, errCanjeNoDisponible
+			}
+			item.ReservaExpiraEn = &expiresAt
 			return item, nil
 		}
 		if item.ReservaExpiraEn == nil || item.ReservaExpiraEn.After(time.Now()) {

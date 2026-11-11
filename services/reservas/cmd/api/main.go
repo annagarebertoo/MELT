@@ -922,6 +922,12 @@ func (s *servidorReservas) confirmarBloqueoCarrito(c *gin.Context) {
 		c.JSON(http.StatusPaymentRequired, gin.H{"error": gin.H{"code": "SENA_NO_APROBADA", "message": err.Error()}})
 		return
 	}
+	if cart.BeneficioCanjeID != "" {
+		if _, err := s.reservarBeneficio(ctx, cart.BeneficioCanjeID, cart.ClienteID, id, cart.TratamientoID, cart.Precio); err != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "BENEFICIO_NO_DISPONIBLE", "message": "El beneficio ya no está reservado para este carrito."}})
+			return
+		}
+	}
 	// La reserva sólo se confirma si el proveedor valida el pago por el importe exacto.
 	now := time.Now().UTC()
 	doc := turno{ID: bson.NewObjectID().Hex(), ClienteID: cart.ClienteID, ProfesionalID: cart.ProfesionalID, TratamientoID: cart.TratamientoID, Inicio: cart.Inicio, Fin: cart.Fin, Estado: "confirmado", CreadoEn: now, PrecioTratamiento: cart.Precio, Sena: cart.Sena, PagoID: req.PagoID, EstadoPago: "aprobado", BeneficioCanjeID: cart.BeneficioCanjeID, DescuentoBeneficio: cart.DescuentoBeneficio, PrecioFinal: cart.PrecioFinal}
