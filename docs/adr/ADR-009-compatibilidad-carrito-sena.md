@@ -4,6 +4,8 @@
 **Fecha:** 2026-10-14  
 **Decisores:** Equipo MELT
 
+> **Enmienda histórica:** este ADR mantiene las reglas de incompatibilidad, retención de 10 minutos y seña del 30 %. La modalidad de pago descrita aquí reflejaba el adaptador de prueba anterior y quedó reemplazada por el simulador y checkout único documentados en [ADR-015](ADR-015-checkout-unico-simulador-pagos.md). No representa la integración vigente.
+
 ## Contexto
 
 Las reglas iniciales de reservas deben contemplar tratamientos incompatibles, selección temporal en carrito y una seña previa a la confirmación. También deben mantenerse los invariantes del dominio: no solapar reservas del profesional, no aceptar combinaciones incompatibles para el mismo cliente y no acreditar puntos antes de la realización efectiva.

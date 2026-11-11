@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +11,50 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func TestVerificarCuentaProfesionalValidaRolesConAuth(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Melt-Internal-Key") != "test-internal" {
+			t.Errorf("internal key header missing")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/internal/usuarios/professional":
+			w.Header().Set("X-Auth-User-Roles", "cliente,profesional")
+			w.WriteHeader(http.StatusNoContent)
+		case "/internal/usuarios/client":
+			w.Header().Set("X-Auth-User-Roles", "cliente")
+			w.WriteHeader(http.StatusNoContent)
+		case "/internal/usuarios/inactive":
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer server.Close()
+	s := &Servidor{authInternalURL: server.URL + "/internal/usuarios/", internalKey: "test-internal"}
+	if err := s.verificarCuentaProfesional(context.Background(), "professional"); err != nil {
+		t.Fatalf("professional account rejected: %v", err)
+	}
+	for _, id := range []string{"client", "inactive"} {
+		err := s.verificarCuentaProfesional(context.Background(), id)
+		var failure *catalogFailure
+		if !errors.As(err, &failure) || failure.status != http.StatusUnprocessableEntity {
+			t.Fatalf("%s account should be rejected as non-professional, got %v", id, err)
+		}
+	}
+}
+
+func TestAuthUserIDIsNeverSerializedInPublicProfessional(t *testing.T) {
+	raw, err := json.Marshal(Profesional{ID: "public-id", Nombre: "Profesional", AuthUserID: "private-auth-id"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "private-auth-id") || strings.Contains(string(raw), "authUserId") {
+		t.Fatalf("Auth account ID leaked in public profile: %s", raw)
+	}
+}
 
 func TestDecodeCatalogValidations(t *testing.T) {
 	gin.SetMode(gin.TestMode)

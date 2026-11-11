@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -23,7 +24,7 @@ func TestZonaHorariaReservasDefaultArgentina(t *testing.T) {
 func TestDisponibilidadExigeTratamientoYProfesionalCompatible(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	catalogo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(tratamientoCatalogo{ID: "facial-01", DuracionMinutos: 60, ProfesionalesIDs: []string{"prof-1"}})
+		_ = json.NewEncoder(w).Encode(tratamientoCatalogo{ID: "facial-01", CategoriaID: "facial", DuracionMinutos: 60, ProfesionalesIDs: []string{"prof-1"}})
 	}))
 	defer catalogo.Close()
 	s := &servidorReservas{catalogoURL: catalogo.URL, httpClient: catalogo.Client()}
@@ -45,6 +46,27 @@ func TestDisponibilidadExigeTratamientoYProfesionalCompatible(t *testing.T) {
 	router.ServeHTTP(incompatible, httptest.NewRequest(http.MethodGet, "/disponibilidad?"+query.Encode(), nil))
 	if incompatible.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("profesional incompatible: status=%d, se esperaba 422", incompatible.Code)
+	}
+}
+
+func TestResolverPerfilProfesionalUsaClaveInternaYPerfilDeCatalogo(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/profesionales/por-cuenta/auth-123" {
+			t.Errorf("unexpected resolver path %q", r.URL.Path)
+		}
+		if r.Header.Get("X-Melt-Internal-Key") != "test-internal" {
+			t.Errorf("internal key missing")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"profesionalId": "catalogo-456"})
+	}))
+	defer server.Close()
+	s := &servidorReservas{catalogoURL: server.URL, internalKey: "test-internal", httpClient: server.Client()}
+	profileID, status, err := s.resolverPerfilProfesional(context.Background(), "auth-123")
+	if err != nil || status != http.StatusOK || profileID != "catalogo-456" {
+		t.Fatalf("resolve result=(%q,%d,%v)", profileID, status, err)
 	}
 }
 

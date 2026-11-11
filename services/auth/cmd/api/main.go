@@ -65,6 +65,8 @@ type authServer struct {
 	tokenTTL      time.Duration
 	claveInterna  string
 	beneficiosURL string
+	catalogoURL   string
+	roleControl   *mongo.Collection
 }
 
 type claims struct {
@@ -120,7 +122,10 @@ func main() {
 		}
 		ttl = minutes
 	}
-	s := &authServer{client: client, users: users, jwtSecret: []byte(secret), tokenTTL: ttl, claveInterna: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY")), beneficiosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("BENEFICIOS_URL")), "/")}
+	s := &authServer{client: client, users: users, jwtSecret: []byte(secret), tokenTTL: ttl, claveInterna: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY")), beneficiosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("BENEFICIOS_URL")), "/"), catalogoURL: strings.TrimRight(strings.TrimSpace(os.Getenv("CATALOGO_URL")), "/"), roleControl: client.Database(dbName).Collection("control_roles")}
+	if s.catalogoURL == "" {
+		s.catalogoURL = "http://catalogo-profesionales:8081"
+	}
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 	defer stopWorker()
 	go s.recuperarAcreditaciones(workerCtx)
@@ -156,7 +161,195 @@ func (s *authServer) router() *gin.Engine {
 		c.Status(http.StatusNoContent)
 	})
 	r.POST("/usuarios", s.requiereRol("administrador", "superadministrador"), s.crearUsuario)
+	r.GET("/usuarios", s.requiereRol("superadministrador"), s.listarUsuarios)
+	r.PUT("/usuarios/:id/rol", s.requiereRol("superadministrador"), s.cambiarRolUsuario)
+	r.GET("/usuarios/profesionales", s.requiereRol("administrador", "superadministrador"), s.listarCuentasProfesionales)
 	return r
+}
+
+type cambiarRolRequest struct {
+	Rol string `json:"rol" binding:"required"`
+}
+
+func (s *authServer) listarUsuarios(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	cur, err := s.users.Find(ctx, bson.M{}, options.Find().SetProjection(bson.M{"_id": 0, "id": 1, "nombre": 1, "email": 1, "roles": 1, "activo": 1, "creadoEn": 1, "emailVerificado": 1}).SetSort(bson.D{{Key: "creadoEn", Value: -1}, {Key: "email", Value: 1}}))
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "USUARIOS_NO_DISPONIBLES", "message": "No se pudieron consultar las cuentas."}})
+		return
+	}
+	defer cur.Close(ctx)
+	usuarios := make([]Usuario, 0)
+	for cur.Next(ctx) {
+		var usuario Usuario
+		if cur.Decode(&usuario) != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "USUARIOS_NO_DISPONIBLES", "message": "No se pudieron leer las cuentas."}})
+			return
+		}
+		usuarios = append(usuarios, usuario)
+	}
+	if cur.Err() != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "USUARIOS_NO_DISPONIBLES", "message": "No se pudieron leer las cuentas."}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"usuarios": usuarios})
+}
+
+func (s *authServer) cambiarRolUsuario(c *gin.Context) {
+	var req cambiarRolRequest
+	if err := c.ShouldBindJSON(&req); err != nil || !rolesValidos[req.Rol] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "ROL_INVALIDO", "message": "Elegí un rol válido."}})
+		return
+	}
+	cl, ok := c.Get("claims")
+	actual, valid := cl.(*claims)
+	if !ok || !valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "TOKEN_INVALIDO", "message": "Iniciá sesión para continuar."}})
+		return
+	}
+	id := strings.TrimSpace(c.Param("id"))
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
+	defer cancel()
+	var objetivo Usuario
+	if err := s.users.FindOne(ctx, bson.M{"id": id}).Decode(&objetivo); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "USUARIO_NO_ENCONTRADO", "message": "No se encontró la cuenta."}})
+		} else {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "USUARIOS_NO_DISPONIBLES", "message": "No se pudo consultar la cuenta."}})
+		}
+		return
+	}
+	if objetivo.ID == actual.Subject && req.Rol != "superadministrador" {
+		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CAMBIO_PROPIO_NO_PERMITIDO", "message": "No podés quitarte el rol de superadministrador desde esta sesión."}})
+		return
+	}
+	if objetivo.Activo && contieneRol(objetivo.Roles, "profesional") && req.Rol != "profesional" {
+		linked, err := s.cuentaTienePerfilVinculado(ctx, id)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "CATALOGO_NO_DISPONIBLE", "message": "No se pudo verificar la vinculación con el catálogo. Intentá nuevamente."}})
+			return
+		}
+		if linked {
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "PROFESIONAL_VINCULADO", "message": "Desvinculá primero esta cuenta de su perfil profesional en Catálogo."}})
+			return
+		}
+	}
+	control := s.roleControl
+	if control == nil {
+		control = s.users.Database().Collection("control_roles")
+	}
+	session, err := s.client.StartSession()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "ROLES_NO_DISPONIBLES", "message": "No se pudo actualizar el rol."}})
+		return
+	}
+	defer session.EndSession(ctx)
+	_, err = session.WithTransaction(ctx, func(tx context.Context) (any, error) {
+		// Este documento serializa los cambios de rol y evita dos bajas simultáneas del último superadministrador.
+		if _, e := control.UpdateOne(tx, bson.M{"_id": "role_management"}, bson.M{"$inc": bson.M{"version": 1}}, options.UpdateOne().SetUpsert(true)); e != nil {
+			return nil, e
+		}
+		var current Usuario
+		if e := s.users.FindOne(tx, bson.M{"id": id}).Decode(&current); e != nil {
+			return nil, e
+		}
+		if current.ID == actual.Subject && req.Rol != "superadministrador" {
+			return nil, errors.New("CAMBIO_PROPIO_NO_PERMITIDO")
+		}
+		if e := validarConservacionSuperadmin(tx, s.users, current, req.Rol); e != nil {
+			return nil, e
+		}
+		_, e := s.users.UpdateOne(tx, bson.M{"id": id}, bson.M{"$set": bson.M{"roles": []string{req.Rol}}})
+		return nil, e
+	})
+	if err != nil {
+		switch err.Error() {
+		case "CAMBIO_PROPIO_NO_PERMITIDO":
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": err.Error(), "message": "No podés quitarte el rol de superadministrador desde esta sesión."}})
+		case "ULTIMO_SUPERADMINISTRADOR":
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": err.Error(), "message": "Debe quedar al menos un superadministrador activo."}})
+		default:
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "ROLES_NO_DISPONIBLES", "message": "No se pudo actualizar el rol."}})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"usuario": gin.H{"id": objetivo.ID, "email": objetivo.Email, "rol": req.Rol}})
+}
+
+func validarConservacionSuperadmin(ctx context.Context, users *mongo.Collection, usuario Usuario, nuevoRol string) error {
+	if !usuario.Activo || !contieneRol(usuario.Roles, "superadministrador") || nuevoRol == "superadministrador" {
+		return nil
+	}
+	count, err := users.CountDocuments(ctx, bson.M{"activo": true, "roles": "superadministrador"})
+	if err != nil {
+		return err
+	}
+	if count <= 1 {
+		return errors.New("ULTIMO_SUPERADMINISTRADOR")
+	}
+	return nil
+}
+
+func contieneRol(roles []string, role string) bool {
+	for _, actual := range roles {
+		if actual == role {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *authServer) cuentaTienePerfilVinculado(ctx context.Context, id string) (bool, error) {
+	if s.catalogoURL == "" || s.claveInterna == "" {
+		return false, errors.New("catalogo interno no configurado")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.catalogoURL+"/internal/profesionales/por-cuenta/"+id, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("X-Melt-Internal-Key", s.claveInterna)
+	resp, err := (&http.Client{Timeout: 3 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		return true, nil
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	return false, errors.New("respuesta interna inesperada de catálogo")
+}
+
+func (s *authServer) listarCuentasProfesionales(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
+	defer cancel()
+	cur, err := s.users.Find(ctx, bson.M{"activo": true, "roles": "profesional"}, options.Find().SetProjection(bson.M{"_id": 0, "id": 1, "nombre": 1, "email": 1}).SetSort(bson.D{{Key: "nombre", Value: 1}, {Key: "id", Value: 1}}))
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "USUARIOS_NO_DISPONIBLES", "message": "No se pudieron consultar las cuentas profesionales."}})
+		return
+	}
+	defer cur.Close(ctx)
+	cuentas := make([]gin.H, 0)
+	for cur.Next(ctx) {
+		var usuario struct {
+			ID     string `bson:"id" json:"id"`
+			Nombre string `bson:"nombre" json:"nombre"`
+			Email  string `bson:"email" json:"email"`
+		}
+		if err := cur.Decode(&usuario); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "USUARIOS_NO_DISPONIBLES", "message": "No se pudieron leer las cuentas profesionales."}})
+			return
+		}
+		cuentas = append(cuentas, gin.H{"id": usuario.ID, "nombre": usuario.Nombre, "email": usuario.Email})
+	}
+	if err := cur.Err(); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "USUARIOS_NO_DISPONIBLES", "message": "No se pudieron leer las cuentas profesionales."}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"usuarios": cuentas})
 }
 
 func (s *authServer) registrarCliente(c *gin.Context) {
@@ -488,7 +681,8 @@ func (s *authServer) usuarioInterno(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 	defer cancel()
-	err := s.users.FindOne(ctx, bson.M{"id": c.Param("id"), "activo": true}, options.FindOne().SetProjection(bson.M{"_id": 1})).Err()
+	var usuario Usuario
+	err := s.users.FindOne(ctx, bson.M{"id": c.Param("id"), "activo": true}, options.FindOne().SetProjection(bson.M{"_id": 0, "id": 1, "roles": 1, "nombre": 1})).Decode(&usuario)
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		c.Status(http.StatusNotFound)
 		return
@@ -497,5 +691,8 @@ func (s *authServer) usuarioInterno(c *gin.Context) {
 		c.Status(http.StatusServiceUnavailable)
 		return
 	}
+	c.Header("X-Auth-User-ID", usuario.ID)
+	c.Header("X-Auth-User-Roles", strings.Join(usuario.Roles, ","))
+	c.Header("X-Auth-User-Name", usuario.Nombre)
 	c.Status(http.StatusNoContent)
 }

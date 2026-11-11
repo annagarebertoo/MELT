@@ -29,7 +29,7 @@ Facilitar la organización de la agenda del centro, brindar a los clientes un me
 | Catálogo con búsqueda, filtros, paginación y ordenamiento | Búsqueda textual en OpenSearch con reconstrucción asíncrona desde MongoDB; lista pública cacheada en Memcached con invalidación por generación. |
 | Perfiles públicos, selección profesional y consulta de disponibilidad | Implementados; requieren asociación válida y agenda activa. |
 | Identidad y permisos por operación | Implementados para las rutas de identidad, administración del catálogo y reservas descritas en la documentación. |
-| Reserva, carrito de 10 minutos, seña del 30 %, confirmación y cancelación | Implementados para el recorrido local con adaptador Mercado Pago en modo test. |
+| Reserva, carrito único, checkout agrupado, seña del 30 % y cancelación | Implementados para el recorrido local con simulador de pagos; no se realizan cobros reales. |
 | Prevención de cruces y concurrencia | Implementada para el bloqueo/turno de un profesional y cubierta por la prueba de integración de Reservas. |
 | Interfaz web de registro, login, perfil, catálogo y reserva | Implementada y servida por Gateway/NGINX. |
 | Puntos por tratamientos completados, canjes y notificaciones por correo | Pendientes de implementación en los flujos de negocio. |
@@ -44,9 +44,9 @@ Las reglas y la verificación por punto están en [SPEC.md](SPEC.md#13-estado-de
 2. Selecciona un profesional y un horario disponible.
 3. Solicita la reserva.
 4. El sistema valida que el profesional pueda atender el tratamiento, que el horario esté dentro de su agenda y que no se superponga con turnos o bloqueos vigentes de ese profesional.
-5. Al agregar el horario al carrito, lo bloquea durante 10 minutos; si el cliente no confirma, lo libera automáticamente.
-6. Para confirmar, exige el pago exitoso de una seña equivalente al 30 % del precio del tratamiento y transforma el bloqueo en reserva. Si se cancela con 24 horas o más de anticipación, se devuelve el 100 % de la seña; con menos de 24 horas o ante inasistencia, no se devuelve.
-7. La cancelación libera el horario; si se solicita con al menos 24 horas de anticipación, se tramita la devolución de la seña.
+5. Cada horario agregado al carrito queda bloqueado durante 10 minutos; si el cliente no confirma, se libera automáticamente.
+6. El carrito agrupa los bloqueos activos del cliente. Un único checkout simula el pago de una seña equivalente al 30 % del total y confirma todos los turnos en una transacción. Si se cancela con 24 horas o más de anticipación, se registra la devolución simulada del 100 % de la seña; con menos de 24 horas o ante inasistencia, no se devuelve.
+7. La cancelación libera el horario; si se solicita con al menos 24 horas de anticipación, el simulador registra la devolución de la seña.
 
 La acreditación de puntos por tratamientos completados, el envío de correos y las incompatibilidades entre tratamientos del mismo cliente pertenecen al alcance general, pero todavía no forman parte del flujo local implementado.
 
@@ -59,7 +59,7 @@ El sistema cuenta con un **frontend web**, un **API Gateway** y microservicios c
 | Autenticación | Registro e inicio de sesión, identidad de la cuenta y autorización por roles. | 
 | Catálogo y Profesionales | Tratamientos, categorías, profesionales, precios, duraciones, palabras clave y puntos configurados. |
 | Reservas | Agenda, disponibilidad efectiva, creación, cancelación y finalización de turnos. |
-| Pagos | Adaptación de Checkout Pro, verificación de señas y solicitud de devoluciones en Mercado Pago test. |
+| Pagos | Registro persistente e idempotente de simulaciones, consultas, aprobaciones/rechazos configurables y devoluciones simuladas. |
 | Beneficios | Saldos, movimientos de puntos, canjes, aplicaciones y restituciones. |
 | API Gateway | Punto de entrada del frontend y enrutamiento hacia los servicios. |
 
@@ -169,7 +169,7 @@ La guía para ejecutar y probar el sistema localmente es [docs/LOCAL-DEV.md](doc
 
 El repositorio ya incluye una interfaz web conectada al gateway, autenticación, catálogo público de tratamientos y profesionales, permisos por operación en Reservas, agenda y disponibilidad, bloqueo temporal de carrito, checkout de seña y cancelaciones con la política de devolución. El estado verificable de la parte de identidad y reservas, las pruebas ejecutadas y las condiciones para una prueba real están en [SPEC.md, sección 13](SPEC.md#13-estado-de-implementación-y-verificación) y en la [guía de reservas web](docs/RESERVAS-WEB.md).
 
-La integración con el proveedor externo asignado (búsqueda de sedes cercanas) sigue pendiente de que el otro grupo publique su API y contrato. También siguen pendientes los puntos por tratamientos completados, canjes y notificaciones por correo. OpenSearch, Memcached y las métricas de Catálogo se integraron para exploración y se verificaron localmente; esto no equivale a un despliegue. Las pruebas locales usan Mercado Pago en modo test; esto no equivale a cobros de producción.
+La integración con el proveedor externo asignado (búsqueda de sedes cercanas) sigue pendiente de que el otro grupo publique su API y contrato. También siguen pendientes las notificaciones por correo. OpenSearch, Memcached y las métricas de Catálogo se integraron para exploración y se verificaron localmente; esto no equivale a un despliegue. Las pruebas de reserva locales usan el simulador de pagos y no realizan cobros.
 
 
 ## Desarrollo local
@@ -185,38 +185,22 @@ docker compose ps
 El estado de resiliencia y el procedimiento para registrar evidencia real se encuentran en [docs/POSTMORTEM.md](docs/POSTMORTEM.md). No se deben interpretar las configuraciones declaradas como pruebas ejecutadas: búsqueda y caché de Catálogo se probaron localmente, mientras que las integraciones de mensajería y métricas de negocio siguen pendientes de su evidencia de extremo a extremo.
 
 
-## Pagos de reservas con Mercado Pago (modo pruebas)
+## Checkout y pagos simulados
 
-El servicio `pagos` adapta la API de Mercado Pago al contrato interno que consume `reservas`. En el entorno local, Compose configura `PAGOS_URL=http://pagos:8085`. El adaptador sólo arranca con `MP_ENV=test`; no se debe cambiar a producción como parte de esta configuración.
+El servicio `pagos` simula las operaciones sin conectarse a una pasarela externa. No hay cobros reales, preferencias ni webhooks. Reservas calcula el total y la seña del 30 % usando Catálogo y los beneficios reservados; un solo `POST /api/v1/reservas/carrito/checkout` simula la seña completa y confirma todos los turnos en una transacción. El mismo `idempotencyKey` permite recuperar el resultado sin duplicar pagos ni reservas.
 
-1. En el panel de desarrolladores de Mercado Pago, abrí tu aplicación y copiá el **Access Token de prueba** (no una credencial de producción).
-2. Creá un archivo `.env` en la raíz del repositorio (no lo subas a Git) con:
+El simulador registra las transacciones en su base propia `pagos_db`. Compose la conecta a MongoDB y configura `PAYMENT_SIMULATOR_RESULT=approved` por defecto para que la demostración funcione sin credenciales. Para probar rechazos, configurar `PAYMENT_SIMULATOR_RESULT=rejected` en el entorno local antes de levantar Pagos. Esa variable solo se consume en backend; el frontend no puede elegir el resultado.
 
-   ```dotenv
-   MP_ENV=test
-   MP_ACCESS_TOKEN=PEGAR_ACCESS_TOKEN_DE_PRUEBA
-   MP_BASE_URL=https://api.mercadopago.com
-   MP_RETURN_URL=
-   ```
+### Contrato interno de Pagos
 
-3. Levantá o reconstruí los servicios:
+- `POST /payments/simulate`: registra una operación de checkout con clave de idempotencia; requiere `X-Melt-Internal-Key`.
+- `GET /payments/{id}`: consulta el estado persistido; es interno.
+- `POST /payments/verify`: comprueba operación, referencia, moneda e importe; es interno.
+- `POST /payments/{id}/reverse`: revierte una aprobación simulada si Reservas no pudo confirmar todo el checkout.
+- `POST /payments/refunds`: registra devoluciones simuladas idempotentes según la política existente.
+- `GET /health`: informa que el simulador está disponible y el resultado configurado, sin exponer secretos.
 
-   ```bash
-   docker compose up -d --build pagos reservas
-   ```
-
-4. Comprobá el adaptador en `http://localhost:8085/health` sólo si publicás el puerto localmente; por defecto, `pagos` es interno a la red de Compose y no expone un puerto en el host.
-
-### Contrato interno
-
-- `POST /payments/verify`: consulta `GET /v1/payments/{id}` a Mercado Pago y sólo marca aprobado si coinciden estado `approved`, ID, importe, moneda `ARS` y `external_reference` con el ID del carrito.
-- `POST /payments/preferences`: crea un Checkout Pro por el importe exacto de la seña, con el ID del carrito como `external_reference`; devuelve el enlace sandbox de pago. Si se configura `MP_RETURN_URL`, debe ser una URL HTTPS pública y se agrega como destino de retorno.
-- `POST /payments/refunds`: crea una devolución parcial mediante `POST /v1/payments/{id}/refunds`, enviando el importe y el encabezado `X-Idempotency-Key` para evitar duplicados.
-- `GET /health`: chequeo de disponibilidad del adaptador.
-
-La interfaz ofrece el enlace Checkout Pro devuelto al crear el carrito. Después del pago, el cliente ingresa o recupera el ID de la operación para que MELT verifique el estado aprobado, el importe exacto de la seña (30 %), moneda ARS y `external_reference` igual al ID del carrito generado por `POST /carrito/bloqueos`.
-
-No guardes el Access Token en el repositorio, en el frontend ni en logs. Usá cuentas y credenciales de prueba de Mercado Pago; nunca uses credenciales productivas en esta configuración.
+No se requieren variables, SDK, tokens ni credenciales de Mercado Pago.
 
 ## API de acreditación externa
 

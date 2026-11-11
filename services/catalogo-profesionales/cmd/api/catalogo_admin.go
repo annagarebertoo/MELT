@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
@@ -140,7 +141,7 @@ func decodeCatalog(c *gin.Context, target any) bool {
 	required := []string{"nombre"}
 	switch target.(type) {
 	case *Tratamiento:
-		for _, k := range []string{"id", "nombre", "descripcion", "categoria", "precio", "moneda", "duracionMinutos", "imagenes", "keywords", "profesionalesIds"} {
+		for _, k := range []string{"id", "nombre", "descripcion", "categoria", "categoriaId", "precio", "moneda", "duracionMinutos", "imagenes", "keywords", "profesionalesIds"} {
 			allowed[k] = true
 		}
 		required = append(required, "descripcion", "categoria", "precio", "moneda", "duracionMinutos")
@@ -232,6 +233,9 @@ func (s *Servidor) inicializarCatalogo(ctx context.Context) error {
 			return err
 		}
 	}
+	if _, err := s.profesionales.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "authUserId", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true).SetName("uq_profesionales_auth_user")}); err != nil {
+		return err
+	}
 	if _, err := s.categorias.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "clave", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_categorias_clave")}); err != nil {
 		return err
 	}
@@ -322,6 +326,7 @@ func (s *Servidor) guardarTratamiento(c *gin.Context, create bool) {
 		if e := existing(ctx, s.categorias, bson.M{"nombre": t.Categoria, "eliminada": bson.M{"$ne": true}}, &category, "CATEGORIA"); e != nil {
 			return e
 		}
+		t.CategoriaID = category.ID
 		if e := s.requireRefs(ctx, s.profesionales, t.ProfesionalesIDs, bson.M{"activo": true}); e != nil {
 			return e
 		}
@@ -373,6 +378,7 @@ func (s *Servidor) guardarProfesional(c *gin.Context, create bool) {
 			if e := existing(ctx, s.profesionales, bson.M{"id": p.ID}, &old, "PROFESIONAL"); e != nil {
 				return e
 			}
+			p.AuthUserID = old.AuthUserID
 		}
 		if e := s.requireRefs(ctx, s.coleccion, p.TratamientosIDs, bson.M{"eliminado": bson.M{"$ne": true}}); e != nil {
 			return e
@@ -405,6 +411,159 @@ func (s *Servidor) guardarProfesional(c *gin.Context, create bool) {
 	}
 	c.JSON(status, p)
 }
+
+type profesionalAdministrativo struct {
+	ID              string   `json:"id"`
+	Nombre          string   `json:"nombre"`
+	Descripcion     string   `json:"descripcion,omitempty"`
+	TratamientosIDs []string `json:"tratamientosIds"`
+	Activo          bool     `json:"activo"`
+	AuthUserID      string   `json:"authUserId,omitempty"`
+}
+
+func (s *Servidor) listarProfesionalesAdmin(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	cur, err := s.profesionales.Find(ctx, bson.M{"activo": true}, options.Find().SetSort(bson.D{{Key: "nombre", Value: 1}, {Key: "id", Value: 1}}))
+	if err != nil {
+		responderErrorDB(c, err)
+		return
+	}
+	defer cur.Close(ctx)
+	items := make([]profesionalAdministrativo, 0)
+	for cur.Next(ctx) {
+		var p Profesional
+		if err := cur.Decode(&p); err != nil {
+			responderErrorDB(c, err)
+			return
+		}
+		if p.TratamientosIDs == nil {
+			p.TratamientosIDs = []string{}
+		}
+		items = append(items, profesionalAdministrativo{ID: p.ID, Nombre: p.Nombre, Descripcion: p.Descripcion, TratamientosIDs: p.TratamientosIDs, Activo: p.Activo, AuthUserID: p.AuthUserID})
+	}
+	if err := cur.Err(); err != nil {
+		responderErrorDB(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"profesionales": items})
+}
+
+func (s *Servidor) verificarCuentaProfesional(ctx context.Context, authUserID string) error {
+	if s == nil || s.authInternalURL == "" || s.internalKey == "" {
+		return fail(http.StatusServiceUnavailable, "AUTH_NO_DISPONIBLE", "No se pudo validar la cuenta profesional.")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.authInternalURL+url.PathEscape(authUserID), nil)
+	if err != nil {
+		return fail(http.StatusServiceUnavailable, "AUTH_NO_DISPONIBLE", "No se pudo validar la cuenta profesional.")
+	}
+	req.Header.Set("X-Melt-Internal-Key", s.internalKey)
+	resp, err := (&http.Client{Timeout: 3 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Do(req)
+	if err != nil {
+		return fail(http.StatusServiceUnavailable, "AUTH_NO_DISPONIBLE", "No se pudo validar la cuenta profesional.")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return fail(http.StatusUnprocessableEntity, "CUENTA_NO_PROFESIONAL", "La cuenta no existe o no está activa.")
+	}
+	if resp.StatusCode != http.StatusNoContent {
+		return fail(http.StatusServiceUnavailable, "AUTH_NO_DISPONIBLE", "No se pudo validar la cuenta profesional.")
+	}
+	for _, role := range strings.Split(resp.Header.Get("X-Auth-User-Roles"), ",") {
+		if strings.TrimSpace(role) == "profesional" {
+			return nil
+		}
+	}
+	return fail(http.StatusUnprocessableEntity, "CUENTA_NO_PROFESIONAL", "La cuenta debe tener el rol profesional.")
+}
+
+func (s *Servidor) vincularCuentaProfesional(c *gin.Context) {
+	id := c.Param("id")
+	if !pathID(c, &id, false) {
+		return
+	}
+	var req struct {
+		AuthUserID *string `json:"authUserId"`
+	}
+	media, _, mediaErr := mime.ParseMediaType(c.GetHeader("Content-Type"))
+	if mediaErr != nil || media != "application/json" {
+		catalogError(c, http.StatusUnsupportedMediaType, "CONTENT_TYPE_INVALIDO", "Usá Content-Type: application/json.")
+		return
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 4096))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&req) != nil || req.AuthUserID == nil {
+		catalogError(c, http.StatusBadRequest, "DATOS_INVALIDOS", "Indicá authUserId con el ID de cuenta profesional o una cadena vacía para desvincular.")
+		return
+	}
+	var extra any
+	if decoder.Decode(&extra) != io.EOF {
+		catalogError(c, http.StatusBadRequest, "DATOS_INVALIDOS", "Enviá un único objeto JSON.")
+		return
+	}
+	authUserID := strings.TrimSpace(*req.AuthUserID)
+	if authUserID != "" {
+		if !idValido(authUserID) {
+			catalogError(c, http.StatusBadRequest, "DATOS_INVALIDOS", "El ID de cuenta no es válido.")
+			return
+		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
+		err := s.verificarCuentaProfesional(ctx, authUserID)
+		cancel()
+		if err != nil {
+			readFailure(c, err)
+			return
+		}
+	}
+	if !s.mutate(c, func(ctx context.Context) error {
+		var profile Profesional
+		if err := existing(ctx, s.profesionales, bson.M{"id": id, "activo": true}, &profile, "PROFESIONAL"); err != nil {
+			return err
+		}
+		if authUserID != "" {
+			count, err := s.profesionales.CountDocuments(ctx, bson.M{"authUserId": authUserID, "id": bson.M{"$ne": id}})
+			if err != nil {
+				return err
+			}
+			if count != 0 {
+				return fail(http.StatusConflict, "CUENTA_YA_VINCULADA", "La cuenta ya está vinculada a otro perfil profesional.")
+			}
+			_, err = s.profesionales.UpdateOne(ctx, bson.M{"id": id, "activo": true}, bson.M{"$set": bson.M{"authUserId": authUserID}})
+			return err
+		}
+		_, err := s.profesionales.UpdateOne(ctx, bson.M{"id": id, "activo": true}, bson.M{"$unset": bson.M{"authUserId": ""}})
+		return err
+	}) {
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"profesionalId": id, "authUserId": authUserID, "vinculado": authUserID != ""})
+}
+
+func (s *Servidor) resolverPerfilProfesional(c *gin.Context) {
+	if s == nil || s.internalKey == "" || subtle.ConstantTimeCompare([]byte(c.GetHeader("X-Melt-Internal-Key")), []byte(s.internalKey)) != 1 {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "IDENTIDAD_INTERNA_INVALIDA", "message": "Se requiere una credencial de servicio válida."}})
+		return
+	}
+	authUserID := strings.TrimSpace(c.Param("authUserId"))
+	if !idValido(authUserID) {
+		catalogError(c, http.StatusBadRequest, "DATOS_INVALIDOS", "El ID de cuenta no es válido.")
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
+	defer cancel()
+	var p Profesional
+	err := s.profesionales.FindOne(ctx, bson.M{"authUserId": authUserID, "activo": true}).Decode(&p)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		catalogError(c, http.StatusNotFound, "PERFIL_NO_VINCULADO", "La cuenta no tiene un perfil profesional activo vinculado.")
+		return
+	}
+	if err != nil {
+		responderErrorDB(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"profesionalId": p.ID})
+}
+
 func (s *Servidor) eliminarTratamiento(c *gin.Context) {
 	id := c.Param("id")
 	if !pathID(c, &id, false) {
@@ -434,7 +593,7 @@ func (s *Servidor) eliminarProfesional(c *gin.Context) {
 		if e := existing(ctx, s.profesionales, bson.M{"id": id, "activo": true}, &old, "PROFESIONAL"); e != nil {
 			return e
 		}
-		if _, err := s.profesionales.UpdateOne(ctx, bson.M{"id": id}, bson.M{"$set": bson.M{"activo": false, "tratamientosIds": []string{}}}); err != nil {
+		if _, err := s.profesionales.UpdateOne(ctx, bson.M{"id": id}, bson.M{"$set": bson.M{"activo": false, "tratamientosIds": []string{}}, "$unset": bson.M{"authUserId": ""}}); err != nil {
 			return err
 		}
 		_, err := s.coleccion.UpdateMany(ctx, bson.M{"eliminado": bson.M{"$ne": true}, "profesionalesIds": id}, bson.M{"$pull": bson.M{"profesionalesIds": id}})

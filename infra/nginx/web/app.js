@@ -1,10 +1,9 @@
 const API = "/api/v1";
 const TOKEN_KEY = "melt.session";
-const CART_KEY = "melt.pending-cart";
 const INVITATION_KEY = "melt.pending-invitation";
 let invitation = null;
-const state = { page: 1, pageSize: 8, hasNext: false, search: "", category: "", priceMax: "", sort: "nombre", order: "asc", bookingTreatment: null, detailTreatment: null, heldCartId: null, holdExpiresAt: null, holdTimer: null, cancelling: null, mode: "login", user: null, rewardRequests: new Map(), rewards: [], canjes: [], categories: [], professionals: [] };
-const catalogAdminState = { categories: [], treatments: [], professionals: [] };
+const state = { page: 1, pageSize: 8, hasNext: false, search: "", category: "", priceMax: "", sort: "nombre", order: "asc", bookingTreatment: null, detailTreatment: null, cartTimer: null, selectedSlot: null, cartItems: [], cartSummary: null, checkoutKey: null, cancelling: null, mode: "login", user: null, rewardRequests: new Map(), rewards: [], canjes: [], categories: [], professionals: [] };
+const catalogAdminState = { categories: [], treatments: [], professionals: [], adminProfessionals: [], professionalAccounts: [] };
 
 const $ = (selector) => document.querySelector(selector);
 const token = () => sessionStorage.getItem(TOKEN_KEY);
@@ -460,19 +459,26 @@ async function loadAccount() {
     $("#profile-initials").textContent = (user.nombre || "M").trim().slice(0, 1).toLocaleUpperCase("es-AR");
     $("#my-bookings").classList.remove("hidden");
     const roles = Array.isArray(user.roles) ? user.roles : [];
-    const isClient = roles.includes("cliente");
-    const isAdmin = roles.some((role) => ["administrador", "superadministrador"].includes(role));
-    $("#points-panel").classList.toggle("hidden", !isClient);
-    $("#ghostkitchen-panel").classList.toggle("hidden", !isClient);
-    $("#profile-ghostkitchen").classList.toggle("hidden", !isClient);
-    $("#professional-panel").classList.toggle("hidden", !roles.includes("profesional"));
-    $("#admin-panel").classList.toggle("hidden", !isAdmin);
-    $("#catalog-admin-link").classList.toggle("hidden", !isAdmin);
+    const visibility = accountSectionVisibility(roles);
+    $("#points-panel").classList.toggle("hidden", !visibility.client);
+    $("#points-balance").closest(".points-box").classList.toggle("hidden", !visibility.client);
+    $("#ghostkitchen-panel").classList.toggle("hidden", !visibility.client);
+    $("#profile-ghostkitchen").classList.toggle("hidden", !visibility.client);
+    $("#professional-panel").classList.toggle("hidden", !visibility.professional);
+    $("#admin-panel").classList.toggle("hidden", !visibility.admin);
+    $("#superadmin-users-panel").classList.toggle("hidden", !visibility.superadmin);
+    $("#catalog-admin-link").classList.toggle("hidden", !visibility.admin);
+    $("#cart-menu-link").classList.toggle("hidden", !visibility.client);
+    $("#carrito").classList.toggle("hidden", !visibility.client);
+    $("#profile-reservations").classList.toggle("hidden", !visibility.bookings);
+    $("#availability-form").closest(".calendar-card").classList.toggle("hidden", !visibility.bookings);
+    $("#my-bookings").classList.toggle("hidden", !visibility.bookings);
     $("#auth-form").closest(".account-card").classList.add("hidden");
     await confirmInvitation();
-    await Promise.all([loadBookings(), ...(isClient ? [loadPoints(), loadBenefits()] : [])]);
-    if (roles.includes("profesional")) await loadProfessionalTurns();
-    if (isAdmin) await Promise.all([loadAdminBenefits(), loadCatalogAdmin()]);
+    await Promise.all([...(visibility.bookings ? [loadBookings()] : []), ...(visibility.client ? [loadPoints(), loadBenefits(), loadCart()] : [])]);
+    if (visibility.professional) await Promise.all([loadProfessionalAgenda(), loadProfessionalTurns()]);
+    if (visibility.admin) await Promise.all([loadAdminBenefits(), loadCatalogAdmin()]);
+    if (visibility.superadmin) await loadSuperadminUsers();
   } catch {
     sessionStorage.removeItem(TOKEN_KEY);
     updateAuthChrome();
@@ -480,19 +486,85 @@ async function loadAccount() {
   }
 }
 
+function accountSectionVisibility(userRoles) {
+  const roles = Array.isArray(userRoles) ? userRoles : [];
+  const superadmin = roles.includes("superadministrador");
+  const admin = !superadmin && roles.includes("administrador");
+  const professional = !superadmin && !admin && roles.includes("profesional");
+  const client = !superadmin && !admin && !professional && roles.includes("cliente");
+  const receptionOnly = !superadmin && !admin && !professional && !client && roles.includes("recepcion");
+  return { superadmin, admin, professional, client, bookings: client || receptionOnly };
+}
+
 function showSignedOut() {
   state.user = null;
   $("#catalog-admin-link").classList.add("hidden");
+  $("#cart-menu-link").classList.add("hidden");
+  $("#carrito").classList.add("hidden");
+  $("#cart-count").textContent = "0";
+  window.clearInterval(state.cartTimer);
   $("#points-panel").classList.add("hidden");
   $("#ghostkitchen-panel").classList.add("hidden");
   $("#profile-ghostkitchen").classList.add("hidden");
   $("#professional-panel").classList.add("hidden");
   $("#admin-panel").classList.add("hidden");
+  $("#superadmin-users-panel").classList.add("hidden");
   $("#profile-panel").classList.add("hidden");
   $("#my-bookings").classList.add("hidden");
+  $("#availability-form").closest(".calendar-card").classList.remove("hidden");
   $("#auth-form").closest(".account-card").classList.remove("hidden");
   $("#points-balance").textContent = "—";
   updateAuthChrome();
+}
+
+const authRoleLabels = { cliente: "Cliente", profesional: "Profesional", recepcion: "Recepción", administrador: "Administrador", superadministrador: "Superadministrador" };
+function isSuperadmin() { return Boolean(token() && state.user?.roles?.includes("superadministrador")); }
+
+async function loadSuperadminUsers() {
+  if (!isSuperadmin()) return;
+  setStatus("#superadmin-users-status", "Cargando cuentas…");
+  try {
+    const result = await request("/auth/usuarios");
+    const users = Array.isArray(result?.usuarios) ? result.usuarios : [];
+    $("#superadmin-users-list").innerHTML = users.map((user) => {
+      const roleText = (user.roles || []).map((role) => authRoleLabels[role] || role).join(", ") || "Sin rol";
+      const options = Object.entries(authRoleLabels).map(([role, label]) => `<option value="${role}">${label}</option>`).join("");
+      return `<article class="catalog-admin-row superadmin-user-row"><span><strong>${escapeHTML(user.nombre)} · ${escapeHTML(user.email)}</strong><small>Rol actual: ${escapeHTML(roleText)} · ${user.activo ? "Activa" : "Inactiva"}</small></span><div class="superadmin-user-controls"><select class="form-field" data-user-role="${escapeHTML(user.id)}" aria-label="Nuevo rol para ${escapeHTML(user.email)}"><option value="">Cambiar rol…</option>${options}</select><button class="button button-outline" type="button" data-save-user-role="${escapeHTML(user.id)}">Guardar rol</button></div></article>`;
+    }).join("") || `<p class="empty-state">No hay cuentas registradas.</p>`;
+    setStatus("#superadmin-users-status", `${users.length} cuentas cargadas.`);
+  } catch (error) { setStatus("#superadmin-users-status", error.message, true); }
+}
+
+async function createManagedUser(event) {
+  event.preventDefault();
+  if (!isSuperadmin()) return setStatus("#superadmin-create-status", "Solo un superadministrador puede crear cuentas.", true);
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const rol = String(data.get("rol") || "");
+  if (!window.confirm(`¿Crear una cuenta nueva con rol ${authRoleLabels[rol]}?`)) return;
+  try {
+    await request("/auth/usuarios", { method: "POST", body: JSON.stringify({ nombre: String(data.get("nombre") || "").trim(), email: String(data.get("email") || "").trim(), password: String(data.get("password") || ""), roles: [rol] }) });
+    form.reset();
+    setStatus("#superadmin-create-status", "Cuenta creada correctamente. La contraseña no se volverá a mostrar.");
+    await loadSuperadminUsers();
+  } catch (error) { setStatus("#superadmin-create-status", error.message, true); }
+}
+
+async function saveManagedUserRole(event) {
+  const button = event.target.closest("[data-save-user-role]");
+  if (!button) return;
+  if (!isSuperadmin()) return setStatus("#superadmin-users-status", "Solo un superadministrador puede cambiar roles.", true);
+  const id = button.dataset.saveUserRole;
+  const select = $(`[data-user-role="${CSS.escape(id)}"]`);
+  const rol = String(select?.value || "");
+  if (!rol) return setStatus("#superadmin-users-status", "Elegí el nuevo rol.", true);
+  if (!window.confirm(`¿Cambiar el rol de esta cuenta a ${authRoleLabels[rol]}?`)) return;
+  button.disabled = true;
+  try {
+    await request(`/auth/usuarios/${encodeURIComponent(id)}/rol`, { method: "PUT", body: JSON.stringify({ rol }) });
+    setStatus("#superadmin-users-status", "Rol actualizado correctamente.");
+    await loadSuperadminUsers();
+  } catch (error) { setStatus("#superadmin-users-status", error.message, true); button.disabled = false; }
 }
 
 async function loadPoints() {
@@ -584,7 +656,9 @@ async function completeTreatment(id, button) {
   try {
     const result = await request(`/reservas/turnos/${encodeURIComponent(id)}/completar`, { method: "POST", body: "{}" });
     showToast(result.acreditacion?.mensaje || "Tratamiento confirmado.");
-    await Promise.all([loadBookings(), loadProfessionalTurns(), loadPoints()]);
+    const refresh = [loadProfessionalTurns()];
+    if (state.user?.roles?.includes("cliente")) refresh.push(loadBookings(), loadPoints());
+    await Promise.all(refresh);
   } catch (error) {
     showToast(error.message, true);
     button.disabled = false;
@@ -592,20 +666,99 @@ async function completeTreatment(id, button) {
 }
 
 async function loadProfessionalTurns() {
-  const list = $("#professional-turns");
+  const upcomingList = $("#professional-upcoming");
+  const historyList = $("#professional-history");
   try {
     const result = await request("/reservas/turnos");
     const turns = result.turnos || [];
-    list.innerHTML = turns.length ? turns.map((turn) => {
-      const date = new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(turn.inicio));
-      const completed = turn.estado === "completado";
-      const confirm = turn.estado === "confirmado" ? `<button class="button button-outline complete-treatment" type="button" data-id="${escapeHTML(turn.id)}">Confirmar realizado</button>` : "";
-      return `<article class="movement-row"><div><strong>${escapeHTML(turn.tratamientoId)}</strong><small>${escapeHTML(date)} · ${completed ? "Tratamiento realizado" : escapeHTML(turn.estado)}</small></div>${confirm}</article>`;
-    }).join("") : `<p class="empty-state">No hay turnos asignados para mostrar.</p>`;
-    list.querySelectorAll(".complete-treatment").forEach((button) => button.addEventListener("click", () => completeTreatment(button.dataset.id, button)));
+    const ids = [...new Set(turns.map((turn) => turn.tratamientoId).filter(Boolean))];
+    const names = new Map();
+    await Promise.all(ids.map(async (id) => { try { const treatment = await request(`/tratamientos/${encodeURIComponent(id)}`); names.set(id, treatment.nombre); } catch {} }));
+    const now = Date.now();
+    const renderTurn = (turn) => {
+      const start = new Date(turn.inicio);
+      const end = new Date(turn.fin);
+      const date = new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(start);
+      const stateText = ({ confirmado: "Confirmado", cancelado: "Cancelado", completado: "Realizado", no_asistio: "No asistió" })[turn.estado] || turn.estado;
+      const open = turn.estado === "confirmado";
+      const actions = open ? `<div class="booking-actions"><button class="button button-outline complete-treatment" type="button" data-id="${escapeHTML(turn.id)}">Marcar realizado</button><button class="text-link professional-no-show" type="button" data-id="${escapeHTML(turn.id)}" ${end.getTime() > now ? "disabled title=\"Disponible al finalizar el turno\"" : ""}>Marcar no asistió</button><button class="text-link professional-cancel-turn" type="button" data-id="${escapeHTML(turn.id)}">Cancelar turno</button></div>` : "";
+      return `<article class="booking-row"><div><strong>${escapeHTML(names.get(turn.tratamientoId) || turn.tratamientoId || "Tratamiento")}</strong><span>${escapeHTML(date)} · Cliente: ${escapeHTML(turn.clienteNombre || turn.clienteId || "No disponible")}</span><small class="booking-status">${escapeHTML(stateText)}</small></div>${actions}</article>`;
+    };
+    const upcoming = turns.filter((turn) => turn.estado === "confirmado" && new Date(turn.inicio).getTime() >= now);
+    const history = turns.filter((turn) => turn.estado !== "confirmado" || new Date(turn.inicio).getTime() < now);
+    upcomingList.innerHTML = upcoming.map(renderTurn).join("") || `<p class="empty-state">No hay próximas reservas.</p>`;
+    historyList.innerHTML = history.map(renderTurn).join("") || `<p class="empty-state">Todavía no hay turnos en el historial.</p>`;
+    document.querySelectorAll(".complete-treatment").forEach((button) => button.addEventListener("click", () => completeTreatment(button.dataset.id, button)));
+    document.querySelectorAll(".professional-cancel-turn").forEach((button) => button.addEventListener("click", () => cancelProfessionalTurn(button)));
+    document.querySelectorAll(".professional-no-show").forEach((button) => button.addEventListener("click", () => recordNoShow(button)));
   } catch (error) {
-    list.innerHTML = `<p class="form-status error-text">No pudimos cargar tus turnos: ${escapeHTML(error.message)}</p>`;
+    upcomingList.innerHTML = historyList.innerHTML = `<p class="form-status error-text">No pudimos cargar tus turnos: ${escapeHTML(error.message)}</p>`;
   }
+}
+
+const professionalWeekdays = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+async function loadProfessionalAgenda() {
+  const container = $("#professional-agenda-days");
+  try {
+    const result = await request("/reservas/agenda");
+    const days = Array.isArray(result.dias) ? result.dias : [];
+    container.innerHTML = professionalWeekdays.map((label, day) => {
+      const current = days.find((item) => Number(item.diaSemana) === day);
+      const blocks = current?.bloques || (current?.activo && current.horaInicio && current.horaFin ? [{ inicio: current.horaInicio, fin: current.horaFin }] : []);
+      return `<fieldset class="professional-agenda-day" data-day="${day}"><legend><label><input class="professional-day-active" type="checkbox" ${blocks.length ? "checked" : ""}> ${label}</label></legend><div class="professional-day-blocks">${blocks.map((block) => agendaBlockMarkup(block)).join("")}</div><button class="text-link add-agenda-block" type="button">+ Agregar bloque</button></fieldset>`;
+    }).join("");
+    container.querySelectorAll(".professional-day-active").forEach((input) => input.addEventListener("change", () => {
+      input.closest("fieldset").querySelector(".professional-day-blocks").classList.toggle("hidden", !input.checked);
+    }));
+    container.querySelectorAll(".add-agenda-block").forEach((button) => button.addEventListener("click", () => {
+      const day = button.closest("fieldset");
+      day.querySelector(".professional-day-active").checked = true;
+      day.querySelector(".professional-day-blocks").classList.remove("hidden");
+      day.querySelector(".professional-day-blocks").insertAdjacentHTML("beforeend", agendaBlockMarkup({ inicio: "09:00", fin: "18:00" }));
+      bindAgendaBlockRemoval(day);
+    }));
+    container.querySelectorAll(".professional-day-blocks").forEach((node) => node.classList.toggle("hidden", !node.closest("fieldset").querySelector(".professional-day-active").checked));
+    bindAgendaBlockRemoval(container);
+    setStatus("#professional-agenda-status", "Disponibilidad cargada.");
+  } catch (error) {
+    container.innerHTML = `<p class="form-status error-text">No pudimos cargar la disponibilidad: ${escapeHTML(error.message)}</p>`;
+  }
+}
+
+function agendaBlockMarkup(block) {
+  return `<div class="professional-agenda-block"><label>Desde <input type="time" min="08:00" max="20:00" value="${escapeHTML(block.inicio || "09:00")}" required></label><label>Hasta <input type="time" min="08:00" max="20:00" value="${escapeHTML(block.fin || "18:00")}" required></label><button class="text-link remove-agenda-block" type="button">Quitar</button></div>`;
+}
+function bindAgendaBlockRemoval(root) {
+  root.querySelectorAll(".remove-agenda-block").forEach((button) => { if (button.dataset.bound) return; button.dataset.bound = "true"; button.addEventListener("click", () => button.closest(".professional-agenda-block").remove()); });
+}
+async function saveProfessionalAgenda(event) {
+  event.preventDefault();
+  const button = $("#save-professional-agenda");
+  button.disabled = true;
+  try {
+    const days = [...document.querySelectorAll(".professional-agenda-day")].map((fieldset) => {
+      const diaSemana = Number(fieldset.dataset.day);
+      const activo = fieldset.querySelector(".professional-day-active").checked;
+      const bloques = activo ? [...fieldset.querySelectorAll(".professional-agenda-block")].map((node) => ({ inicio: node.querySelector("input").value, fin: node.querySelectorAll("input")[1].value })) : [];
+      if (activo && !bloques.length) throw new Error(`${professionalWeekdays[diaSemana]} necesita al menos un bloque horario.`);
+      return { diaSemana, bloques };
+    });
+    for (const day of days) await request("/reservas/agenda", { method: "PUT", body: JSON.stringify(day) });
+    setStatus("#professional-agenda-status", "Disponibilidad guardada. Los horarios de reservas existentes se conservaron.");
+  } catch (error) { setStatus("#professional-agenda-status", error.message, true); }
+  finally { button.disabled = false; }
+}
+async function cancelProfessionalTurn(button) {
+  if (!window.confirm("¿Cancelar este turno? Se aplicarán las reglas actuales de cancelación y devolución.")) return;
+  button.disabled = true;
+  try { await request(`/reservas/turnos/${encodeURIComponent(button.dataset.id)}`, { method: "DELETE" }); showToast("Turno cancelado."); await loadProfessionalTurns(); }
+  catch (error) { showToast(error.message, true); button.disabled = false; }
+}
+async function recordNoShow(button) {
+  if (!window.confirm("¿Registrar que el cliente no asistió? No se acreditarán puntos por este turno.")) return;
+  button.disabled = true;
+  try { await request(`/reservas/turnos/${encodeURIComponent(button.dataset.id)}/no-asistio`, { method: "POST", body: "{}" }); showToast("Inasistencia registrada sin acreditar puntos."); await loadProfessionalTurns(); }
+  catch (error) { showToast(error.message, true); button.disabled = false; }
 }
 
 async function loadAdminBenefits() {
@@ -673,126 +826,161 @@ async function loadAvailability(event) {
   const query = new URLSearchParams({ profesionalId: professionalId, tratamientoId: treatmentId, fecha: date });
   setStatus("#availability-status", "Consultando disponibilidad…");
   $("#time-slots").innerHTML = "";
-  $("#payment-form").classList.add("hidden");
+  $("#selected-slot-action").classList.add("hidden");
   try {
     const result = await request(`/reservas/disponibilidad?${query}`);
     const slots = result.horarios || [];
-    setStatus("#availability-status", slots.length ? "Elegí un horario disponible. Lo vas a tener reservado por 10 minutos." : "No hay horarios disponibles para esa fecha. Probá con otro día.");
+    setStatus("#availability-status", slots.length ? "Elegí un horario disponible. Después podés agregarlo al carrito; el pago se inicia desde allí." : "No hay horarios disponibles para esa fecha. Probá con otro día.");
     $("#time-slots").innerHTML = slots.map((time) => `<button class="slot-button" type="button" data-time="${escapeHTML(time)}">${escapeHTML(time)}</button>`).join("");
-    $("#time-slots").querySelectorAll(".slot-button").forEach((button) => button.addEventListener("click", () => holdSlot(button.dataset.time)));
+    $("#time-slots").querySelectorAll(".slot-button").forEach((button) => button.addEventListener("click", () => selectBookingSlot(button.dataset.time, button)));
     updateSteps(2);
   } catch (error) { setStatus("#availability-status", error.message, true); }
 }
 
-function clearHoldUI() {
-  window.clearInterval(state.holdTimer);
-  state.holdTimer = null;
-  state.heldCartId = null;
-  state.holdExpiresAt = null;
-  $("#hold-countdown").textContent = "10:00";
-  $("#payment-form").classList.add("hidden");
-  $("#payment-id").value = "";
-  sessionStorage.removeItem(CART_KEY);
+function selectBookingSlot(time, button) {
+  const treatment = window.treatments?.find((item) => item.id === $("#booking-treatment").value) || state.bookingTreatment;
+  if (!treatment) return;
+  state.selectedSlot = { time, date: $("#booking-date").value, treatmentId: treatment.id, professionalId: $("#booking-professional").value };
+  document.querySelectorAll(".slot-button").forEach((item) => item.classList.toggle("selected", item === button));
+  $("#selected-slot-action").innerHTML = `<p>Elegiste las <strong>${escapeHTML(time)}</strong>. Se retendrá durante diez minutos al agregarlo.</p><button class="button button-dark" id="add-selected-to-cart" type="button">Agregar al carrito</button>`;
+  $("#selected-slot-action").classList.remove("hidden");
+  $("#add-selected-to-cart").addEventListener("click", holdSlot);
 }
 
-function startCountdown(expiration) {
-  state.holdExpiresAt = new Date(expiration).getTime();
-  window.clearInterval(state.holdTimer);
-  const tick = () => {
-    const remaining = Math.max(0, Math.ceil((state.holdExpiresAt - Date.now()) / 1000));
-    $("#hold-countdown").textContent = `${String(Math.floor(remaining / 60)).padStart(2, "0")}:${String(remaining % 60).padStart(2, "0")}`;
-    if (!remaining) {
-      clearHoldUI();
-      setStatus("#availability-status", "El tiempo de reserva terminó. Volvé a consultar la agenda para elegir otro horario.", true);
-      updateSteps(2);
-    }
-  };
-  tick();
-  state.holdTimer = window.setInterval(tick, 1000);
-}
-
-async function holdSlot(time) {
-  const date = $("#booking-date").value;
-  const localStart = new Date(`${date}T${time}:00`);
+async function holdSlot() {
+  const selected = state.selectedSlot;
+  if (!selected) return;
+  const localStart = new Date(`${selected.date}T${selected.time}:00`);
   if (Number.isNaN(localStart.getTime())) return showToast("La fecha o el horario no son válidos.", true);
+  const button = $("#add-selected-to-cart");
+  if (button) { button.disabled = true; button.textContent = "Agregando…"; }
   try {
-    if (state.heldCartId) await releaseHold(false);
     const result = await request("/reservas/carrito/bloqueos", {
       method: "POST",
-      body: JSON.stringify({ profesionalId: $("#booking-professional").value, tratamientoId: $("#booking-treatment").value, inicio: localStart.toISOString(), beneficioCanjeId: $("#booking-benefit").value || undefined })
+      body: JSON.stringify({ profesionalId: selected.professionalId, tratamientoId: selected.treatmentId, inicio: localStart.toISOString(), beneficioCanjeId: $("#booking-benefit").value || undefined, diferirPago: true })
     });
-    state.heldCartId = result.bloqueo.id;
-    $("#hold-message").textContent = result.bloqueo.descuentoBeneficio ? `Beneficio aplicado: ${formatPrice(result.bloqueo.descuentoBeneficio)} de descuento. El horario está protegido durante diez minutos.` : `El horario está protegido durante diez minutos. Completá el pago antes de que venza el contador.`;
-    $("#hold-amount").textContent = formatPrice(result.bloqueo.sena);
-    $("#checkout-link").href = result.bloqueo.urlPago || result.urlPago;
-    sessionStorage.setItem(CART_KEY, JSON.stringify({ id: result.bloqueo.id, expiresAt: result.bloqueo.expiraEn, urlPago: result.bloqueo.urlPago || result.urlPago, sena: result.bloqueo.sena }));
-    $("#payment-form").classList.remove("hidden");
-    $("#payment-id").focus();
-    startCountdown(result.bloqueo.expiraEn);
-    setStatus("#availability-status", "Horario guardado temporalmente en tu carrito.");
+    state.selectedSlot = null;
+    $("#selected-slot-action").classList.add("hidden");
+    $("#time-slots").querySelector(`[data-time="${CSS.escape(selected.time)}"]`)?.remove();
+    setStatus("#availability-status", result.mensaje || "Tratamiento agregado al carrito. El horario quedó retenido por diez minutos.");
+    showToast("Tratamiento agregado al carrito. Todavía no se inició ningún pago.");
     updateSteps(3);
-  } catch (error) { setStatus("#availability-status", error.message, true); }
+    await loadCart();
+  } catch (error) { setStatus("#availability-status", error.message, true); if (button) { button.disabled = false; button.textContent = "Agregar al carrito"; } }
 }
 
-function restorePendingCart() {
-  if (!token()) return;
+async function loadCart() {
+  if (!token() || !state.user?.roles?.includes("cliente")) return;
+  const list = $("#cart-items");
+  $("#cart-checkout").disabled = true;
+  list.innerHTML = `<p class="muted">Cargando carrito…</p>`;
   try {
-    const saved = JSON.parse(sessionStorage.getItem(CART_KEY) || "null");
-    if (!saved?.id || !saved?.expiresAt || new Date(saved.expiresAt).getTime() <= Date.now()) {
-      if (saved) {
-        sessionStorage.removeItem(CART_KEY);
-        setStatus("#availability-status", "El bloqueo anterior venció. Consultá nuevamente para elegir otro horario.");
-      }
-      return;
-    }
-    state.heldCartId = saved.id;
-    $("#hold-amount").textContent = formatPrice(saved.sena);
-    $("#checkout-link").href = saved.urlPago || "#";
-    $("#hold-message").textContent = "Tu carrito sigue activo. Completá el pago antes de que termine el contador.";
-    $("#payment-form").classList.remove("hidden");
-    startCountdown(saved.expiresAt);
-    updateSteps(3);
-    const paymentID = new URLSearchParams(window.location.search).get("payment_id") || new URLSearchParams(window.location.search).get("collection_id");
-    if (paymentID && /^\d+$/.test(paymentID)) {
-      $("#payment-id").value = paymentID;
-      setStatus("#availability-status", "Recibimos el regreso de Mercado Pago. Validá el ID para confirmar tu turno.");
-    }
-  } catch {
-    sessionStorage.removeItem(CART_KEY);
-  }
-}
-
-async function confirmBooking(event) {
-  event.preventDefault();
-  if (!state.heldCartId) return;
-  const button = $("#confirm-booking");
-  button.disabled = true;
-  button.textContent = "Validando pago…";
-  try {
-    await request(`/reservas/carrito/bloqueos/${encodeURIComponent(state.heldCartId)}/confirmar`, { method: "POST", body: JSON.stringify({ pagoId: $("#payment-id").value.trim() }) });
-    clearHoldUI();
-    $("#payment-form").reset();
-    setStatus("#availability-status", "¡Turno confirmado! Ya está en tu lista de reservas.");
-    showToast("¡Tu turno quedó confirmado!");
-    await Promise.all([loadBookings(), loadBenefits(), loadPoints()]);
-    updateSteps(1);
-    $("#my-bookings").scrollIntoView({ behavior: "smooth" });
-  } catch (error) { setStatus("#availability-status", error.message, true); }
-  finally { button.disabled = false; button.textContent = "Validar pago y confirmar turno"; }
-}
-
-async function releaseHold(showMessage = true) {
-  if (!state.heldCartId) return;
-  const id = state.heldCartId;
-  try {
-    await request(`/reservas/carrito/bloqueos/${encodeURIComponent(id)}`, { method: "DELETE" });
-    clearHoldUI();
-    if (showMessage) setStatus("#availability-status", "Liberaste el horario. Podés elegir otro.");
-    updateSteps(2);
+    const result = await request("/reservas/carrito");
+    state.cartItems = Array.isArray(result.items) ? result.items : [];
+    state.cartSummary = summarizeCartItems(state.cartItems, result.resumen);
+    const treatmentIDs = [...new Set(state.cartItems.map((item) => item.tratamientoId))];
+    const professionalIDs = [...new Set(state.cartItems.map((item) => item.profesionalId))];
+    const treatments = new Map();
+    const professionals = new Map();
+    await Promise.all([
+      ...treatmentIDs.map(async (id) => { try { treatments.set(id, await request(`/tratamientos/${encodeURIComponent(id)}`)); } catch {} }),
+      ...treatmentIDs.map(async (id) => { try { const response = await request(`/profesionales?tratamientoId=${encodeURIComponent(id)}`); for (const person of response.profesionales || []) if (professionalIDs.includes(person.id)) professionals.set(person.id, person.nombre); } catch {} })
+    ]);
+    renderCart(treatments, professionals);
+    setStatus("#cart-status", state.cartItems.length ? `${state.cartItems.length} ${state.cartItems.length === 1 ? "tratamiento retenido" : "tratamientos retenidos"}. Confirmá una compra simulada para todos los turnos.` : "Tu carrito está vacío. Consultá horarios y agregá un tratamiento.");
   } catch (error) {
-    if (showMessage) setStatus("#availability-status", error.message, true);
-    else throw error;
+    state.cartItems = [];
+    state.cartSummary = null;
+    list.innerHTML = `<p class="form-status error-text">No pudimos cargar el carrito: ${escapeHTML(error.message)}</p>`;
+    $("#cart-count").textContent = "0";
+    $("#cart-summary").replaceChildren();
+    $("#cart-checkout").disabled = true;
+    setStatus("#cart-status", error.message, true);
   }
+}
+
+function summarizeCartItems(items, serverSummary) {
+  if (!items.length) return { subtotal: 0, descuento: 0, total: 0, sena: 0, restante: 0 };
+  let subtotal = 0, descuento = 0, total = 0, sena = 0;
+  for (const item of items) {
+    const price = Number(item.precio);
+    const discount = Number(item.descuentoBeneficio || 0);
+    const finalPrice = item.precioFinal == null ? price - discount : Number(item.precioFinal);
+    const deposit = item.sena == null ? Math.round(finalPrice * 30) / 100 : Number(item.sena);
+    if (![price, discount, finalPrice, deposit].every(Number.isFinite) || price <= 0 || discount < 0 || finalPrice < 0 || deposit < 0) return null;
+    subtotal += price;
+    descuento += discount;
+    total += finalPrice;
+    sena += deposit;
+  }
+  const computed = { subtotal, descuento, total, sena, restante: Math.max(0, total - sena) };
+  const keys = Object.keys(computed);
+  const serverValues = keys.map((key) => Number(serverSummary?.[key]));
+  if (serverValues.every(Number.isFinite) && serverValues.every((value, index) => Math.abs(value - computed[keys[index]]) < 0.02)) {
+    return Object.fromEntries(keys.map((key, index) => [key, serverValues[index]]));
+  }
+  return computed;
+}
+
+function renderCart(treatments = new Map(), professionals = new Map()) {
+  const items = state.cartItems;
+  $("#cart-count").textContent = String(items.length);
+  $("#cart-checkout").disabled = !items.length || !state.cartSummary;
+  const list = $("#cart-items");
+  const summary = state.cartSummary || {};
+  $("#cart-summary").innerHTML = items.length && state.cartSummary ? `<div><span>Subtotal</span><strong>${formatPrice(summary.subtotal)}</strong></div><div><span>Descuentos</span><strong>−${formatPrice(summary.descuento)}</strong></div><div><span>Total</span><strong>${formatPrice(summary.total)}</strong></div><div><span>Seña · 30 %</span><strong>${formatPrice(summary.sena)}</strong></div><div><span>Restante</span><strong>${formatPrice(summary.restante)}</strong></div><p class="muted">Pago simulado por MELT · no se realizará ningún cobro real.</p>` : items.length ? `<p class="form-status error-text">Los importes del carrito no son válidos. Actualizá el carrito antes de confirmar.</p>` : "";
+  if (!items.length) { list.innerHTML = `<p class="empty-state">Tu carrito está vacío. Podés seguir explorando y agregar varios tratamientos.</p>`; window.clearInterval(state.cartTimer); state.cartTimer = null; return; }
+  list.innerHTML = items.map((item) => {
+    const treatment = treatments.get(item.tratamientoId) || window.treatments?.find((candidate) => candidate.id === item.tratamientoId);
+    const date = new Intl.DateTimeFormat("es-AR", { dateStyle: "medium" }).format(new Date(item.inicio));
+    const time = new Intl.DateTimeFormat("es-AR", { timeStyle: "short" }).format(new Date(item.inicio));
+    const duration = Math.max(0, Math.round((new Date(item.fin) - new Date(item.inicio)) / 60000));
+    return `<article class="cart-item" data-id="${escapeHTML(item.id)}"><div class="cart-item-summary"><div><p class="eyebrow">${escapeHTML(date)} · ${escapeHTML(time)}</p><h3>${escapeHTML(treatment?.nombre || item.tratamientoId)}</h3><p>${escapeHTML(professionals.get(item.profesionalId) || professionalLabel(item.profesionalId, 0))} · ${duration} min</p></div><button class="text-link cart-remove" type="button" data-id="${escapeHTML(item.id)}">Quitar</button></div><div class="cart-item-meta"><span>Precio ${formatPrice(item.precioFinal ?? item.precio)}</span><strong>Seña 30 % · ${formatPrice(item.sena)}</strong><span>Retención <b class="cart-countdown" data-cart-expiration="${escapeHTML(item.expiraEn)}">10:00</b></span></div>${item.descuentoBeneficio ? `<p class="muted">Beneficio aplicado: −${formatPrice(item.descuentoBeneficio)}</p>` : ""}</article>`;
+  }).join("");
+  list.querySelectorAll(".cart-remove").forEach((button) => button.addEventListener("click", () => removeCartItem(button.dataset.id)));
+  tickCartCountdowns();
+  window.clearInterval(state.cartTimer);
+  state.cartTimer = window.setInterval(tickCartCountdowns, 1000);
+}
+
+function tickCartCountdowns() {
+  let expired = false;
+  document.querySelectorAll("[data-cart-expiration]").forEach((node) => {
+    const remaining = Math.max(0, Math.ceil((new Date(node.dataset.cartExpiration).getTime() - Date.now()) / 1000));
+    node.textContent = `${String(Math.floor(remaining / 60)).padStart(2, "0")}:${String(remaining % 60).padStart(2, "0")}`;
+    if (!remaining) expired = true;
+  });
+  if (expired) { window.clearInterval(state.cartTimer); state.cartTimer = null; loadCart(); }
+}
+
+async function removeCartItem(id) {
+  try { await request(`/reservas/carrito/bloqueos/${encodeURIComponent(id)}`, { method: "DELETE" }); state.checkoutKey = null; showToast("Tratamiento quitado y horario liberado."); await loadCart(); }
+  catch (error) { showToast(error.message, true); }
+}
+
+async function confirmCartPurchase() {
+  const button = $("#cart-checkout");
+  if (!state.cartItems.length || !state.cartSummary) { button.disabled = true; setStatus("#cart-status", "Actualizá el carrito y verificá sus importes antes de confirmar la compra.", true); return; }
+  button.disabled = true;
+  try {
+    state.checkoutKey ||= (globalThis.crypto?.randomUUID?.() || `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const result = await request("/reservas/carrito/checkout", { method: "POST", body: JSON.stringify({ idempotencyKey: state.checkoutKey }) });
+    const checkout = result.checkout || {};
+    if (checkout.estado === "confirmed") {
+      state.checkoutKey = null;
+      showToast("Compra simulada aprobada. Todos los turnos quedaron confirmados.");
+      setStatus("#cart-status", `Compra confirmada. Se registraron ${checkout.turnos?.length || state.cartItems.length} turnos; no se realizó ningún cobro real.`);
+      await Promise.all([loadCart(), loadBookings()]);
+    } else if (checkout.estado === "rejected") {
+      state.checkoutKey = null;
+      setStatus("#cart-status", "Pago simulado rechazado. No se confirmó ningún turno; tus retenciones siguen vigentes para reintentar.", true);
+      await loadCart();
+    } else {
+      setStatus("#cart-status", "La compra sigue procesándose. Podés reintentar sin duplicar el pago.");
+    }
+  } catch (error) {
+    setStatus("#cart-status", error.message, true);
+  } finally { button.disabled = !state.cartItems.length || !state.cartSummary; }
 }
 
 async function saveRewardAdmin(event) {
@@ -848,6 +1036,26 @@ function renderCatalogAdmin() {
   list("categories", catalogAdminState.categories);
   list("treatments", catalogAdminState.treatments);
   list("professionals", catalogAdminState.professionals);
+  renderProfessionalAccountLinks();
+}
+
+function renderProfessionalAccountLinks() {
+  const container = $("#professional-account-links");
+  if (!container) return;
+  const claimed = new Map(catalogAdminState.adminProfessionals.filter((item) => item.authUserId).map((item) => [item.authUserId, item.id]));
+  container.innerHTML = catalogAdminState.adminProfessionals.map((profile) => {
+    const account = catalogAdminState.professionalAccounts.find((item) => item.id === profile.authUserId);
+    const currentLabel = account ? `${account.nombre} · ${account.email}` : profile.authUserId ? `Cuenta no disponible · ${profile.authUserId}` : "Sin cuenta vinculada";
+    const options = catalogAdminState.professionalAccounts
+      .filter((item) => !claimed.has(item.id) || item.id === profile.authUserId)
+      .map((item) => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.nombre)} · ${escapeHTML(item.email)}</option>`).join("");
+    return `<article class="catalog-admin-row professional-account-row"><span><strong>${escapeHTML(profile.nombre)}</strong><small>${escapeHTML(profile.id)} · ${escapeHTML(currentLabel)}</small></span><div class="professional-account-controls"><select class="form-field professional-account-select" data-account-select="${escapeHTML(profile.id)}" aria-label="Cuenta Auth para ${escapeHTML(profile.nombre)}"><option value="">Elegí una cuenta profesional</option>${options}</select><button class="button button-outline save-professional-account" type="button" data-id="${escapeHTML(profile.id)}">Vincular</button><button class="text-link unlink-professional-account" type="button" data-id="${escapeHTML(profile.id)}" ${profile.authUserId ? "" : "disabled"}>Quitar vínculo</button></div></article>`;
+  }).join("") || `<p class="muted">No hay perfiles profesionales activos.</p>`;
+  for (const profile of catalogAdminState.adminProfessionals) {
+    const select = container.querySelector(`[data-account-select="${CSS.escape(profile.id)}"]`);
+    if (select && profile.authUserId && Array.from(select.options).some((option) => option.value === profile.authUserId)) select.value = profile.authUserId;
+  }
+  setStatus("#professional-account-links-status", `${catalogAdminState.professionalAccounts.length} cuentas profesionales activas disponibles.`);
 }
 
 async function loadCatalogAdmin() {
@@ -857,14 +1065,18 @@ async function loadCatalogAdmin() {
   }
   catalogAdminStatus("Cargando categorías, tratamientos y profesionales…");
   try {
-    const [categories, treatments, professionals] = await Promise.all([
+    const [categories, treatments, professionals, adminProfessionals, accounts] = await Promise.all([
       request("/catalogo/categorias"),
       request("/catalogo/tratamientos?page=1&limit=50"),
-      request("/catalogo/profesionales")
+      request("/catalogo/profesionales"),
+      request("/catalogo/admin/profesionales"),
+      request("/auth/usuarios/profesionales")
     ]);
     catalogAdminState.categories = Array.isArray(categories?.categorias) ? categories.categorias : [];
     catalogAdminState.treatments = Array.isArray(treatments?.tratamientos) ? treatments.tratamientos : [];
     catalogAdminState.professionals = Array.isArray(professionals?.profesionales) ? professionals.profesionales : [];
+    catalogAdminState.adminProfessionals = Array.isArray(adminProfessionals?.profesionales) ? adminProfessionals.profesionales : [];
+    catalogAdminState.professionalAccounts = Array.isArray(accounts?.usuarios) ? accounts.usuarios : [];
     renderCatalogAdmin();
     catalogAdminStatus("Listas actualizadas.");
   } catch (error) {
@@ -971,6 +1183,28 @@ function handleCatalogAdminAction(event) {
   if (remove) deactivateCatalogItem(remove.dataset.adminDelete, remove.dataset.id);
 }
 
+async function handleProfessionalAccountLink(event) {
+  const link = event.target.closest(".save-professional-account, .unlink-professional-account");
+  if (!link) return;
+  if (!isCatalogAdmin()) return catalogAdminStatus("No tenés permiso para administrar las cuentas profesionales.", true);
+  const profileID = link.dataset.id;
+  const select = $(`#professional-account-links [data-account-select="${CSS.escape(profileID)}"]`);
+  const authUserId = link.classList.contains("unlink-professional-account") ? "" : String(select?.value || "");
+  if (!authUserId && link.classList.contains("save-professional-account")) {
+    setStatus("#professional-account-links-status", "Elegí una cuenta profesional para vincular.", true);
+    return;
+  }
+  link.disabled = true;
+  try {
+    await request(`/catalogo/admin/profesionales/${encodeURIComponent(profileID)}/cuenta`, { method: "PUT", body: JSON.stringify({ authUserId }) });
+    setStatus("#professional-account-links-status", authUserId ? "Cuenta vinculada al perfil." : "Cuenta desvinculada del perfil.");
+    await loadCatalogAdmin();
+  } catch (error) {
+    setStatus("#professional-account-links-status", error.message, true);
+    link.disabled = false;
+  }
+}
+
 function initialize() {
   const updateHeaderOnScroll = () => $(".site-header").classList.toggle("site-header-scrolled", window.scrollY > 70);
   window.addEventListener("scroll", updateHeaderOnScroll, { passive: true });
@@ -1008,17 +1242,23 @@ function initialize() {
   });
   window.addEventListener("popstate", syncProfessionalHash);
   $("#availability-form").addEventListener("submit", loadAvailability);
-  $("#booking-treatment").addEventListener("change", updateProfessionals);
-  $("#booking-date").addEventListener("change", () => { $("#time-slots").innerHTML = ""; updateSteps(1); });
-  $("#payment-form").addEventListener("submit", confirmBooking);
-  $("#release-hold").addEventListener("click", () => releaseHold());
-  $("#logout-button").addEventListener("click", async () => { if (state.heldCartId) await releaseHold(false); sessionStorage.removeItem(TOKEN_KEY); showSignedOut(); showToast("Cerraste sesión."); });
+  $("#booking-treatment").addEventListener("change", () => { state.selectedSlot = null; $("#time-slots").innerHTML = ""; $("#selected-slot-action").classList.add("hidden"); updateProfessionals(); });
+  $("#booking-professional").addEventListener("change", () => { state.selectedSlot = null; $("#time-slots").innerHTML = ""; $("#selected-slot-action").classList.add("hidden"); updateSteps(1); });
+  $("#booking-date").addEventListener("change", () => { state.selectedSlot = null; $("#time-slots").innerHTML = ""; $("#selected-slot-action").classList.add("hidden"); updateSteps(1); });
+  $("#logout-button").addEventListener("click", async () => { sessionStorage.removeItem(TOKEN_KEY); showSignedOut(); showToast("Cerraste sesión."); });
   $("#refresh-account").addEventListener("click", loadAccount);
   $("#refresh-bookings").addEventListener("click", loadBookings);
+  $("#refresh-cart").addEventListener("click", loadCart);
+  $("#cart-checkout").addEventListener("click", confirmCartPurchase);
   $("#refresh-benefits").addEventListener("click", async () => { await Promise.all([loadPoints(), loadBenefits()]); });
-  $("#refresh-professional-turns").addEventListener("click", loadProfessionalTurns);
+  $("#refresh-professional-turns").addEventListener("click", () => Promise.all([loadProfessionalAgenda(), loadProfessionalTurns()]));
+  $("#professional-agenda-form").addEventListener("submit", saveProfessionalAgenda);
   $("#refresh-admin").addEventListener("click", loadAdminBenefits);
+  $("#refresh-users").addEventListener("click", loadSuperadminUsers);
+  $("#superadmin-create-user").addEventListener("submit", createManagedUser);
+  $("#superadmin-users-list").addEventListener("click", saveManagedUserRole);
   $("#refresh-catalog-admin").addEventListener("click", loadCatalogAdmin);
+  $("#professional-account-links").addEventListener("click", handleProfessionalAccountLink);
   $("#admin-category-form").addEventListener("submit", (event) => saveCatalogAdmin(event, "category"));
   $("#admin-treatment-form").addEventListener("submit", (event) => saveCatalogAdmin(event, "treatment"));
   $("#admin-professional-form").addEventListener("submit", (event) => saveCatalogAdmin(event, "professional"));
@@ -1056,7 +1296,6 @@ function initialize() {
   loadTreatments();
   syncProfessionalHash();
   initializeInvitation().then(() => loadAccount());
-  restorePendingCart();
 }
 
 initialize();

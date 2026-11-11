@@ -80,7 +80,7 @@ Resultado esperado: `201 Created` y el tratamiento creado en el cuerpo de la res
 
 Los perfiles activos se consultan en `GET /api/v1/profesionales?tratamientoId={id}`. Para habilitar un tratamiento, asociá el ID de un profesional tanto en el perfil (`tratamientosIds`) como en el tratamiento (`profesionalesIds`) y configurá su agenda con `PUT /api/v1/reservas/agenda`. Las tres operaciones de Catálogo requieren un token administrativo. Reservas valida el ID, la duración, la compatibilidad y el horario antes de crear un bloqueo.
 
-El flujo visual y los ejemplos de preparación de profesional, tratamiento y agenda están en [RESERVAS-WEB.md](RESERVAS-WEB.md). Para que haya pago de prueba, configura `MP_ACCESS_TOKEN` de prueba. El Checkout Pro genera un enlace por el 30 % y el ID del carrito se usa como referencia en la validación. Sin credenciales válidas no se retiene un horario.
+El flujo visual y los ejemplos de preparación de profesional, tratamiento y agenda están en [RESERVAS-WEB.md](RESERVAS-WEB.md). El simulador local funciona sin credenciales externas; configura opcionalmente `PAYMENT_SIMULATOR_RESULT=rejected` para probar un rechazo. El valor predeterminado es `approved`.
 
 Al desplegar Catálogo fuera de Compose, definí `AUTH_URL` con la URL base interna o privada del servicio Auth, por ejemplo `https://melt-tygp.onrender.com`. En Compose, el servicio usa `http://auth:8084` como valor predeterminado. No configures la URL de Auth en el frontend.
 
@@ -205,14 +205,15 @@ El servicio Reservas persiste agendas semanales y turnos en MongoDB, en la base 
 
 - `PUT /api/v1/reservas/agenda`: crea o actualiza el horario semanal. `diaSemana` usa 0=domingo y 6=sábado; `horaInicio` y `horaFin` usan `HH:MM`. Un profesional solo puede editar su propia agenda; recepción y administración pueden gestionar la agenda de un profesional indicado.
 - `GET /api/v1/reservas/disponibilidad?profesionalId=ID&tratamientoId=ID&fecha=YYYY-MM-DD`: devuelve inicios cada 15 minutos dentro de la agenda del profesional, tomando duración del Catálogo. Rechaza profesionales que no estén asociados al tratamiento, turnos confirmados y bloqueos activos del carrito. La zona horaria local se configura con `MELT_TIMEZONE`; por omisión es `America/Argentina/Buenos_Aires`.
-- `POST /api/v1/reservas/carrito/bloqueos`: JSON con `profesionalId`, `tratamientoId` e `inicio` RFC3339 con zona. Valida que el profesional sea compatible, que el horario futuro esté dentro de su agenda y que no se superponga; reserva los minutos con un índice único compartido por todas las réplicas. El bloqueo vence a los 10 minutos y devuelve el importe de seña del 30 %.
-- `POST /api/v1/reservas/carrito/bloqueos/{id}/confirmar`: JSON `{"pagoId":"..."}`. Confirma solo después de verificar con Pagos la seña exacta en ARS. Repetir la confirmación del mismo carrito devuelve el turno existente y no crea otro.
+- `POST /api/v1/reservas/carrito/bloqueos`: JSON con `profesionalId`, `tratamientoId` e `inicio` RFC3339 con zona. Valida que el profesional sea compatible, que el horario futuro esté dentro de su agenda y que no se superponga; reserva los minutos con un índice único compartido por todas las réplicas. En la interfaz se envía `diferirPago: true`; el bloqueo vence a los 10 minutos.
+- `POST /api/v1/reservas/carrito/checkout`: JSON `{"idempotencyKey":"..."}`. Reservas recalcula precios/beneficios, agrupa todos los bloqueos activos propios, calcula una sola seña del 30 %, solicita una simulación idempotente a Pagos y confirma todas las reservas en una transacción.
+- `POST /api/v1/reservas/carrito/bloqueos/{id}/pago` y `POST /carrito/bloqueos/{id}/confirmar` se conservan como alias históricos y responden `409 CHECKOUT_UNICO_REQUERIDO`; ya no crean ni confirman pagos individuales.
 - `DELETE /api/v1/reservas/carrito/bloqueos/{id}`: libera un bloqueo pendiente que pertenece al cliente autenticado.
 - `POST /api/v1/reservas/turnos`: la creación directa está deshabilitada; devuelve `CARRITO_REQUERIDO`. Usá el bloqueo temporal y confirmalo después de pagar la seña.
 - `GET /api/v1/reservas/turnos`: clientes ven sus turnos, profesionales sus turnos asignados y recepción/administración pueden consultar todos.
 - `DELETE /api/v1/reservas/turnos/{id}`: el cliente solo cancela turnos propios; recepción/administración pueden cancelar otros. Desde 24 horas antes inclusive se devuelve el 100 % de la seña; con menos de 24 horas no hay devolución. Si el proveedor falla, la cancelación queda registrada y la devolución puede reintentarse en `POST /api/v1/reservas/turnos/{id}/devolucion/reintentar`.
 
-Los endpoints privados quedan detrás de `auth_request` en el gateway y aplican identidad y permisos por operación en Reservas. La restricción única de profesional y minuto coordina bloqueos aun con varias réplicas; al cancelar se liberan los minutos ocupados. Catálogo y Pagos se invocan con timeout. La disponibilidad usa la duración real y profesionales habilitados que devuelve Catálogo.
+Los endpoints privados quedan detrás de `auth_request` en el gateway y aplican identidad y permisos por operación en Reservas. La restricción única de profesional y minuto coordina bloqueos aun con varias réplicas; al cancelar se liberan los minutos ocupados. Catálogo y Pagos se invocan con timeout. La disponibilidad usa la duración real y profesionales habilitados que devuelve Catálogo. Pagos persiste simulaciones y devoluciones en `pagos_db`, una base separada; no necesita tokens ni llamadas externas.
 
 ### Pruebas de Reservas
 

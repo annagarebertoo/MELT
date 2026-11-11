@@ -243,6 +243,11 @@ components:
           description: Nombre de una categoría activa administrada en /api/v1/catalogo/categorias. Las cuatro categorías iniciales se conservan; el catálogo admite nuevas categorías.
           example: Facial
 
+        categoriaId:
+          type: string
+          description: Identificador estable de la categoría, incluido para que Reservas aplique restricciones de solapamiento sin depender del nombre visible.
+          example: cat-facial
+
         descripcion:
           type: string
           description: Descripción del tratamiento.

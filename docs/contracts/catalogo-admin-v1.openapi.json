@@ -223,6 +223,94 @@
         }
       }
     },
+    "/admin/profesionales": {
+      "get": {
+        "summary": "Listar perfiles activos y sus cuentas vinculadas para administración",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Perfiles activos. authUserId solo aparece en este endpoint administrativo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["profesionales"],
+                  "properties": {
+                    "profesionales": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["id", "nombre", "tratamientosIds", "activo"],
+                        "properties": {
+                          "id": {"type": "string"},
+                          "nombre": {"type": "string"},
+                          "descripcion": {"type": "string"},
+                          "tratamientosIds": {"type": "array", "items": {"type": "string"}},
+                          "activo": {"type": "boolean"},
+                          "authUserId": {"type": "string", "description": "ID Auth asociado; omitido si no existe vínculo."}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Error401"},
+          "403": {"$ref": "#/components/responses/Error403"},
+          "503": {"$ref": "#/components/responses/Error503"}
+        }
+      }
+    },
+    "/admin/profesionales/{id}/cuenta": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {"type": "string", "minLength": 1, "maxLength": 128}
+        }
+      ],
+      "put": {
+        "summary": "Vincular o desvincular una cuenta Auth del perfil profesional",
+        "description": "Requiere administrador o superadministrador. authUserId debe pertenecer a una cuenta activa con rol profesional. Enviar cadena vacía para desvincular. Cada cuenta puede vincularse a un solo perfil.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["authUserId"],
+                "properties": {
+                  "authUserId": {"type": "string", "description": "ID de cuenta profesional; cadena vacía para quitar el vínculo."}
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Vínculo actualizado."},
+          "400": {"$ref": "#/components/responses/Error400"},
+          "401": {"$ref": "#/components/responses/Error401"},
+          "403": {"$ref": "#/components/responses/Error403"},
+          "404": {"$ref": "#/components/responses/Error404"},
+          "409": {"$ref": "#/components/responses/Error409"},
+          "415": {"$ref": "#/components/responses/Error415"},
+          "422": {"description": "La cuenta no está activa o no tiene el rol profesional."},
+          "503": {"$ref": "#/components/responses/Error503"}
+        }
+      }
+    },
     "/profesionales": {
       "post": {
         "summary": "Crear profesional",

@@ -24,7 +24,7 @@
     <aside class="site-menu" id="site-menu" aria-hidden="true" aria-label="Menú principal" inert>
       <div class="site-menu-top"><span class="brand">MELT</span><button id="menu-close" type="button" aria-label="Cerrar menú">×</button></div>
       <nav aria-label="Navegación principal">
-        <a href="#inicio">Inicio</a><a href="#seleccion">Selección MELT</a><a href="#tratamientos">Tratamientos</a><a href="#profesionales">Profesionales</a><a href="#reservas">Reservar turno</a><a href="#cuenta">Mi cuenta</a><a id="catalog-admin-link" class="hidden" href="#catalog-admin">Administrar catálogo</a>
+        <a href="#inicio">Inicio</a><a href="#seleccion">Selección MELT</a><a href="#tratamientos">Tratamientos</a><a href="#profesionales">Profesionales</a><a href="#reservas">Reservar turno</a><a href="#cuenta">Mi cuenta</a><a id="cart-menu-link" class="hidden" href="#carrito">Mi carrito <span id="cart-count" class="cart-count">0</span></a><a id="catalog-admin-link" class="hidden" href="#catalog-admin">Administrar catálogo</a>
       </nav>
       <p>Tu tiempo, tu ritual.</p>
     </aside>
@@ -102,7 +102,7 @@
         <ol class="booking-steps" aria-label="Pasos de la reserva">
           <li class="active" data-booking-step="1"><span>01</span><b>Elegí tu tratamiento</b></li>
           <li data-booking-step="2"><span>02</span><b>Buscá un horario</b></li>
-          <li data-booking-step="3"><span>03</span><b>Confirmá tu seña</b></li>
+          <li data-booking-step="3"><span>03</span><b>Revisá tu carrito</b></li>
         </ol>
         <div id="invitation-panel" class="booking-guest-note hidden" role="status" aria-live="polite">
           <div><strong>Puntos para tu cuenta MELT</strong><p id="invitation-details"></p><button id="discard-invitation" class="text-button" type="button">Continuar sin invitación</button></div>
@@ -140,17 +140,9 @@
             </form>
             <div id="availability-status" class="form-status" aria-live="polite"></div>
             <div id="time-slots" class="time-slots"></div>
+            <div id="selected-slot-action" class="selected-slot-action hidden" aria-live="polite"></div>
             <div id="booking-summary" class="booking-summary-inline hidden" aria-live="polite"></div>
-            <form id="payment-form" class="payment-form hidden">
-              <div class="hold-countdown"><span><i aria-hidden="true"></i>Horario reservado para vos</span><strong id="hold-countdown">10:00</strong></div>
-              <p id="hold-message" class="hold-message"></p>
-              <div class="deposit-summary"><span>Seña requerida · 30 %</span><strong id="hold-amount">—</strong></div>
-              <p class="payment-guidance">Pagá la seña en Mercado Pago. Al volver, ingresá el ID de la operación para validar el pago y confirmar tu turno.</p>
-              <a class="button button-payment full-width" id="checkout-link" href="#" target="_blank" rel="noopener noreferrer">Pagar seña en Mercado Pago ↗</a>
-              <label class="form-field">ID de pago aprobado<input id="payment-id" required inputmode="numeric" pattern="[0-9]+" autocomplete="off" placeholder="Ej.: 1234567890"></label>
-              <button class="button button-dark full-width" id="confirm-booking" type="submit">Validar pago y confirmar turno</button>
-              <button class="text-button release-button" id="release-hold" type="button">Liberar horario</button>
-            </form>
+            <p class="payment-guidance">Los horarios agregados se revisan y confirman juntos desde <a href="#carrito">Mi carrito</a>. El pago de la seña es simulado y no se realiza ningún cobro real.</p>
           </div>
         </div>
         <section id="points-panel" class="benefits-area hidden" aria-labelledby="points-title">
@@ -189,15 +181,30 @@
           <div id="ghostkitchen-pagination" class="pagination hidden"><button id="ghostkitchen-prev" class="button button-outline" type="button">← Anterior</button><span id="ghostkitchen-page">Página 1</span><button id="ghostkitchen-next" class="button button-outline" type="button">Siguiente →</button></div>
           <p class="ghostkitchen-note">La disponibilidad es orientativa y no garantiza una reserva ni una compra.</p>
         </section>        <section id="professional-panel" class="benefits-area hidden" aria-labelledby="professional-title">
-          <div class="section-heading"><div><p class="eyebrow">Atención profesional</p><h2 id="professional-title">Mis tratamientos</h2></div><button id="refresh-professional-turns" class="button button-outline" type="button">Actualizar</button></div>
-          <p class="muted">Cuando termines un turno, confirmalo para registrar la realización y habilitar la acreditación de puntos.</p>
-          <div id="professional-turns" class="movement-list" aria-live="polite"></div>
+          <div class="section-heading"><div><p class="eyebrow">Atención profesional</p><h2 id="professional-title">Mi agenda</h2></div><button id="refresh-professional-turns" class="button button-outline" type="button">Actualizar</button></div>
+          <section class="benefit-card professional-agenda" aria-labelledby="professional-availability-title">
+            <h3 id="professional-availability-title">Disponibilidad semanal</h3>
+            <p class="muted">Configurá tus días y bloques de atención entre las 08:00 y las 20:00. No se guardarán cambios que dejen fuera reservas existentes.</p>
+            <form id="professional-agenda-form"><div id="professional-agenda-days" class="professional-agenda-days" aria-live="polite"><p class="muted">Cargando disponibilidad…</p></div>
+              <button id="save-professional-agenda" class="button button-dark" type="submit">Guardar disponibilidad</button><p id="professional-agenda-status" class="form-status" aria-live="polite"></p>
+            </form>
+          </section>
+          <section class="professional-turns" aria-labelledby="professional-turns-title"><h3 id="professional-turns-title">Mis turnos</h3>
+            <h4>Próximas reservas</h4><div id="professional-upcoming" class="movement-list" aria-live="polite"></div>
+            <h4>Historial</h4><div id="professional-history" class="movement-list" aria-live="polite"></div>
+          </section>
         </section>
         <section id="admin-panel" class="benefits-area hidden" aria-labelledby="admin-title">
           <div class="section-heading"><div><p class="eyebrow">Administración MELT</p><h2 id="admin-title">Reglas y recompensas</h2></div><button id="refresh-admin" class="button button-outline" type="button">Actualizar</button></div>
           <section id="catalog-admin" class="catalog-admin" aria-labelledby="catalog-admin-title">
             <div class="section-heading"><div><p class="eyebrow">Catálogo y profesionales</p><h3 id="catalog-admin-title">Administrar catálogo</h3></div><button id="refresh-catalog-admin" class="button button-outline" type="button">Actualizar listas</button></div>
             <p id="catalog-admin-access" class="form-status" aria-live="polite"></p>
+            <section class="benefit-card professional-account-links" aria-labelledby="professional-account-links-title">
+              <h4 id="professional-account-links-title">Cuentas de profesionales</h4>
+              <p class="muted">Vinculá cada perfil del catálogo con su cuenta Auth para habilitar el acceso a su agenda.</p>
+              <div id="professional-account-links" class="movement-list" aria-live="polite"></div>
+              <p id="professional-account-links-status" class="form-status" aria-live="polite"></p>
+            </section>
             <div class="benefits-columns catalog-admin-columns">
               <form id="admin-category-form" class="benefit-card admin-form"><h4>Categorías</h4>
                 <label class="form-field">ID<input name="id" required maxlength="128" placeholder="facial"></label>
@@ -250,9 +257,31 @@
           <div id="admin-rewards-list" class="movement-list"></div>
           <div class="benefit-card redeemed-card"><h3>Mensajes que requieren revisión</h3><div id="failed-messages" class="movement-list"></div></div>
         </section>
+        <section id="superadmin-users-panel" class="benefits-area hidden" aria-labelledby="superadmin-users-title">
+          <div class="section-heading"><div><p class="eyebrow">Acceso restringido</p><h2 id="superadmin-users-title">Administrar usuarios y roles</h2></div><button id="refresh-users" class="button button-outline" type="button">Actualizar</button></div>
+          <p class="muted">Solo el superadministrador puede gestionar las cuentas. Las cuentas profesionales vinculadas deben desvincularse primero desde Catálogo.</p>
+          <form id="superadmin-create-user" class="benefit-card admin-form superadmin-create-user">
+            <h3>Crear cuenta</h3>
+            <label class="form-field">Nombre<input name="nombre" required maxlength="120"></label>
+            <label class="form-field">Email<input name="email" type="email" required></label>
+            <label class="form-field">Contraseña inicial<input name="password" type="password" required minlength="8" maxlength="72" autocomplete="new-password"></label>
+            <label class="form-field">Rol<select name="rol" required><option value="cliente">Cliente</option><option value="profesional">Profesional</option><option value="recepcion">Recepción</option><option value="administrador">Administrador</option><option value="superadministrador">Superadministrador</option></select></label>
+            <button class="button button-dark" type="submit">Crear cuenta</button><p id="superadmin-create-status" class="form-status" aria-live="polite"></p>
+          </form>
+          <p id="superadmin-users-status" class="form-status" aria-live="polite"></p>
+          <div id="superadmin-users-list" class="movement-list" aria-live="polite"></div>
+        </section>
         <div id="my-bookings" class="bookings-panel hidden"><div class="bookings-heading"><div><p class="eyebrow">Tus próximos encuentros</p><h3>Mis reservas</h3></div><button id="refresh-bookings" class="button button-outline" type="button">Actualizar</button></div><div id="bookings-list"></div></div>
       </section>
     </main>
+
+    <section id="carrito" class="cart-section section-pad hidden" aria-labelledby="cart-title">
+      <div class="section-heading"><div><p class="eyebrow">Tus horarios retenidos</p><h2 id="cart-title">Mi carrito</h2></div><div class="cart-header-actions"><button id="refresh-cart" class="button button-outline" type="button">Actualizar</button><button id="cart-checkout" class="button button-dark" type="button" disabled>Confirmar compra</button></div></div>
+      <p class="section-description">Revisá todos tus tratamientos y confirmalos en una única compra simulada. Cada horario se retiene durante diez minutos.</p>
+      <div id="cart-status" class="form-status" aria-live="polite"></div>
+      <div id="cart-items" class="cart-items" aria-live="polite"><p class="muted">Iniciá sesión como cliente para consultar el carrito.</p></div>
+      <div id="cart-summary" class="cart-summary" aria-live="polite"></div>
+    </section>
 
     <footer class="site-footer"><div class="footer-brand"><a class="brand" href="#inicio">MELT</a><p>Cuidarte también es hacerte un espacio.</p></div><div class="footer-links"><a href="#seleccion">Selección</a><a href="#tratamientos">Tratamientos</a><a href="#profesionales">Profesionales</a><a href="#reservas">Reservas</a><a href="#cuenta">Mi cuenta</a></div><span>© MELT · Centro de estética</span></footer>
     <dialog class="treatment-dialog" id="treatment-dialog" aria-labelledby="detail-title">

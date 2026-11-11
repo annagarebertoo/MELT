@@ -307,7 +307,7 @@ Las decisiones siguientes actualizan el diseño inicial y deben prevalecer sobre
 
 - Al agregar un horario al carrito se crea un bloqueo temporal de 10 minutos, con titular y vencimiento. El bloqueo se libera al confirmar, quitar el elemento o vencer el plazo; no puede permanecer indefinidamente por la desconexión del cliente.
 - Reservas valida superposición de agenda del profesional e incompatibilidad de tratamientos del mismo cliente. Las reglas de incompatibilidad son explícitas por combinación de tratamientos/categorías y pueden incluir intervalos de separación. La operación de bloqueo debe ser atómica para prevenir carreras.
-- La seña equivale al 30 % del precio vigente del tratamiento y debe pagarse para confirmar la reserva. Si el cliente cancela con 24 horas o más de anticipación, se devuelve el 100 %; con menos de 24 horas o ante inasistencia, no se devuelve. La cancelación tardía libera el horario. El adaptador implementado usa Mercado Pago Checkout Pro en modo de prueba, verifica el pago antes de confirmar y admite devoluciones con clave de idempotencia. Cobros de producción quedan fuera de esta configuración.
+- La seña equivale al 30 % del precio vigente del tratamiento. El carrito agrupa las retenciones de un cliente y un checkout idempotente calcula una sola seña total. El simulador registra aprobación/rechazo en Pagos; Reservas confirma el conjunto dentro de una transacción y solicita compensación si no puede confirmarlo. Las cancelaciones conservan la política vigente de devolución simulada.
 
 ### Eventos y correo
 
@@ -332,7 +332,7 @@ Este snapshot describe la implementación local y complementa el diseño objetiv
 - Catálogo almacena tratamientos y perfiles públicos en colecciones separadas de la misma base MongoDB `catalogo_db` (`tratamientos` y `profesionales`). La base objetivo independiente `profesionales_db` aún no se usa.
 - Reservas almacena agendas semanales, turnos, bloqueos y carritos en MongoDB `reservas_db`. Los bloqueos usan unicidad por profesional/minuto y vencimiento TTL. PostgreSQL no está integrado a Reservas en esta versión.
 - Auth persiste cuentas en MongoDB `usuarios_db`. NGINX valida sesiones privadas y propaga identidad verificada. Reservas decide acceso por operación y valida titularidad; la API administrativa de Catálogo requiere rol administrador/superadministrador.
-- El adaptador `pagos` crea preferencias y verifica/refunda operaciones en Mercado Pago test. Producción no está habilitada; el retorno automático requiere configurar una URL HTTPS pública.
+- El servicio `pagos` persiste pagos y devoluciones simulados en su base propia. El resultado predeterminado local es aprobado; se configura rechazo mediante `PAYMENT_SIMULATOR_RESULT=rejected`. No hay SDK, credenciales externas ni cobros reales.
 - La web se sirve desde NGINX y consume las rutas de catálogo, Auth, Reservas, Beneficios y Pagos del Gateway. Hay datos demo locales de tratamientos, profesionales y agendas; no se consideran datos comerciales ni cuentas de Auth. Ver `docs/RESERVAS-WEB.md`.
 - La API externa asignada a Cocina Fantasma (búsqueda de sedes cercanas) no está entregada todavía. Puntos por tratamientos completados, canjes, notificaciones por correo y consola administrativa tampoco forman parte de este flujo implementado.
 

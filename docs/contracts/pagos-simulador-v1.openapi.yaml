@@ -1,0 +1,117 @@
+openapi: 3.0.3
+info:
+  title: MELT Pagos - API interna del simulador
+  version: 1.0.0
+  description: Contrato servidor a servidor. Ninguna ruta de pago se publica al navegador.
+servers:
+  - url: http://pagos:8085
+security:
+  - meltInternalKey: []
+paths:
+  /payments/simulate:
+    post:
+      summary: Registra/reutiliza el pago simulado de un checkout
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [checkoutId, importe, moneda]
+              properties:
+                checkoutId: { type: string }
+                importe: { type: number, exclusiveMinimum: 0 }
+                moneda: { type: string, enum: [ARS] }
+      responses:
+        '201': { description: Nueva operación registrada }
+        '200': { description: Reintento idempotente; devuelve la misma operación }
+        '400': { description: Solicitud inválida }
+        '409': { description: El checkout ya tiene otra operación/importe }
+  /payments/{id}:
+    get:
+      summary: Consulta una transacción simulada
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Resultado persistido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payment' }
+        '404': { description: Operación inexistente }
+  /payments/verify:
+    post:
+      summary: Valida aprobación, checkout, importe y moneda de una operación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pagoId, importe, moneda, referencia]
+              properties:
+                pagoId: { type: string }
+                importe: { type: number }
+                moneda: { type: string, enum: [ARS] }
+                referencia: { type: string }
+      responses:
+        '200': { description: Resultado de validación }
+  /payments/{id}/reverse:
+    post:
+      summary: Revierte idempotentemente una aprobación ante fallo de confirmación de Reservas
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Simulación revertida }
+        '409': { description: Operación no aprobada }
+  /payments/refunds:
+    post:
+      summary: Registra una devolución simulada idempotente
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pagoId, importe, moneda]
+              properties:
+                pagoId: { type: string }
+                importe: { type: number, exclusiveMinimum: 0 }
+                moneda: { type: string, enum: [ARS] }
+                motivo: { type: string }
+      responses:
+        '201': { description: Devolución registrada }
+        '409': { description: Importe inválido o devolución incompatible }
+components:
+  securitySchemes:
+    meltInternalKey:
+      type: apiKey
+      in: header
+      name: X-Melt-Internal-Key
+  parameters:
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema: { type: string }
+  schemas:
+    Payment:
+      type: object
+      required: [id, checkoutId, importe, moneda, estado, creadoEn]
+      properties:
+        id: { type: string }
+        checkoutId: { type: string }
+        importe: { type: number }
+        moneda: { type: string, enum: [ARS] }
+        estado: { type: string, enum: [approved, rejected, reversed] }
+        creadoEn: { type: string, format: date-time }

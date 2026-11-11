@@ -26,6 +26,7 @@ services:
       PROFESIONALES_MONGODB_DATABASE: ${PROFESIONALES_MONGODB_DATABASE:-}
       PORT: "8081"
       AUTH_URL: ${AUTH_URL:-http://auth:8084}
+      MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
       OPENSEARCH_URL: ${OPENSEARCH_URL:-http://opensearch:9200}
       MEMCACHED_ADDRESS: ${MEMCACHED_ADDRESS:-memcached:11211}
       MEMCACHED_NAMESPACE: ${MEMCACHED_NAMESPACE:-melt:catalogo}
@@ -60,6 +61,8 @@ services:
       MELT_TIMEZONE: ${MELT_TIMEZONE:-America/Argentina/Buenos_Aires}
       PAGOS_URL: ${PAGOS_URL:-http://pagos:8085}
       BENEFICIOS_URL: http://beneficios:8083
+      CATALOGO_URL: http://catalogo-profesionales:8081
+      AUTH_URL: http://auth:8084
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
@@ -76,10 +79,13 @@ services:
       context: ./services/pagos
     environment:
       PORT: "8085"
-      MP_ENV: "test"
-      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
-      MP_BASE_URL: ${MP_BASE_URL:-https://api.mercadopago.com}
-      MP_RETURN_URL: ${MP_RETURN_URL:-}
+      MONGODB_URI: mongodb://mongodb:27017
+      PAGOS_MONGODB_DATABASE: ${PAGOS_MONGODB_DATABASE:-pagos_db}
+      MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
+      PAYMENT_SIMULATOR_RESULT: ${PAYMENT_SIMULATOR_RESULT:-approved}
+    depends_on:
+      mongodb:
+        condition: service_healthy
     restart: unless-stopped
 
   auth:
@@ -90,6 +96,7 @@ services:
       MONGODB_URI: mongodb://mongodb:27017
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Defini AUTH_JWT_SECRET en tu entorno}
       BENEFICIOS_URL: http://beneficios:8083
+      CATALOGO_URL: http://catalogo-profesionales:8081
       AUTH_TOKEN_TTL_MINUTES: ${AUTH_TOKEN_TTL_MINUTES:-15}
       AUTH_ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL:-}
       AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-}
@@ -97,6 +104,8 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+      catalogo-profesionales:
+        condition: service_started
     restart: unless-stopped
 
   beneficios:

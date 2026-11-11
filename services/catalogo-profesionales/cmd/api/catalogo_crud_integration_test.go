@@ -185,6 +185,60 @@ func TestCatalogCRUDMongo(t *testing.T) {
 	}
 	catalogCall(t, r, "GET", "/categorias/corporal", "", 404)
 }
+
+func TestVinculacionCuentaProfesionalMongo(t *testing.T) {
+	s, r := catalogFixture(t)
+	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/verify-admin" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if req.Header.Get("X-Melt-Internal-Key") != "test-internal" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		switch req.URL.Path {
+		case "/internal/usuarios/pro-account-1", "/internal/usuarios/pro-account-2":
+			w.Header().Set("X-Auth-User-Roles", "profesional")
+			w.WriteHeader(http.StatusNoContent)
+		case "/internal/usuarios/client-account":
+			w.Header().Set("X-Auth-User-Roles", "cliente")
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer auth.Close()
+	s.authVerifyAdminURL = auth.URL + "/verify-admin"
+	s.authInternalURL = auth.URL + "/internal/usuarios/"
+	s.internalKey = "test-internal"
+
+	catalogCall(t, r, "POST", "/profesionales", `{"id":"p1","nombre":"Perfil uno"}`, 201)
+	catalogCall(t, r, "POST", "/profesionales", `{"id":"p2","nombre":"Perfil dos"}`, 201)
+	catalogCall(t, r, "PUT", "/admin/profesionales/p1/cuenta", `{"authUserId":"pro-account-1"}`, 200)
+	catalogCall(t, r, "PUT", "/admin/profesionales/p2/cuenta", `{"authUserId":"client-account"}`, http.StatusUnprocessableEntity)
+	catalogCall(t, r, "PUT", "/admin/profesionales/p2/cuenta", `{"authUserId":"pro-account-1"}`, http.StatusConflict)
+
+	public := catalogRequest(r, http.MethodGet, "/profesionales/p1", "")
+	if public.Code != http.StatusOK || strings.Contains(public.Body.String(), "authUserId") || strings.Contains(public.Body.String(), "pro-account-1") {
+		t.Fatalf("public professional profile leaked Auth link: status=%d body=%s", public.Code, public.Body.String())
+	}
+	admin := catalogCall(t, r, http.MethodGet, "/admin/profesionales", "", http.StatusOK)
+	rows := admin["profesionales"].([]any)
+	found := false
+	for _, item := range rows {
+		profile := item.(map[string]any)
+		if profile["id"] == "p1" && profile["authUserId"] == "pro-account-1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("administrative list did not expose the linked account")
+	}
+	catalogCall(t, r, http.MethodPut, "/admin/profesionales/p1/cuenta", `{"authUserId":""}`, http.StatusOK)
+	catalogCall(t, r, http.MethodPut, "/admin/profesionales/p2/cuenta", `{"authUserId":"pro-account-1"}`, http.StatusOK)
+}
+
 func TestCatalogTransactionRollback(t *testing.T) {
 	s, _ := catalogFixture(t)
 	ctx := context.Background()

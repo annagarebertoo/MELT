@@ -27,6 +27,7 @@ type Tratamiento struct {
 	Nombre           string   `bson:"nombre" json:"nombre"`
 	Descripcion      string   `bson:"descripcion" json:"descripcion"`
 	Categoria        string   `bson:"categoria" json:"categoria"`
+	CategoriaID      string   `bson:"categoriaId,omitempty" json:"categoriaId,omitempty"`
 	Precio           float64  `bson:"precio" json:"precio"`
 	Moneda           string   `bson:"moneda" json:"moneda"`
 	DuracionMinutos  int      `bson:"duracionMinutos" json:"duracionMinutos"`
@@ -41,6 +42,7 @@ type Profesional struct {
 	Descripcion     string   `bson:"descripcion,omitempty" json:"descripcion,omitempty"`
 	TratamientosIDs []string `bson:"tratamientosIds" json:"tratamientosIds"`
 	Activo          bool     `bson:"activo" json:"activo"`
+	AuthUserID      string   `bson:"authUserId,omitempty" json:"-"`
 }
 
 type Servidor struct {
@@ -49,11 +51,46 @@ type Servidor struct {
 	coleccion          *mongo.Collection
 	profesionales      *mongo.Collection
 	authVerifyAdminURL string
+	authInternalURL    string
+	internalKey        string
 	search             *searchClient
 	cache              *memcacheClient
 	lastIndexSuccess   atomic.Int64
 	indexFailures      atomic.Uint64
 	searchFailures     atomic.Uint64
+}
+
+func (s *Servidor) completarCategoriaIDs(ctx context.Context, tratamientos []Tratamiento) error {
+	nombres := make([]string, 0)
+	seen := map[string]bool{}
+	for _, t := range tratamientos {
+		if t.CategoriaID == "" && t.Categoria != "" && !seen[t.Categoria] {
+			seen[t.Categoria] = true
+			nombres = append(nombres, t.Categoria)
+		}
+	}
+	if len(nombres) == 0 {
+		return nil
+	}
+	cursor, err := s.categorias.Find(ctx, bson.M{"nombre": bson.M{"$in": nombres}, "eliminada": bson.M{"$ne": true}}, options.Find().SetProjection(bson.M{"_id": 0, "id": 1, "nombre": 1}))
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(ctx)
+	var categorias []Categoria
+	if err := cursor.All(ctx, &categorias); err != nil {
+		return err
+	}
+	porNombre := make(map[string]string, len(categorias))
+	for _, categoria := range categorias {
+		porNombre[categoria.Nombre] = categoria.ID
+	}
+	for i := range tratamientos {
+		if tratamientos[i].CategoriaID == "" {
+			tratamientos[i].CategoriaID = porNombre[tratamientos[i].Categoria]
+		}
+	}
+	return nil
 }
 
 func main() {
@@ -102,7 +139,7 @@ func main() {
 	if authURL == "" {
 		authURL = "http://auth:8084"
 	}
-	servidor := &Servidor{coleccion: coleccion, profesionales: profesionales, authVerifyAdminURL: authURL + "/verify-admin"}
+	servidor := &Servidor{coleccion: coleccion, profesionales: profesionales, authVerifyAdminURL: authURL + "/verify-admin", authInternalURL: authURL + "/internal/usuarios/", internalKey: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY"))}
 	searchURL := strings.TrimSpace(os.Getenv("OPENSEARCH_URL"))
 	if searchURL == "" {
 		searchURL = "http://opensearch:9200"
@@ -188,6 +225,9 @@ func crearRouter(servidor *Servidor, ping func(context.Context) error) *gin.Engi
 	router.DELETE("/categorias/:id", servidor.requiereAdmin(), servidor.eliminarCategoria)
 	router.GET("/profesionales", servidor.listarProfesionales)
 	router.POST("/profesionales", servidor.requiereAdmin(), servidor.crearProfesional)
+	router.GET("/admin/profesionales", servidor.requiereAdmin(), servidor.listarProfesionalesAdmin)
+	router.PUT("/admin/profesionales/:id/cuenta", servidor.requiereAdmin(), servidor.vincularCuentaProfesional)
+	router.GET("/internal/profesionales/por-cuenta/:authUserId", servidor.resolverPerfilProfesional)
 	return router
 }
 
@@ -405,6 +445,10 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 			catalogError(c, 503, "BUSQUEDA_NO_DISPONIBLE", "La búsqueda no está disponible temporalmente.")
 			return
 		}
+		if err := s.completarCategoriaIDs(searchCtx, result.Treatments); err != nil {
+			catalogError(c, 503, "CATEGORIAS_NO_DISPONIBLES", "No se pudieron resolver las categorías de los tratamientos.")
+			return
+		}
 		payload := gin.H{"tratamientos": result.Treatments, "pagination": gin.H{"page": page, "limit": limit, "total": result.Total, "totalPages": totalPages(result.Total, limit)}}
 		if raw, err := json.Marshal(payload); err == nil {
 			if s.cache != nil {
@@ -440,6 +484,10 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 
 	for i := range tratamientos {
 		normalizarLecturaTratamiento(&tratamientos[i])
+	}
+	if err := s.completarCategoriaIDs(ctx, tratamientos); err != nil {
+		catalogError(c, 503, "CATEGORIAS_NO_DISPONIBLES", "No se pudieron resolver las categorías de los tratamientos.")
+		return
 	}
 	payload := gin.H{
 		"tratamientos": tratamientos,
@@ -501,6 +549,12 @@ func (s *Servidor) obtenerTratamiento(c *gin.Context) {
 	}
 
 	normalizarLecturaTratamiento(&tratamiento)
+	items := []Tratamiento{tratamiento}
+	if err := s.completarCategoriaIDs(ctx, items); err != nil {
+		catalogError(c, 503, "CATEGORIAS_NO_DISPONIBLES", "No se pudo resolver la categoría del tratamiento.")
+		return
+	}
+	tratamiento = items[0]
 	c.JSON(http.StatusOK, tratamiento)
 }
 

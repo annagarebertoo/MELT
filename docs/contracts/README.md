@@ -1,5 +1,10 @@
 # API de Tratamientos MELT
 
+Contratos adicionales para reservas y pagos:
+
+- [Carrito y checkout agrupado de Reservas](reservas-checkout-v1.openapi.yaml).
+- [Simulador interno de Pagos](pagos-simulador-v1.openapi.yaml). Sus operaciones requieren `X-Melt-Internal-Key` y no se exponen al frontend.
+
 ## Descripción
 
 La API pública permite consultar tratamientos y perfiles profesionales activos de MELT. Para la consigna de integración, el Grupo 1 (Gimnasio) es consumidor del catálogo del Grupo 5 (MELT).

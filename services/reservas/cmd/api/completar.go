@@ -27,13 +27,18 @@ func (s *servidorReservas) completarTratamiento(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "PERMISOS_INSUFICIENTES", "message": "Solo el profesional asignado puede confirmar que realizó el tratamiento."}})
 		return
 	}
+	profesionalID, status, err := s.resolverPerfilProfesional(c.Request.Context(), identidad.ID)
+	if err != nil {
+		c.JSON(status, gin.H{"error": gin.H{"code": "PERFIL_PROFESIONAL_NO_DISPONIBLE", "message": err.Error()}})
+		return
+	}
 	if s.mongo == nil || s.outbox == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "EVENTOS_NO_DISPONIBLES", "message": "No se pudo registrar la realización de forma segura."}})
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
 	defer cancel()
-	item, repetido, err := s.registrarRealizacion(ctx, strings.TrimSpace(c.Param("id")), identidad.ID)
+	item, repetido, err := s.registrarRealizacion(ctx, strings.TrimSpace(c.Param("id")), profesionalID)
 	switch {
 	case errors.Is(err, errTurnoNoEncontrado):
 		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "TURNO_NO_ENCONTRADO", "message": "No encontramos ese turno."}})
@@ -92,6 +97,9 @@ func (s *servidorReservas) registrarRealizacion(ctx context.Context, turnoID, pr
 		if res.MatchedCount != 1 {
 			return nil, errTurnoNoConfirmado
 		}
+		if _, e = s.bloqueos.DeleteMany(tx, bson.M{"turnoId": item.ID}); e != nil {
+			return nil, e
+		}
 		item.Estado, item.TratamientoRealizadoPor = "completado", profesionalID
 		item.TratamientoRealizadoEn = &now
 		payload := bson.M{"eventId": eventID, "turnoId": item.ID, "usuarioId": item.ClienteID, "profesionalId": item.ProfesionalID, "tratamientoId": item.TratamientoID, "realizadoEn": now, "beneficioCanjeId": item.BeneficioCanjeID, "beneficioReservaId": item.BeneficioReservaID}
@@ -123,6 +131,9 @@ func (s *servidorReservas) cancelarConEvento(ctx context.Context, t turno, devol
 		}
 		if res.MatchedCount != 1 {
 			return nil, errTurnoNoConfirmado
+		}
+		if _, e = s.bloqueos.DeleteMany(tx, bson.M{"turnoId": t.ID}); e != nil {
+			return nil, e
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
 		eventID := "turno-cancelado:" + t.ID

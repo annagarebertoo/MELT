@@ -98,3 +98,7 @@ Hay que definir modalidades de comunicación, cuándo usar cada una y qué probl
 - Reservas → Catálogo y Reservas → Beneficios permanecen como interacciones previstas; no hay llamadas de negocio implementadas que permitan validar sus políticas. No se agregan mecanismos ni se cambian reglas de negocio en esta etapa.
 
 El procedimiento y sus limitaciones se encuentran en [Validación de comunicación](../COMMUNICATION.md), con [evidencia reproducible](../evidence/d5-2026-10-23.json). Esta validación incremental no acredita todos los requisitos de comunicación síncrona y asíncrona de la etapa final.
+
+## Enmienda — checkout y pagos simulados (2026-11-11)
+
+La compra local usa ahora una llamada síncrona idempotente Reservas → Pagos: Pagos guarda una simulación aprobada o rechazada en su base propia; Reservas confirma todos los turnos en una transacción o revierte la simulación ante una falla. No se reciben webhooks ni notificaciones de pasarela porque se retiró la integración externa de Mercado Pago. Los eventos de realización y puntos siguen siendo independientes del checkout y del pago. Ver [ADR-015](ADR-015-checkout-unico-simulador-pagos.md).

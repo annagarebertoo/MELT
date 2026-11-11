@@ -100,6 +100,31 @@ paths:
         '401':
           description: Token ausente, inválido, vencido o cuenta deshabilitada.
   /usuarios:
+    get:
+      summary: Listar cuentas registradas para el superadministrador
+      operationId: listarUsuariosAdministrativo
+      security:
+        - bearerAuth: []
+      description: Devuelve nombre, email, roles, estado y fecha de alta. Nunca incluye contraseñas ni hashes.
+      responses:
+        '200':
+          description: Listado de cuentas.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [usuarios]
+                properties:
+                  usuarios:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Usuario'
+        '401':
+          description: Token ausente o inválido.
+        '403':
+          description: Se requiere superadministrador.
+        '503':
+          description: No se pudieron consultar las cuentas.
     post:
       summary: Crear una cuenta interna
       operationId: crearUsuarioInterno
@@ -128,6 +153,80 @@ paths:
           description: Ya existe una cuenta con ese email.
         '503':
           description: No se pudo guardar la cuenta.
+  /usuarios/profesionales:
+    get:
+      summary: Listar cuentas profesionales activas para administración
+      operationId: listarCuentasProfesionales
+      description: Requiere rol administrador o superadministrador. Devuelve únicamente ID, nombre y email; no incluye credenciales ni permite modificar roles.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Cuentas activas que tienen el rol profesional.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [usuarios]
+                properties:
+                  usuarios:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, nombre, email]
+                      properties:
+                        id:
+                          type: string
+                        nombre:
+                          type: string
+                        email:
+                          type: string
+                          format: email
+        '401':
+          description: Token ausente o inválido.
+        '403':
+          description: Se requiere administrador o superadministrador.
+        '503':
+          description: No se pudieron consultar las cuentas.
+  /usuarios/{id}/rol:
+    put:
+      summary: Cambiar el rol de una cuenta
+      operationId: cambiarRolUsuario
+      security:
+        - bearerAuth: []
+      description: Solo superadministrador. Bloquea la autodegradación, la baja del último superadministrador y la degradación de cuentas profesionales aún vinculadas en Catálogo.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rol]
+              properties:
+                rol:
+                  type: string
+                  enum: [cliente, profesional, recepcion, administrador, superadministrador]
+      responses:
+        '200':
+          description: Rol actualizado.
+        '400':
+          description: Rol inválido.
+        '401':
+          description: Token ausente o inválido.
+        '403':
+          description: Se requiere superadministrador.
+        '404':
+          description: Cuenta inexistente.
+        '409':
+          description: Autodegradación, último superadministrador o vínculo profesional activo.
+        '503':
+          description: No se pudo verificar Catálogo o guardar el cambio.
 components:
   securitySchemes:
     bearerAuth:

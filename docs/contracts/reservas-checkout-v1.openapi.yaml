@@ -1,0 +1,109 @@
+openapi: 3.0.3
+info:
+  title: Reservas MELT - Carrito y checkout agrupado
+  version: 1.0.0
+  description: Contrato público para retenciones propias y una compra simulada que agrupa varios turnos.
+servers:
+  - url: /api/v1/reservas
+security:
+  - bearerAuth: []
+paths:
+  /carrito:
+    get:
+      summary: Consulta el carrito activo del cliente autenticado
+      responses:
+        '200':
+          description: Retenciones activas propias y totales calculados por Reservas
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, resumen]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Hold' }
+                  resumen: { $ref: '#/components/schemas/Summary' }
+        '401': { description: Sesión ausente o inválida }
+        '403': { description: El rol no tiene acceso al carrito }
+  /carrito/bloqueos:
+    post:
+      summary: Retiene un horario por diez minutos y lo agrega al carrito
+      description: El frontend envía diferirPago=true. No inicia pagos.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profesionalId, tratamientoId, inicio]
+              properties:
+                profesionalId: { type: string }
+                tratamientoId: { type: string }
+                inicio: { type: string, format: date-time }
+                beneficioCanjeId: { type: string }
+                diferirPago: { type: boolean, enum: [true] }
+      responses:
+        '201': { description: Retención agregada }
+        '409': { description: Horario ocupado, incompatible o fuera de agenda }
+  /carrito/bloqueos/{id}:
+    delete:
+      summary: Quita un elemento propio y libera solo sus minutos
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Elemento liberado }
+        '404': { description: Elemento propio no encontrado }
+        '409': { description: El elemento participa en un checkout en curso }
+  /carrito/checkout:
+    post:
+      summary: Simula una compra única y confirma todos los turnos del carrito
+      description: El cliente no envía precios ni resultado de pago. Repetir la misma clave recupera el checkout sin duplicar pagos o reservas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idempotencyKey]
+              properties:
+                idempotencyKey: { type: string, minLength: 8, maxLength: 80 }
+      responses:
+        '201': { description: Todos los turnos quedaron confirmados }
+        '200': { description: Resultado recuperado o checkout rechazado }
+        '400': { description: Carrito vacío o clave inválida }
+        '409': { description: Un horario venció o cambió; no hubo confirmación parcial }
+        '503': { description: Pagos no está disponible; se conserva el carrito }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Hold:
+      type: object
+      required: [id, tratamientoId, profesionalId, inicio, fin, precio, precioFinal, sena, expiraEn]
+      properties:
+        id: { type: string }
+        tratamientoId: { type: string }
+        profesionalId: { type: string }
+        inicio: { type: string, format: date-time }
+        fin: { type: string, format: date-time }
+        precio: { type: number }
+        descuentoBeneficio: { type: number }
+        precioFinal: { type: number }
+        sena: { type: number }
+        expiraEn: { type: string, format: date-time }
+    Summary:
+      type: object
+      required: [subtotal, descuento, total, sena, restante]
+      properties:
+        subtotal: { type: number }
+        descuento: { type: number }
+        total: { type: number }
+        sena: { type: number, description: Importe total de la seña del 30 por ciento }
+        restante: { type: number }

@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"math"
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 	_ "time/tzdata"
@@ -26,12 +29,18 @@ type identidad struct {
 }
 
 type agendaSemanal struct {
-	ID            string `bson:"_id" json:"id"`
-	ProfesionalID string `bson:"profesionalId" json:"profesionalId"`
-	DiaSemana     int    `bson:"diaSemana" json:"diaSemana"`
-	HoraInicio    string `bson:"horaInicio" json:"horaInicio"`
-	HoraFin       string `bson:"horaFin" json:"horaFin"`
-	Activo        bool   `bson:"activo" json:"activo"`
+	ID            string         `bson:"_id" json:"id"`
+	ProfesionalID string         `bson:"profesionalId" json:"profesionalId"`
+	DiaSemana     int            `bson:"diaSemana" json:"diaSemana"`
+	HoraInicio    string         `bson:"horaInicio" json:"horaInicio"`
+	HoraFin       string         `bson:"horaFin" json:"horaFin"`
+	Bloques       []bloqueAgenda `bson:"bloques,omitempty" json:"bloques"`
+	Activo        bool           `bson:"activo" json:"activo"`
+}
+
+type bloqueAgenda struct {
+	Inicio string `bson:"inicio" json:"inicio"`
+	Fin    string `bson:"fin" json:"fin"`
 }
 
 type turno struct {
@@ -39,6 +48,8 @@ type turno struct {
 	ClienteID               string     `bson:"clienteId" json:"clienteId"`
 	ProfesionalID           string     `bson:"profesionalId" json:"profesionalId"`
 	TratamientoID           string     `bson:"tratamientoId" json:"tratamientoId"`
+	CategoriaID             string     `bson:"categoriaId,omitempty" json:"categoriaId,omitempty"`
+	ClienteNombre           string     `bson:"-" json:"clienteNombre,omitempty"`
 	Inicio                  time.Time  `bson:"inicio" json:"inicio"`
 	Fin                     time.Time  `bson:"fin" json:"fin"`
 	Estado                  string     `bson:"estado" json:"estado"`
@@ -51,6 +62,8 @@ type turno struct {
 	EstadoDevolucion        string     `bson:"estadoDevolucion,omitempty" json:"estadoDevolucion,omitempty"`
 	TratamientoRealizadoEn  *time.Time `bson:"tratamientoRealizadoEn,omitempty" json:"tratamientoRealizadoEn,omitempty"`
 	TratamientoRealizadoPor string     `bson:"tratamientoRealizadoPor,omitempty" json:"tratamientoRealizadoPor,omitempty"`
+	NoAsistioEn             *time.Time `bson:"noAsistioEn,omitempty" json:"noAsistioEn,omitempty"`
+	NoAsistioPor            string     `bson:"noAsistioPor,omitempty" json:"noAsistioPor,omitempty"`
 	BeneficioCanjeID        string     `bson:"beneficioCanjeId,omitempty" json:"beneficioCanjeId,omitempty"`
 	BeneficioReservaID      string     `bson:"beneficioReservaId,omitempty" json:"beneficioReservaId,omitempty"`
 	DescuentoBeneficio      float64    `bson:"descuentoBeneficio,omitempty" json:"descuentoBeneficio,omitempty"`
@@ -63,11 +76,14 @@ type servidorReservas struct {
 	turnos        *mongo.Collection
 	bloqueos      *mongo.Collection
 	carritos      *mongo.Collection
+	checkouts     *mongo.Collection
 	outbox        *mongo.Collection
 	catalogoURL   string
 	pagosURL      string
 	beneficiosURL string
 	internalKey   string
+	authURL       string
+	controlAgenda *mongo.Collection
 	rabbitURL     string
 	httpClient    *http.Client
 }
@@ -75,6 +91,7 @@ type servidorReservas struct {
 type tratamientoCatalogo struct {
 	ID               string   `json:"id"`
 	Nombre           string   `json:"nombre"`
+	CategoriaID      string   `json:"categoriaId"`
 	DuracionMinutos  int      `json:"duracionMinutos"`
 	ProfesionalesIDs []string `json:"profesionalesIds"`
 	Precio           float64  `json:"precio"`
@@ -97,6 +114,8 @@ func tratamientoCompatible(t tratamientoCatalogo, profesionalID string) bool {
 type bloqueoTurno struct {
 	ID            string     `bson:"_id,omitempty"`
 	ProfesionalID string     `bson:"profesionalId"`
+	ClienteID     string     `bson:"clienteId,omitempty"`
+	CategoriaID   string     `bson:"categoriaId,omitempty"`
 	Minuto        int64      `bson:"minuto"`
 	TurnoID       string     `bson:"turnoId"`
 	ExpiraEn      *time.Time `bson:"expiraEn,omitempty"`
@@ -122,7 +141,7 @@ func (s *servidorReservas) obtenerTratamiento(ctx context.Context, id string) (t
 	if resp.StatusCode != http.StatusOK {
 		return t, http.StatusServiceUnavailable, errors.New("Catálogo no está disponible")
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&t); err != nil || t.ID == "" || t.DuracionMinutos < 5 || t.DuracionMinutos > 480 {
+	if err := json.NewDecoder(resp.Body).Decode(&t); err != nil || t.ID == "" || t.DuracionMinutos < 5 || t.DuracionMinutos > 480 || strings.TrimSpace(t.CategoriaID) == "" {
 		return t, http.StatusServiceUnavailable, errors.New("Catálogo devolvió un tratamiento inválido")
 	}
 	return t, http.StatusOK, nil
@@ -131,7 +150,7 @@ func (s *servidorReservas) obtenerTratamiento(ctx context.Context, id string) (t
 var permisosPorOperacion = map[string]map[string]bool{
 	"reservas.consultar-disponibilidad":  {"cliente": true, "profesional": true, "recepcion": true, "administrador": true, "superadministrador": true},
 	"reservas.consultar-turnos":          {"cliente": true, "profesional": true, "recepcion": true, "administrador": true, "superadministrador": true},
-	"reservas.cancelar-turno":            {"cliente": true, "recepcion": true, "administrador": true, "superadministrador": true},
+	"reservas.cancelar-turno":            {"cliente": true, "profesional": true, "recepcion": true, "administrador": true, "superadministrador": true},
 	"reservas.crear":                     {"cliente": true},
 	"reservas.gestionar-agenda":          {"profesional": true, "recepcion": true, "administrador": true, "superadministrador": true},
 	"reservas.crear-bloqueo-carrito":     {"cliente": true},
@@ -139,6 +158,7 @@ var permisosPorOperacion = map[string]map[string]bool{
 	"reservas.liberar-bloqueo-carrito":   {"cliente": true},
 	"reservas.reintentar-devolucion":     {"cliente": true, "recepcion": true, "administrador": true, "superadministrador": true},
 	"reservas.completar-tratamiento":     {"profesional": true},
+	"reservas.registrar-ausencia":        {"profesional": true},
 }
 
 func main() {
@@ -165,8 +185,12 @@ func main() {
 	if beneficiosURL == "" {
 		beneficiosURL = "http://beneficios:8083"
 	}
+	authURL := strings.TrimRight(strings.TrimSpace(os.Getenv("AUTH_URL")), "/")
+	if authURL == "" {
+		authURL = "http://auth:8084"
+	}
 	rabbitURL := strings.TrimSpace(os.Getenv("RABBITMQ_URL"))
-	s := &servidorReservas{mongo: client, agendas: db.Collection("agendas_semanales"), turnos: db.Collection("turnos"), bloqueos: db.Collection("bloqueos_turnos"), carritos: db.Collection("carritos_bloqueos"), outbox: db.Collection("outbox_eventos"), catalogoURL: catalogoURL, pagosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("PAGOS_URL")), "/"), beneficiosURL: beneficiosURL, internalKey: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY")), rabbitURL: rabbitURL, httpClient: &http.Client{Timeout: 7 * time.Second}}
+	s := &servidorReservas{mongo: client, agendas: db.Collection("agendas_semanales"), turnos: db.Collection("turnos"), bloqueos: db.Collection("bloqueos_turnos"), carritos: db.Collection("carritos_bloqueos"), checkouts: db.Collection("checkouts"), outbox: db.Collection("outbox_eventos"), controlAgenda: db.Collection("control_agendas"), catalogoURL: catalogoURL, authURL: authURL, pagosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("PAGOS_URL")), "/"), beneficiosURL: beneficiosURL, internalKey: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY")), rabbitURL: rabbitURL, httpClient: &http.Client{Timeout: 7 * time.Second}}
 	_, err = s.agendas.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "profesionalId", Value: 1}, {Key: "diaSemana", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_agenda_profesional_dia")})
 	if err != nil {
 		log.Fatal("no se pudo crear índice de agenda")
@@ -179,6 +203,10 @@ func main() {
 	if err != nil {
 		log.Fatal("no se pudo crear índice de bloqueos de turnos")
 	}
+	_, err = s.bloqueos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "clienteId", Value: 1}, {Key: "categoriaId", Value: 1}, {Key: "minuto", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_bloqueo_cliente_categoria_minuto").SetPartialFilterExpression(bson.M{"clienteId": bson.M{"$exists": true}, "categoriaId": bson.M{"$exists": true}})})
+	if err != nil {
+		log.Fatal("no se pudo crear índice de categoría por cliente")
+	}
 	_, err = s.bloqueos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "expiraEn", Value: 1}}, Options: options.Index().SetExpireAfterSeconds(0).SetName("ttl_bloqueos_carrito")})
 	if err != nil {
 		log.Fatal("no se pudo crear índice TTL de bloqueos")
@@ -186,6 +214,10 @@ func main() {
 	_, err = s.carritos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "expiraEn", Value: 1}}, Options: options.Index().SetExpireAfterSeconds(0).SetName("ttl_carritos")})
 	if err != nil {
 		log.Fatal("no se pudo crear índice TTL de carritos")
+	}
+	_, err = s.checkouts.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "clienteId", Value: 1}, {Key: "idempotencyKey", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_checkout_cliente_idempotencia")})
+	if err != nil {
+		log.Fatal("no se pudo crear índice de idempotencia de checkout")
 	}
 	_, err = s.outbox.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "publicadoEn", Value: 1}, {Key: "creadoEn", Value: 1}}})
 	if err != nil {
@@ -205,15 +237,20 @@ func (s *servidorReservas) router() *gin.Engine {
 	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"servicio": "reservas", "estado": "ok"}) })
 	r.GET("/me", requiereIdentidad(), func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"usuario": identidadDesdeHeaders(c)}) })
 	r.PUT("/agenda", requiereIdentidad(), requierePermiso("reservas.gestionar-agenda"), s.guardarAgenda)
+	r.GET("/agenda", requiereIdentidad(), requierePermiso("reservas.gestionar-agenda"), s.consultarAgenda)
 	r.GET("/disponibilidad", requiereIdentidad(), requierePermiso("reservas.consultar-disponibilidad"), s.disponibilidad)
 	r.GET("/turnos", requiereIdentidad(), requierePermiso("reservas.consultar-turnos"), s.listarTurnos)
+	r.GET("/carrito", requiereIdentidad(), requierePermiso("reservas.crear-bloqueo-carrito"), s.listarCarrito)
+	r.POST("/carrito/checkout", requiereIdentidad(), requierePermiso("reservas.confirmar-bloqueo-carrito"), s.checkoutCarrito)
 	r.POST("/carrito/bloqueos", requiereIdentidad(), requierePermiso("reservas.crear-bloqueo-carrito"), s.crearBloqueoCarrito)
+	r.POST("/carrito/bloqueos/:id/pago", requiereIdentidad(), requierePermiso("reservas.crear-bloqueo-carrito"), s.iniciarPagoBloqueo)
 	r.POST("/carrito/bloqueos/:id/confirmar", requiereIdentidad(), requierePermiso("reservas.confirmar-bloqueo-carrito"), s.confirmarBloqueoCarrito)
 	r.DELETE("/carrito/bloqueos/:id", requiereIdentidad(), requierePermiso("reservas.liberar-bloqueo-carrito"), s.liberarBloqueoCarrito)
 	r.POST("/turnos", requiereIdentidad(), requierePermiso("reservas.crear"), s.confirmarTurnoDesdeCarrito)
 	r.DELETE("/turnos/:id", requiereIdentidad(), requierePermiso("reservas.cancelar-turno"), s.cancelarTurno)
 	r.POST("/turnos/:id/devolucion/reintentar", requiereIdentidad(), requierePermiso("reservas.reintentar-devolucion"), s.reintentarDevolucion)
 	r.POST("/turnos/:id/completar", requiereIdentidad(), requierePermiso("reservas.completar-tratamiento"), s.completarTratamiento)
+	r.POST("/turnos/:id/no-asistio", requiereIdentidad(), requierePermiso("reservas.registrar-ausencia"), s.registrarNoAsistencia)
 	return r
 }
 
@@ -282,11 +319,12 @@ func mapKeys(m map[string]bool) []string {
 }
 
 type agendaRequest struct {
-	ProfesionalID string `json:"profesionalId"`
-	DiaSemana     int    `json:"diaSemana"`
-	HoraInicio    string `json:"horaInicio"`
-	HoraFin       string `json:"horaFin"`
-	Activo        *bool  `json:"activo"`
+	ProfesionalID string         `json:"profesionalId"`
+	DiaSemana     int            `json:"diaSemana"`
+	HoraInicio    string         `json:"horaInicio"`
+	HoraFin       string         `json:"horaFin"`
+	Bloques       []bloqueAgenda `json:"bloques"`
+	Activo        *bool          `json:"activo"`
 }
 
 func parseHora(s string) (int, error) {
@@ -302,8 +340,212 @@ func agendaValida(dia int, inicio, fin string) bool {
 	}
 	a, errA := parseHora(inicio)
 	b, errB := parseHora(fin)
-	return errA == nil && errB == nil && a < b
+	return errA == nil && errB == nil && a >= 8*60 && b <= 20*60 && a < b
 }
+
+func validarBloquesAgenda(bloques []bloqueAgenda) ([]bloqueAgenda, bool) {
+	if len(bloques) > 8 {
+		return nil, false
+	}
+	ordenados := append([]bloqueAgenda(nil), bloques...)
+	sort.Slice(ordenados, func(i, j int) bool { return ordenados[i].Inicio < ordenados[j].Inicio })
+	ultimoFin := -1
+	for _, bloque := range ordenados {
+		inicio, errInicio := parseHora(bloque.Inicio)
+		fin, errFin := parseHora(bloque.Fin)
+		if errInicio != nil || errFin != nil || inicio < 8*60 || fin > 20*60 || inicio >= fin || inicio < ultimoFin {
+			return nil, false
+		}
+		ultimoFin = fin
+	}
+	return ordenados, true
+}
+
+func bloquesAgendaDe(agenda agendaSemanal) []bloqueAgenda {
+	if agenda.Bloques != nil {
+		return agenda.Bloques
+	}
+	if agenda.Activo && agendaValida(agenda.DiaSemana, agenda.HoraInicio, agenda.HoraFin) {
+		return []bloqueAgenda{{Inicio: agenda.HoraInicio, Fin: agenda.HoraFin}}
+	}
+	return []bloqueAgenda{}
+}
+
+func intervaloEnBloques(inicio, fin time.Time, bloques []bloqueAgenda, loc *time.Location) bool {
+	localInicio, localFin := inicio.In(loc), fin.In(loc)
+	if localInicio.Year() != localFin.Year() || localInicio.YearDay() != localFin.YearDay() {
+		return false
+	}
+	startMinute, endMinute := localInicio.Hour()*60+localInicio.Minute(), localFin.Hour()*60+localFin.Minute()
+	for _, bloque := range bloques {
+		from, errFrom := parseHora(bloque.Inicio)
+		to, errTo := parseHora(bloque.Fin)
+		if errFrom == nil && errTo == nil && startMinute >= from && endMinute <= to {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *servidorReservas) resolverPerfilProfesional(ctx context.Context, authUserID string) (string, int, error) {
+	if s == nil || strings.TrimSpace(s.catalogoURL) == "" || s.internalKey == "" {
+		return "", http.StatusServiceUnavailable, errors.New("Catálogo interno no configurado")
+	}
+	endpoint := strings.TrimRight(s.catalogoURL, "/") + "/internal/profesionales/por-cuenta/" + url.PathEscape(authUserID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", http.StatusServiceUnavailable, err
+	}
+	req.Header.Set("X-Melt-Internal-Key", s.internalKey)
+	client := s.httpClient
+	if client == nil {
+		client = &http.Client{Timeout: 3 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", http.StatusServiceUnavailable, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return "", http.StatusForbidden, errors.New("La cuenta profesional no tiene un perfil vinculado")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", http.StatusServiceUnavailable, errors.New("No se pudo resolver el perfil profesional")
+	}
+	var result struct {
+		ProfesionalID string `json:"profesionalId"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&result); err != nil || strings.TrimSpace(result.ProfesionalID) == "" {
+		return "", http.StatusServiceUnavailable, errors.New("Catálogo devolvió un perfil profesional inválido")
+	}
+	return result.ProfesionalID, http.StatusOK, nil
+}
+
+func (s *servidorReservas) nombreClienteInterno(ctx context.Context, userID string) string {
+	if s.authURL == "" || s.internalKey == "" {
+		return ""
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(s.authURL, "/")+"/internal/usuarios/"+url.PathEscape(userID), nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("X-Melt-Internal-Key", s.internalKey)
+	client := s.httpClient
+	if client == nil {
+		client = &http.Client{Timeout: 3 * time.Second}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return ""
+	}
+	return strings.TrimSpace(resp.Header.Get("X-Auth-User-Name"))
+}
+
+var errAgendaIncompatible = errors.New("AGENDA_INCOMPATIBLE_CON_RESERVAS")
+
+func (s *servidorReservas) agendaControl() *mongo.Collection {
+	if s.controlAgenda != nil {
+		return s.controlAgenda
+	}
+	return s.agendas.Database().Collection("control_agendas")
+}
+
+func agendaControlID(profesionalID string, dia int) string {
+	return profesionalID + "-" + strconv.Itoa(dia)
+}
+
+func (s *servidorReservas) asegurarAgendaControl(ctx context.Context, profesionalID string, dia int) error {
+	_, err := s.agendaControl().UpdateOne(ctx, bson.M{"_id": agendaControlID(profesionalID, dia)}, bson.M{"$setOnInsert": bson.M{"version": 0}}, options.UpdateOne().SetUpsert(true))
+	if mongo.IsDuplicateKeyError(err) {
+		return nil
+	}
+	return err
+}
+
+func (s *servidorReservas) agendaRespetaReservas(ctx context.Context, profesionalID string, dia int, bloques []bloqueAgenda) (bool, error) {
+	now := time.Now().UTC()
+	loc := zonaHorariaReservas()
+	turns, err := s.turnos.Find(ctx, bson.M{"profesionalId": profesionalID, "estado": "confirmado", "inicio": bson.M{"$gte": now}})
+	if err != nil {
+		return false, err
+	}
+	defer turns.Close(ctx)
+	var turnos []turno
+	if err := turns.All(ctx, &turnos); err != nil {
+		return false, err
+	}
+	for _, item := range turnos {
+		if int(item.Inicio.In(loc).Weekday()) == dia && !intervaloEnBloques(item.Inicio, item.Fin, bloques, loc) {
+			return false, nil
+		}
+	}
+	carts, err := s.carritos.Find(ctx, bson.M{"profesionalId": profesionalID, "estado": "pendiente_pago", "expiraEn": bson.M{"$gt": now}, "inicio": bson.M{"$gte": now}})
+	if err != nil {
+		return false, err
+	}
+	defer carts.Close(ctx)
+	var pendientes []bloqueoCarrito
+	if err := carts.All(ctx, &pendientes); err != nil {
+		return false, err
+	}
+	for _, item := range pendientes {
+		if int(item.Inicio.In(loc).Weekday()) == dia && !intervaloEnBloques(item.Inicio, item.Fin, bloques, loc) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (s *servidorReservas) consultarAgenda(c *gin.Context) {
+	u := c.MustGet("identidad").(identidad)
+	profesionalID := strings.TrimSpace(c.Query("profesionalId"))
+	if tieneRol(u, "profesional") && !tieneRol(u, "recepcion", "administrador", "superadministrador") {
+		resolvedID, status, err := s.resolverPerfilProfesional(c.Request.Context(), u.ID)
+		if err != nil {
+			c.JSON(status, gin.H{"error": gin.H{"code": "PERFIL_PROFESIONAL_NO_DISPONIBLE", "message": err.Error()}})
+			return
+		}
+		profesionalID = resolvedID
+	}
+	if profesionalID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "PROFESIONAL_REQUERIDO", "message": "Indicá un perfil profesional."}})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	cur, err := s.agendas.Find(ctx, bson.M{"profesionalId": profesionalID}, options.Find().SetSort(bson.D{{Key: "diaSemana", Value: 1}}))
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo consultar la agenda"})
+		return
+	}
+	defer cur.Close(ctx)
+	var guardadas []agendaSemanal
+	if err := cur.All(ctx, &guardadas); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo leer la agenda"})
+		return
+	}
+	porDia := make(map[int]agendaSemanal, len(guardadas))
+	for _, item := range guardadas {
+		porDia[item.DiaSemana] = item
+	}
+	dias := make([]agendaSemanal, 0, 7)
+	for dia := 0; dia < 7; dia++ {
+		item, ok := porDia[dia]
+		if !ok {
+			item = agendaSemanal{ID: agendaControlID(profesionalID, dia), ProfesionalID: profesionalID, DiaSemana: dia, Bloques: []bloqueAgenda{}, Activo: false}
+		}
+		if item.Bloques == nil {
+			item.Bloques = bloquesAgendaDe(item)
+		}
+		dias = append(dias, item)
+	}
+	c.JSON(http.StatusOK, gin.H{"profesionalId": profesionalID, "dias": dias})
+}
+
 func (s *servidorReservas) guardarAgenda(c *gin.Context) {
 	u := c.MustGet("identidad").(identidad)
 	var req agendaRequest
@@ -313,21 +555,65 @@ func (s *servidorReservas) guardarAgenda(c *gin.Context) {
 	}
 	profesionalID := strings.TrimSpace(req.ProfesionalID)
 	if tieneRol(u, "profesional") && !tieneRol(u, "recepcion", "administrador", "superadministrador") {
-		profesionalID = u.ID
+		resolvedID, status, err := s.resolverPerfilProfesional(c.Request.Context(), u.ID)
+		if err != nil {
+			c.JSON(status, gin.H{"error": gin.H{"code": "PERFIL_PROFESIONAL_NO_DISPONIBLE", "message": err.Error()}})
+			return
+		}
+		profesionalID = resolvedID
 	}
-	if profesionalID == "" || !agendaValida(req.DiaSemana, req.HoraInicio, req.HoraFin) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "Indicá profesional, día de 0 (domingo) a 6 (sábado) y un rango horario válido."}})
+	if req.Bloques == nil {
+		if req.Activo != nil && !*req.Activo {
+			req.Bloques = []bloqueAgenda{}
+		} else if req.HoraInicio != "" || req.HoraFin != "" {
+			req.Bloques = []bloqueAgenda{{Inicio: req.HoraInicio, Fin: req.HoraFin}}
+		} else {
+			req.Bloques = []bloqueAgenda{}
+		}
+	}
+	bloques, valid := validarBloquesAgenda(req.Bloques)
+	if profesionalID == "" || req.DiaSemana < 0 || req.DiaSemana > 6 || !valid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "Usá bloques no superpuestos entre las 08:00 y las 20:00."}})
 		return
 	}
-	activo := true
-	if req.Activo != nil {
-		activo = *req.Activo
+	doc := agendaSemanal{ID: agendaControlID(profesionalID, req.DiaSemana), ProfesionalID: profesionalID, DiaSemana: req.DiaSemana, Bloques: bloques, Activo: len(bloques) > 0}
+	if len(bloques) > 0 {
+		doc.HoraInicio, doc.HoraFin = bloques[0].Inicio, bloques[len(bloques)-1].Fin
 	}
-	doc := agendaSemanal{ID: profesionalID + "-" + time.Weekday(req.DiaSemana).String(), ProfesionalID: profesionalID, DiaSemana: req.DiaSemana, HoraInicio: req.HoraInicio, HoraFin: req.HoraFin, Activo: activo}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
-	_, err := s.agendas.UpdateOne(ctx, bson.D{{Key: "profesionalId", Value: profesionalID}, {Key: "diaSemana", Value: req.DiaSemana}}, bson.D{{Key: "$set", Value: doc}}, options.UpdateOne().SetUpsert(true))
+	if err := s.asegurarAgendaControl(ctx, profesionalID, req.DiaSemana); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo bloquear la modificación de agenda"})
+		return
+	}
+	session, err := s.mongo.StartSession()
 	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo guardar la agenda"})
+		return
+	}
+	defer session.EndSession(ctx)
+	_, err = session.WithTransaction(ctx, func(tx context.Context) (any, error) {
+		if _, e := s.agendaControl().UpdateOne(tx, bson.M{"_id": agendaControlID(profesionalID, req.DiaSemana)}, bson.M{"$inc": bson.M{"version": 1}}); e != nil {
+			return nil, e
+		}
+		compatible, e := s.agendaRespetaReservas(tx, profesionalID, req.DiaSemana, bloques)
+		if e != nil {
+			return nil, e
+		}
+		if !compatible {
+			return nil, errAgendaIncompatible
+		}
+		_, e = s.agendas.UpdateOne(tx, bson.M{"profesionalId": profesionalID, "diaSemana": req.DiaSemana}, bson.M{
+			"$set":         bson.M{"profesionalId": doc.ProfesionalID, "diaSemana": doc.DiaSemana, "horaInicio": doc.HoraInicio, "horaFin": doc.HoraFin, "bloques": doc.Bloques, "activo": doc.Activo},
+			"$setOnInsert": bson.M{"_id": doc.ID},
+		}, options.UpdateOne().SetUpsert(true))
+		return doc, e
+	})
+	if err != nil {
+		if errors.Is(err, errAgendaIncompatible) {
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": err.Error(), "message": "La nueva disponibilidad dejaría fuera un turno confirmado o un horario retenido."}})
+			return
+		}
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo guardar la agenda"})
 		return
 	}
@@ -373,19 +659,35 @@ func (s *servidorReservas) disponibilidad(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "La agenda del profesional contiene un rango horario inválido."}})
 		return
 	}
-	startMin, _ := parseHora(agenda.HoraInicio)
-	endMin, _ := parseHora(agenda.HoraFin)
+	if !agenda.Activo {
+		c.JSON(http.StatusOK, gin.H{"profesionalId": prof, "fecha": c.Query("fecha"), "horarios": []string{}})
+		return
+	}
+	bloques, agendaOK := validarBloquesAgenda(bloquesAgendaDe(agenda))
+	if !agendaOK {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "La agenda del profesional contiene bloques inválidos."}})
+		return
+	}
 	var slots []string
-	for m := primerIntervaloDe15Minutos(startMin); m+dur <= endMin; m += 15 {
-		start := base.Add(time.Duration(m) * time.Minute)
-		end := start.Add(time.Duration(dur) * time.Minute)
-		ocupado, busyErr := s.horarioOcupado(ctx, prof, start, end)
-		if busyErr != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo consultar disponibilidad"})
-			return
-		}
-		if !ocupado && start.After(time.Now()) {
-			slots = append(slots, start.Format("15:04"))
+	u := c.MustGet("identidad").(identidad)
+	clienteID := ""
+	if tieneRol(u, "cliente") {
+		clienteID = u.ID
+	}
+	for _, bloque := range bloques {
+		startMin, _ := parseHora(bloque.Inicio)
+		endMin, _ := parseHora(bloque.Fin)
+		for m := primerIntervaloDe15Minutos(startMin); m+dur <= endMin; m += 15 {
+			start := base.Add(time.Duration(m) * time.Minute)
+			end := start.Add(time.Duration(dur) * time.Minute)
+			ocupado, busyErr := s.horarioOcupado(ctx, prof, clienteID, tratamiento.CategoriaID, start, end)
+			if busyErr != nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo consultar disponibilidad"})
+				return
+			}
+			if !ocupado && start.After(time.Now()) {
+				slots = append(slots, start.Format("15:04"))
+			}
 		}
 	}
 	if slots == nil {
@@ -409,7 +711,7 @@ func zonaHorariaReservas() *time.Location {
 	return loc
 }
 
-func (s *servidorReservas) horarioOcupado(ctx context.Context, profesionalID string, inicio, fin time.Time) (bool, error) {
+func (s *servidorReservas) horarioOcupado(ctx context.Context, profesionalID, clienteID, categoriaID string, inicio, fin time.Time) (bool, error) {
 	turnos, err := s.turnos.CountDocuments(ctx, bson.D{{Key: "profesionalId", Value: profesionalID}, {Key: "estado", Value: "confirmado"}, {Key: "inicio", Value: bson.D{{Key: "$lt", Value: fin}}}, {Key: "fin", Value: bson.D{{Key: "$gt", Value: inicio}}}})
 	if err != nil {
 		return false, err
@@ -428,7 +730,71 @@ func (s *servidorReservas) horarioOcupado(ctx context.Context, profesionalID str
 		}},
 	}
 	reservasTemporales, err := s.bloqueos.CountDocuments(ctx, filter)
-	return reservasTemporales > 0, err
+	if err != nil || reservasTemporales > 0 {
+		return reservasTemporales > 0, err
+	}
+	if clienteID != "" && categoriaID != "" {
+		conflicto, err := s.categoriaOcupadaCliente(ctx, clienteID, categoriaID, inicio, fin)
+		return conflicto, err
+	}
+	return false, nil
+}
+
+func (s *servidorReservas) categoriaOcupadaCliente(ctx context.Context, clienteID, categoriaID string, inicio, fin time.Time) (bool, error) {
+	minutoInicio, minutoFin := inicio.UTC().Unix()/60, fin.UTC().Unix()/60
+	filter := bson.M{"clienteId": clienteID, "categoriaId": categoriaID, "minuto": bson.M{"$gte": minutoInicio, "$lt": minutoFin}, "$or": bson.A{bson.M{"expiraEn": bson.M{"$exists": false}}, bson.M{"expiraEn": bson.M{"$gt": time.Now().UTC()}}}}
+	count, err := s.bloqueos.CountDocuments(ctx, filter)
+	if err != nil || count > 0 {
+		return count > 0, err
+	}
+	turns, err := s.turnos.Find(ctx, bson.M{"clienteId": clienteID, "estado": "confirmado", "inicio": bson.M{"$lt": fin}, "fin": bson.M{"$gt": inicio}})
+	if err != nil {
+		return false, err
+	}
+	defer turns.Close(ctx)
+	for turns.Next(ctx) {
+		var item turno
+		if err := turns.Decode(&item); err != nil {
+			return false, err
+		}
+		id := item.CategoriaID
+		if id == "" {
+			t, _, e := s.obtenerTratamiento(ctx, item.TratamientoID)
+			if e != nil {
+				return false, e
+			}
+			id = t.CategoriaID
+		}
+		if id == categoriaID {
+			return true, nil
+		}
+	}
+	if err := turns.Err(); err != nil {
+		return false, err
+	}
+	carts, err := s.carritos.Find(ctx, bson.M{"clienteId": clienteID, "estado": "pendiente_pago", "expiraEn": bson.M{"$gt": time.Now().UTC()}, "inicio": bson.M{"$lt": fin}, "fin": bson.M{"$gt": inicio}})
+	if err != nil {
+		return false, err
+	}
+	defer carts.Close(ctx)
+	for carts.Next(ctx) {
+		var item bloqueoCarrito
+		if err := carts.Decode(&item); err != nil {
+			return false, err
+		}
+		id := item.CategoriaID
+		if id == "" {
+			t, _, e := s.obtenerTratamiento(ctx, item.TratamientoID)
+			if e != nil {
+				return false, e
+			}
+			id = t.CategoriaID
+		}
+		if id == categoriaID {
+			return true, nil
+		}
+	}
+	return false, carts.Err()
 }
 
 func (s *servidorReservas) crearTurno(c *gin.Context) {
@@ -493,11 +859,11 @@ func (s *servidorReservas) crearTurno(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo verificar el horario"})
 		return
 	}
-	doc := turno{ID: bson.NewObjectID().Hex(), ClienteID: u.ID, ProfesionalID: req.ProfesionalID, TratamientoID: tratamiento.ID, Inicio: start.UTC(), Fin: end.UTC(), Estado: "confirmado", CreadoEn: time.Now().UTC()}
+	doc := turno{ID: bson.NewObjectID().Hex(), ClienteID: u.ID, ProfesionalID: req.ProfesionalID, TratamientoID: tratamiento.ID, CategoriaID: tratamiento.CategoriaID, Inicio: start.UTC(), Fin: end.UTC(), Estado: "confirmado", CreadoEn: time.Now().UTC()}
 	// El índice único en profesionalId + minuto coordina todas las réplicas.
 	bloqueos := make([]interface{}, 0, duracionMinutos)
 	for minuto := start.UTC().Unix() / 60; minuto < end.UTC().Unix()/60; minuto++ {
-		bloqueos = append(bloqueos, bloqueoTurno{ProfesionalID: req.ProfesionalID, Minuto: minuto, TurnoID: doc.ID})
+		bloqueos = append(bloqueos, bloqueoTurno{ProfesionalID: req.ProfesionalID, ClienteID: u.ID, CategoriaID: tratamiento.CategoriaID, Minuto: minuto, TurnoID: doc.ID})
 	}
 	if len(bloqueos) > 0 {
 		if _, err := s.bloqueos.InsertMany(ctx, bloqueos); err != nil {
@@ -526,7 +892,12 @@ func (s *servidorReservas) listarTurnos(c *gin.Context) {
 	} else if tieneRol(u, "cliente") {
 		filter = append(filter, bson.E{Key: "clienteId", Value: u.ID})
 	} else if tieneRol(u, "profesional") {
-		filter = append(filter, bson.E{Key: "profesionalId", Value: u.ID})
+		profesionalID, status, err := s.resolverPerfilProfesional(c.Request.Context(), u.ID)
+		if err != nil {
+			c.JSON(status, gin.H{"error": gin.H{"code": "PERFIL_PROFESIONAL_NO_DISPONIBLE", "message": err.Error()}})
+			return
+		}
+		filter = append(filter, bson.E{Key: "profesionalId", Value: profesionalID})
 	} else {
 		c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "PERMISOS_INSUFICIENTES", "message": "No tenés permisos para consultar turnos."}})
 		return
@@ -544,6 +915,11 @@ func (s *servidorReservas) listarTurnos(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudieron leer los turnos"})
 		return
 	}
+	if tieneRol(u, "profesional") && !tieneRol(u, "recepcion", "administrador", "superadministrador") {
+		for i := range out {
+			out[i].ClienteNombre = s.nombreClienteInterno(ctx, out[i].ClienteID)
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"turnos": out})
 }
 
@@ -558,6 +934,7 @@ func (s *servidorReservas) devolverSena(ctx context.Context, pagoID string, impo
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", idempotencyKey)
+	req.Header.Set("X-Melt-Internal-Key", s.internalKey)
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return err
@@ -585,7 +962,16 @@ func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 	}
 	own := t.ClienteID == u.ID
 	staff := tieneRol(u, "recepcion", "administrador", "superadministrador")
-	if !own && !staff {
+	profesionalPropio := false
+	if tieneRol(u, "profesional") {
+		profesionalID, status, err := s.resolverPerfilProfesional(ctx, u.ID)
+		if err != nil {
+			c.JSON(status, gin.H{"error": gin.H{"code": "PERFIL_PROFESIONAL_NO_DISPONIBLE", "message": err.Error()}})
+			return
+		}
+		profesionalPropio = t.ProfesionalID == profesionalID
+	}
+	if !own && !staff && !profesionalPropio {
 		c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "PERMISOS_INSUFICIENTES", "message": "Solo podés cancelar tus propios turnos."}})
 		return
 	}
@@ -614,7 +1000,6 @@ func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "CANCELACION_NO_REGISTRADA", "message": "No se pudo guardar la cancelación de forma segura."}})
 		return
 	}
-	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key: "turnoId", Value: id}})
 	if devolucion > 0 {
 		if err := s.devolverSena(ctx, t.PagoID, devolucion, "refund-turno-"+id); err != nil {
 			c.JSON(http.StatusAccepted, gin.H{"turnoId": id, "estado": "cancelado", "devolucion": gin.H{"importe": devolucion, "moneda": "ARS", "estado": "pendiente", "mensaje": "La cancelación quedó registrada; la devolución requiere reintento operativo."}})
@@ -631,6 +1016,7 @@ type bloqueoCarrito struct {
 	ClienteID          string    `bson:"clienteId" json:"clienteId"`
 	ProfesionalID      string    `bson:"profesionalId" json:"profesionalId"`
 	TratamientoID      string    `bson:"tratamientoId" json:"tratamientoId"`
+	CategoriaID        string    `bson:"categoriaId,omitempty" json:"categoriaId,omitempty"`
 	Inicio             time.Time `bson:"inicio" json:"inicio"`
 	Fin                time.Time `bson:"fin" json:"fin"`
 	Precio             float64   `bson:"precio" json:"precio"`
@@ -643,8 +1029,10 @@ type bloqueoCarrito struct {
 	ExpiraEn           time.Time `bson:"expiraEn" json:"expiraEn"`
 	TurnoID            string    `bson:"turnoId,omitempty" json:"turnoId,omitempty"`
 	PagoID             string    `bson:"pagoId,omitempty" json:"pagoId,omitempty"`
+	EstadoPago         string    `bson:"estadoPago,omitempty" json:"estadoPago,omitempty"`
 	PreferenciaID      string    `bson:"preferenciaId,omitempty" json:"preferenciaId,omitempty"`
 	URLPago            string    `bson:"urlPago,omitempty" json:"urlPago,omitempty"`
+	CheckoutID         string    `bson:"checkoutId,omitempty" json:"checkoutId,omitempty"`
 }
 
 type solicitudCarrito struct {
@@ -652,24 +1040,7 @@ type solicitudCarrito struct {
 	TratamientoID    string `json:"tratamientoId" binding:"required"`
 	Inicio           string `json:"inicio" binding:"required"`
 	BeneficioCanjeID string `json:"beneficioCanjeId,omitempty"`
-}
-
-type confirmarCarritoRequest struct {
-	PagoID string `json:"pagoId" binding:"required"`
-}
-
-type verificacionPagoRequest struct {
-	PagoID     string  `json:"pagoId"`
-	Importe    float64 `json:"importe"`
-	Moneda     string  `json:"moneda"`
-	Referencia string  `json:"referencia"`
-}
-
-type verificacionPagoResponse struct {
-	Aprobado bool    `json:"aprobado"`
-	PagoID   string  `json:"pagoId"`
-	Importe  float64 `json:"importe"`
-	Moneda   string  `json:"moneda"`
+	DiferirPago      bool   `json:"diferirPago,omitempty"`
 }
 
 func importeSena(precio float64) float64 {
@@ -683,64 +1054,6 @@ func importeDevolucion(sena float64, inicio, ahora time.Time) float64 {
 	return 0
 }
 
-func (s *servidorReservas) verificarPago(ctx context.Context, pagoID string, importe float64, moneda, referencia string) error {
-	if s.pagosURL == "" {
-		return errors.New("el proveedor de pagos no está configurado; la reserva no puede confirmarse")
-	}
-	payload, _ := json.Marshal(verificacionPagoRequest{PagoID: pagoID, Importe: importe, Moneda: moneda, Referencia: referencia})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.pagosURL+"/payments/verify", strings.NewReader(string(payload)))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Idempotency-Key", referencia)
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return errors.New("el proveedor de pagos no pudo verificar la seña")
-	}
-	var result verificacionPagoResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return err
-	}
-	if !result.Aprobado || result.PagoID != pagoID || math.Abs(result.Importe-importe) > 0.009 || result.Moneda != moneda {
-		return errors.New("el pago no está aprobado por el importe y moneda exactos de la seña")
-	}
-	return nil
-}
-
-func (s *servidorReservas) crearPreferenciaPago(ctx context.Context, importe float64, moneda, referencia, titulo string) (string, string, error) {
-	if s.pagosURL == "" {
-		return "", "", errors.New("el proveedor de pagos no está configurado")
-	}
-	payload, _ := json.Marshal(map[string]any{"importe": importe, "moneda": moneda, "referencia": referencia, "titulo": titulo})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.pagosURL+"/payments/preferences", strings.NewReader(string(payload)))
-	if err != nil {
-		return "", "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Idempotency-Key", "cart-"+referencia)
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return "", "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		return "", "", errors.New("el proveedor no pudo crear el enlace de pago")
-	}
-	var result struct {
-		PreferenceID string `json:"preferenciaId"`
-		URL          string `json:"urlPago"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || result.PreferenceID == "" || result.URL == "" {
-		return "", "", errors.New("el proveedor devolvió un enlace de pago inválido")
-	}
-	return result.PreferenceID, result.URL, nil
-}
-
 func (s *servidorReservas) descartarBloqueoPendiente(id, clienteID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -750,6 +1063,40 @@ func (s *servidorReservas) descartarBloqueoPendiente(id, clienteID string) {
 	}
 	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key: "turnoId", Value: id}})
 	_, _ = s.carritos.DeleteOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "clienteId", Value: clienteID}, {Key: "estado", Value: "pendiente_pago"}})
+}
+
+func (s *servidorReservas) listarCarrito(c *gin.Context) {
+	u := c.MustGet("identidad").(identidad)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	cur, err := s.carritos.Find(ctx, bson.M{"clienteId": u.ID, "estado": "pendiente_pago", "expiraEn": bson.M{"$gt": time.Now().UTC()}}, options.Find().SetSort(bson.D{{Key: "creadoEn", Value: 1}, {Key: "inicio", Value: 1}}))
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo consultar el carrito"})
+		return
+	}
+	defer cur.Close(ctx)
+	items := []bloqueoCarrito{}
+	if err := cur.All(ctx, &items); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo leer el carrito"})
+		return
+	}
+	resumen := gin.H{"subtotal": float64(0), "descuento": float64(0), "total": float64(0), "sena": float64(0), "restante": float64(0)}
+	var subtotal, descuento, total, sena float64
+	for _, item := range items {
+		subtotal += item.Precio
+		descuento += item.DescuentoBeneficio
+		total += item.PrecioFinal
+		sena += item.Sena
+	}
+	if total == 0 {
+		total = subtotal - descuento
+	}
+	resumen["subtotal"], resumen["descuento"], resumen["total"], resumen["sena"], resumen["restante"] = subtotal, descuento, total, sena, math.Max(0, total-sena)
+	c.JSON(http.StatusOK, gin.H{"items": items, "resumen": resumen})
+}
+
+func (s *servidorReservas) iniciarPagoBloqueo(c *gin.Context) {
+	c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CHECKOUT_UNICO_REQUERIDO", "message": "Los pagos por elemento ya no están disponibles. Confirmá el carrito completo desde POST /carrito/checkout."}})
 }
 
 func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
@@ -772,6 +1119,10 @@ func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": gin.H{"code": "PROFESIONAL_NO_APTO", "message": "El profesional no está habilitado para este tratamiento."}})
 		return
 	}
+	if err := s.profesionalCompatible(ctx, req.ProfesionalID, t.ID); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": gin.H{"code": "PROFESIONAL_NO_APTO", "message": "El perfil profesional está inactivo o ya no está asociado al tratamiento."}})
+		return
+	}
 	if t.Precio < 0 || (t.Moneda != "" && t.Moneda != "ARS") {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": gin.H{"code": "PRECIO_INVALIDO", "message": "El tratamiento no tiene un precio válido en ARS."}})
 		return
@@ -788,13 +1139,12 @@ func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "FUERA_DE_AGENDA", "message": "El profesional no atiende ese día."}})
 		return
 	}
-	if !agendaValida(agenda.DiaSemana, agenda.HoraInicio, agenda.HoraFin) {
+	bloquesAgenda, blocksValid := validarBloquesAgenda(bloquesAgendaDe(agenda))
+	if !agenda.Activo || !blocksValid {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "La agenda del profesional contiene un rango horario inválido."}})
 		return
 	}
-	from, _ := parseHora(agenda.HoraInicio)
-	to, _ := parseHora(agenda.HoraFin)
-	if localStart.Hour()*60+localStart.Minute() < from || localStart.Hour()*60+localStart.Minute()+t.DuracionMinutos > to {
+	if !intervaloEnBloques(start, end, bloquesAgenda, zonaHorariaReservas()) {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "FUERA_DE_AGENDA", "message": "El horario queda fuera de la agenda del profesional."}})
 		return
 	}
@@ -810,9 +1160,16 @@ func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo verificar el horario"})
 		return
 	}
+	if categoriaBusy, categoryErr := s.categoriaOcupadaCliente(ctx, u.ID, t.CategoriaID, start, end); categoryErr != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "DISPONIBILIDAD_NO_DISPONIBLE", "message": "No se pudo verificar si ya tenés un tratamiento de esta categoría en ese horario."}})
+		return
+	} else if categoriaBusy {
+		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CATEGORIA_SUPERPUESTA", "message": "Ya tenés un tratamiento de esta categoría en un horario superpuesto."}})
+		return
+	}
 	id := bson.NewObjectID().Hex()
 	expira := now.Add(10 * time.Minute)
-	doc := bloqueoCarrito{ID: id, ClienteID: u.ID, ProfesionalID: req.ProfesionalID, TratamientoID: t.ID, Inicio: start.UTC(), Fin: end.UTC(), Precio: t.Precio, PrecioFinal: t.Precio, Moneda: "ARS", Sena: importeSena(t.Precio), Estado: "pendiente_pago", ExpiraEn: expira}
+	doc := bloqueoCarrito{ID: id, ClienteID: u.ID, ProfesionalID: req.ProfesionalID, TratamientoID: t.ID, CategoriaID: t.CategoriaID, Inicio: start.UTC(), Fin: end.UTC(), Precio: t.Precio, PrecioFinal: t.Precio, Moneda: "ARS", Sena: importeSena(t.Precio), Estado: "pendiente_pago", ExpiraEn: expira}
 	if req.BeneficioCanjeID != "" {
 		canje, reserveErr := s.reservarBeneficio(ctx, strings.TrimSpace(req.BeneficioCanjeID), u.ID, id, t.ID, t.Precio)
 		if reserveErr != nil {
@@ -826,39 +1183,54 @@ func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
 	}
 	bloqueos := make([]interface{}, 0, t.DuracionMinutos)
 	for minuto := start.UTC().Unix() / 60; minuto < end.UTC().Unix()/60; minuto++ {
-		bloqueos = append(bloqueos, bloqueoTurno{ProfesionalID: req.ProfesionalID, Minuto: minuto, TurnoID: id, ExpiraEn: &expira})
+		bloqueos = append(bloqueos, bloqueoTurno{ProfesionalID: req.ProfesionalID, ClienteID: u.ID, CategoriaID: t.CategoriaID, Minuto: minuto, TurnoID: id, ExpiraEn: &expira})
 	}
-	if _, err := s.bloqueos.InsertMany(ctx, bloqueos); err != nil {
-		_, _ = s.bloqueos.DeleteMany(context.Background(), bson.D{{Key: "turnoId", Value: id}})
+	if err := s.asegurarAgendaControl(ctx, req.ProfesionalID, int(localStart.Weekday())); err != nil {
+		s.liberarBeneficio(context.Background(), doc.BeneficioCanjeID, u.ID, id)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo proteger la agenda durante la reserva"})
+		return
+	}
+	session, sessionErr := s.mongo.StartSession()
+	if sessionErr != nil {
+		s.liberarBeneficio(context.Background(), doc.BeneficioCanjeID, u.ID, id)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo bloquear el horario"})
+		return
+	}
+	defer session.EndSession(ctx)
+	_, err = session.WithTransaction(ctx, func(tx context.Context) (any, error) {
+		if _, e := s.agendaControl().UpdateOne(tx, bson.M{"_id": agendaControlID(req.ProfesionalID, int(localStart.Weekday()))}, bson.M{"$inc": bson.M{"version": 1}}); e != nil {
+			return nil, e
+		}
+		var agendaActual agendaSemanal
+		if e := s.agendas.FindOne(tx, bson.M{"profesionalId": req.ProfesionalID, "diaSemana": int(localStart.Weekday()), "activo": true}).Decode(&agendaActual); e != nil {
+			return nil, errAgendaIncompatible
+		}
+		bloquesActuales, ok := validarBloquesAgenda(bloquesAgendaDe(agendaActual))
+		if !ok || !intervaloEnBloques(start, end, bloquesActuales, zonaHorariaReservas()) {
+			return nil, errAgendaIncompatible
+		}
+		if _, e := s.bloqueos.InsertMany(tx, bloqueos); e != nil {
+			return nil, e
+		}
+		if _, e := s.carritos.InsertOne(tx, doc); e != nil {
+			return nil, e
+		}
+		return doc, nil
+	})
+	if err != nil {
 		s.liberarBeneficio(context.Background(), doc.BeneficioCanjeID, u.ID, id)
 		if mongo.IsDuplicateKeyError(err) {
 			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "HORARIO_OCUPADO", "message": "Ese horario ya está reservado o bloqueado por otro carrito."}})
 			return
 		}
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo bloquear el horario"})
+		if errors.Is(err, errAgendaIncompatible) {
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "FUERA_DE_AGENDA", "message": "La disponibilidad cambió. Volvé a consultar los horarios."}})
+			return
+		}
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo bloquear el horario de forma segura"})
 		return
 	}
-	if _, err := s.carritos.InsertOne(ctx, doc); err != nil {
-		_, _ = s.bloqueos.DeleteMany(context.Background(), bson.D{{Key: "turnoId", Value: id}})
-		s.liberarBeneficio(context.Background(), doc.BeneficioCanjeID, u.ID, id)
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo guardar el carrito"})
-		return
-	}
-	preferenceID, checkoutURL, err := s.crearPreferenciaPago(ctx, doc.Sena, doc.Moneda, doc.ID, "Seña MELT · "+t.Nombre)
-	if err != nil {
-		s.descartarBloqueoPendiente(id, u.ID)
-		s.liberarBeneficio(context.Background(), doc.BeneficioCanjeID, u.ID, id)
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "PAGO_NO_DISPONIBLE", "message": "No pudimos iniciar el pago. No se retuvo el horario; intentá nuevamente más tarde."}})
-		return
-	}
-	doc.PreferenciaID, doc.URLPago = preferenceID, checkoutURL
-	if _, err := s.carritos.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "clienteId", Value: u.ID}, {Key: "estado", Value: "pendiente_pago"}}, bson.D{{Key: "$set", Value: bson.D{{Key: "preferenciaId", Value: preferenceID}, {Key: "urlPago", Value: checkoutURL}}}}); err != nil {
-		s.descartarBloqueoPendiente(id, u.ID)
-		s.liberarBeneficio(context.Background(), doc.BeneficioCanjeID, u.ID, id)
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "PAGO_NO_DISPONIBLE", "message": "No pudimos guardar el enlace de pago. No se retuvo el horario; intentá nuevamente."}})
-		return
-	}
-	c.JSON(http.StatusCreated, gin.H{"bloqueo": doc, "seña": gin.H{"porcentaje": 30, "importe": doc.Sena, "moneda": doc.Moneda}, "mensaje": "El horario queda bloqueado por 10 minutos. Aboná la seña desde el enlace seguro de Mercado Pago.", "urlPago": checkoutURL})
+	c.JSON(http.StatusCreated, gin.H{"bloqueo": doc, "seña": gin.H{"porcentaje": 30, "importe": doc.Sena, "moneda": doc.Moneda}, "mensaje": "Tratamiento agregado al carrito. El horario queda retenido durante diez minutos; el pago se simula una sola vez desde el checkout."})
 }
 
 func (s *servidorReservas) liberarBloqueoCarrito(c *gin.Context) {
@@ -871,94 +1243,47 @@ func (s *servidorReservas) liberarBloqueoCarrito(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "CARRITO_NO_ENCONTRADO", "message": "No encontramos ese carrito."}})
 		return
 	}
-	res, err := s.carritos.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "clienteId", Value: u.ID}, {Key: "estado", Value: "pendiente_pago"}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estado", Value: "liberado"}, {Key: "expiraEn", Value: time.Now().UTC()}}}})
+	session, err := s.mongo.StartSession()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo liberar el horario"})
+		return
+	}
+	defer session.EndSession(ctx)
+	_, err = session.WithTransaction(ctx, func(tx context.Context) (any, error) {
+		res, updateErr := s.carritos.UpdateOne(tx, bson.M{"_id": id, "clienteId": u.ID, "estado": "pendiente_pago", "checkoutId": bson.M{"$in": bson.A{"", nil}}}, bson.M{"$set": bson.M{"estado": "liberado", "expiraEn": time.Now().UTC()}})
+		if updateErr != nil {
+			return nil, updateErr
+		}
+		if res.MatchedCount == 0 {
+			var locked bloqueoCarrito
+			if e := s.carritos.FindOne(tx, bson.M{"_id": id, "clienteId": u.ID, "checkoutId": bson.M{"$nin": bson.A{"", nil}}}).Decode(&locked); e == nil {
+				return nil, errCheckoutEnCurso
+			}
+			return nil, mongo.ErrNoDocuments
+		}
+		if _, deleteErr := s.bloqueos.DeleteMany(tx, bson.M{"turnoId": id}); deleteErr != nil {
+			return nil, deleteErr
+		}
+		return nil, nil
+	})
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "CARRITO_NO_ENCONTRADO", "message": "No existe un bloqueo pendiente de tu propiedad."}})
+		return
+	}
+	if errors.Is(err, errCheckoutEnCurso) {
+		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CHECKOUT_EN_CURSO", "message": "No se puede quitar un elemento mientras se confirma la compra."}})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo liberar el carrito"})
 		return
 	}
-	if res.MatchedCount == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "CARRITO_NO_ENCONTRADO", "message": "No existe un bloqueo pendiente de tu propiedad."}})
-		return
-	}
-	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key: "turnoId", Value: id}})
 	s.liberarBeneficio(ctx, cart.BeneficioCanjeID, u.ID, id)
 	c.Status(http.StatusNoContent)
 }
 
 func (s *servidorReservas) confirmarBloqueoCarrito(c *gin.Context) {
-	u := c.MustGet("identidad").(identidad)
-	id := strings.TrimSpace(c.Param("id"))
-	var req confirmarCarritoRequest
-	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.PagoID) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "PAGO_INVALIDO", "message": "Indicá pagoId del proveedor de pagos."}})
-		return
-	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
-	defer cancel()
-	var cart bloqueoCarrito
-	if err := s.carritos.FindOne(ctx, bson.D{{Key: "_id", Value: id}}).Decode(&cart); err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			c.JSON(http.StatusGone, gin.H{"error": gin.H{"code": "BLOQUEO_VENCIDO", "message": "El bloqueo venció o no existe. Volvé a elegir el horario."}})
-			return
-		}
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo consultar el carrito"})
-		return
-	}
-	if cart.ClienteID != u.ID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "el carrito pertenece a otro cliente"})
-		return
-	}
-	if cart.Estado == "confirmado" && cart.TurnoID != "" {
-		var existente turno
-		if err := s.turnos.FindOne(ctx, bson.D{{Key: "_id", Value: cart.TurnoID}}).Decode(&existente); err == nil {
-			c.JSON(http.StatusOK, gin.H{"turno": existente, "mensaje": "La reserva ya había sido confirmada; no se creó un duplicado."})
-			return
-		}
-	}
-	if cart.Estado != "pendiente_pago" || !cart.ExpiraEn.After(time.Now()) {
-		c.JSON(http.StatusGone, gin.H{"error": gin.H{"code": "BLOQUEO_VENCIDO", "message": "El bloqueo venció; iniciá una nueva reserva."}})
-		return
-	}
-	if err := s.verificarPago(ctx, req.PagoID, cart.Sena, cart.Moneda, id); err != nil {
-		c.JSON(http.StatusPaymentRequired, gin.H{"error": gin.H{"code": "SENA_NO_APROBADA", "message": err.Error()}})
-		return
-	}
-	if cart.BeneficioCanjeID != "" {
-		if _, err := s.reservarBeneficio(ctx, cart.BeneficioCanjeID, cart.ClienteID, id, cart.TratamientoID, cart.Precio); err != nil {
-			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "BENEFICIO_NO_DISPONIBLE", "message": "El beneficio ya no está reservado para este carrito."}})
-			return
-		}
-	}
-	// La reserva sólo se confirma si el proveedor valida el pago por el importe exacto.
-	now := time.Now().UTC()
-	doc := turno{ID: bson.NewObjectID().Hex(), ClienteID: cart.ClienteID, ProfesionalID: cart.ProfesionalID, TratamientoID: cart.TratamientoID, Inicio: cart.Inicio, Fin: cart.Fin, Estado: "confirmado", CreadoEn: now, PrecioTratamiento: cart.Precio, Sena: cart.Sena, PagoID: req.PagoID, EstadoPago: "aprobado", BeneficioCanjeID: cart.BeneficioCanjeID, BeneficioReservaID: id, DescuentoBeneficio: cart.DescuentoBeneficio, PrecioFinal: cart.PrecioFinal}
-	res, err := s.carritos.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "estado", Value: "pendiente_pago"}, {Key: "expiraEn", Value: bson.D{{Key: "$gt", Value: now}}}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estado", Value: "confirmando"}, {Key: "pagoId", Value: req.PagoID}}}})
-	if err != nil || res.MatchedCount != 1 {
-		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CARRITO_PROCESADO", "message": "El carrito venció o ya está siendo confirmado."}})
-		return
-	}
-	if err = s.actualizarBeneficio(ctx, cart.BeneficioCanjeID, cart.ClienteID, id, "aplicar"); err != nil {
-		_, _ = s.carritos.UpdateOne(context.Background(), bson.D{{Key: "_id", Value: id}, {Key: "estado", Value: "confirmando"}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estado", Value: "pendiente_pago"}}}, {Key: "$unset", Value: bson.D{{Key: "pagoId", Value: ""}}}})
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "BENEFICIO_NO_APLICADO", "message": "El beneficio no se pudo aplicar. Podés reintentar la confirmación."}})
-		return
-	}
-	if _, err = s.turnos.InsertOne(ctx, doc); err != nil {
-		_, _ = s.carritos.UpdateOne(context.Background(), bson.D{{Key: "_id", Value: id}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estado", Value: "pendiente_pago"}}}, {Key: "$unset", Value: bson.D{{Key: "pagoId", Value: ""}}}})
-		_ = s.actualizarBeneficio(context.Background(), cart.BeneficioCanjeID, cart.ClienteID, id, "restituir")
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "se verificó el pago pero no se pudo confirmar el turno; contactá soporte con el identificador del pago"})
-		return
-	}
-	_, err = s.bloqueos.UpdateMany(ctx, bson.D{{Key: "turnoId", Value: id}}, bson.D{{Key: "$set", Value: bson.D{{Key: "turnoId", Value: doc.ID}}}, {Key: "$unset", Value: bson.D{{Key: "expiraEn", Value: ""}}}})
-	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "turno creado pero no se pudo consolidar el bloqueo; requiere recuperación operativa"})
-		return
-	}
-	finalizado, finalErr := s.carritos.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "estado", Value: "confirmando"}, {Key: "pagoId", Value: req.PagoID}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estado", Value: "confirmado"}, {Key: "turnoId", Value: doc.ID}}}, {Key: "$unset", Value: bson.D{{Key: "expiraEn", Value: ""}}}})
-	if finalErr != nil || finalizado.MatchedCount != 1 {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "el turno fue creado pero no se pudo cerrar el carrito; requiere recuperación operativa"})
-		return
-	}
-	c.JSON(http.StatusCreated, gin.H{"turno": doc, "pago": gin.H{"estado": "aprobado", "importe": cart.Sena, "moneda": cart.Moneda}})
+	c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CHECKOUT_UNICO_REQUERIDO", "message": "La confirmación por elemento ya no está disponible. Confirmá el carrito completo desde POST /carrito/checkout."}})
 }
 
 func (s *servidorReservas) confirmarTurnoDesdeCarrito(c *gin.Context) {

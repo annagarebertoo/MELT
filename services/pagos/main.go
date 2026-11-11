@@ -1,27 +1,44 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"math"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-const defaultMPBaseURL = "https://api.mercadopago.com"
+type payment struct {
+	ID             string    `bson:"_id" json:"id"`
+	CheckoutID     string    `bson:"checkoutId" json:"checkoutId"`
+	IdempotencyKey string    `bson:"idempotencyKey" json:"-"`
+	Amount         float64   `bson:"importe" json:"importe"`
+	Currency       string    `bson:"moneda" json:"moneda"`
+	Status         string    `bson:"estado" json:"estado"`
+	CreatedAt      time.Time `bson:"creadoEn" json:"creadoEn"`
+	Refunded       float64   `bson:"devuelto" json:"devuelto"`
+}
 
 type server struct {
-	token   string
-	baseURL string
-	client  *http.Client
+	payments    *mongo.Collection
+	refunds     *mongo.Collection
+	internalKey string
+	result      string
+}
+
+type simulateRequest struct {
+	CheckoutID string  `json:"checkoutId"`
+	Amount     float64 `json:"importe"`
+	Currency   string  `json:"moneda"`
 }
 
 type verifyRequest struct {
@@ -31,13 +48,6 @@ type verifyRequest struct {
 	Reference string  `json:"referencia"`
 }
 
-type verifyResponse struct {
-	Approved  bool    `json:"aprobado"`
-	PaymentID string  `json:"pagoId"`
-	Amount    float64 `json:"importe"`
-	Currency  string  `json:"moneda"`
-}
-
 type refundRequest struct {
 	PaymentID string  `json:"pagoId"`
 	Amount    float64 `json:"importe"`
@@ -45,196 +55,195 @@ type refundRequest struct {
 	Reason    string  `json:"motivo"`
 }
 
-type preferenceRequest struct {
-	Amount    float64 `json:"importe"`
-	Currency  string  `json:"moneda"`
-	Reference string  `json:"referencia"`
-	Title     string  `json:"titulo"`
-}
-
-type preferenceResponse struct {
-	ID               string `json:"id"`
-	InitPoint        string `json:"init_point"`
-	SandboxInitPoint string `json:"sandbox_init_point"`
-}
-
-type mpPayment struct {
-	ID                json.RawMessage `json:"id"`
-	Status            string          `json:"status"`
-	TransactionAmount float64         `json:"transaction_amount"`
-	CurrencyID        string          `json:"currency_id"`
-	ExternalReference string          `json:"external_reference"`
-}
-
 func (s *server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "provider": "mercadopago", "mode": "test", "configured": s.token != ""})
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "provider": "simulador", "mode": s.result})
 	})
-	mux.HandleFunc("POST /payments/verify", s.verify)
-	mux.HandleFunc("POST /payments/refunds", s.refund)
-	mux.HandleFunc("POST /payments/preferences", s.createPreference)
+	mux.Handle("POST /payments/simulate", s.internal(http.HandlerFunc(s.simulate)))
+	mux.Handle("GET /payments/{id}", s.internal(http.HandlerFunc(s.getPayment)))
+	mux.Handle("POST /payments/verify", s.internal(http.HandlerFunc(s.verify)))
+	mux.Handle("POST /payments/{id}/reverse", s.internal(http.HandlerFunc(s.reverse)))
+	mux.Handle("POST /payments/refunds", s.internal(http.HandlerFunc(s.refund)))
 	return mux
 }
 
-func (s *server) createPreference(w http.ResponseWriter, r *http.Request) {
-	var req preferenceRequest
-	if err := decodeJSON(r, &req); err != nil || !validAmount(req.Amount) || req.Currency != "ARS" ||
-		!validReference(req.Reference) || strings.TrimSpace(req.Title) == "" || len(req.Title) > 120 {
-		writeError(w, http.StatusBadRequest, "Solicitud de pago inválida")
-		return
-	}
-	body := map[string]any{
-		"items": []map[string]any{{
-			"title": strings.TrimSpace(req.Title), "quantity": 1,
-			"currency_id": req.Currency, "unit_price": req.Amount,
-		}},
-		"external_reference": req.Reference,
-	}
-	var returns map[string]string
-	if returnURL := strings.TrimSpace(os.Getenv("MP_RETURN_URL")); returnURL != "" {
-		parsed, err := url.Parse(returnURL)
-		if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
-			writeError(w, http.StatusServiceUnavailable, "MP_RETURN_URL debe ser una URL HTTPS pública")
+func (s *server) internal(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.internalKey == "" || r.Header.Get("X-Melt-Internal-Key") != s.internalKey {
+			writeError(w, http.StatusUnauthorized, "Operación interna no autorizada")
 			return
 		}
-		returns = map[string]string{
-			"success": returnURL + "?pago=aprobado&referencia=" + url.QueryEscape(req.Reference),
-			"failure": returnURL + "?pago=rechazado&referencia=" + url.QueryEscape(req.Reference),
-			"pending": returnURL + "?pago=pendiente&referencia=" + url.QueryEscape(req.Reference),
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *server) simulate(w http.ResponseWriter, r *http.Request) {
+	var req simulateRequest
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if decodeJSON(r, &req) != nil || key == "" || !validAmount(req.Amount) || req.Currency != "ARS" || !validID(req.CheckoutID) {
+		writeError(w, http.StatusBadRequest, "Solicitud de simulación inválida")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
+	defer cancel()
+	var existing payment
+	err := s.payments.FindOne(ctx, bson.M{"checkoutId": req.CheckoutID}).Decode(&existing)
+	if err == nil {
+		if existing.CheckoutID != req.CheckoutID || existing.Amount != req.Amount || existing.Currency != req.Currency {
+			writeError(w, http.StatusConflict, "La clave de idempotencia ya se usó con otros datos")
+			return
 		}
-		body["back_urls"] = returns
-		body["auto_return"] = "approved"
-	}
-	encoded, _ := json.Marshal(body)
-	var result preferenceResponse
-	if err := s.request(r, http.MethodPost, "/checkout/preferences", encoded, "cart-"+req.Reference, &result); err != nil {
-		writeError(w, http.StatusBadGateway, "Mercado Pago no pudo iniciar el pago")
+		writeJSON(w, http.StatusOK, existing)
 		return
 	}
-	checkoutURL := result.InitPoint
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("MP_ENV")), "test") && result.SandboxInitPoint != "" {
-		checkoutURL = result.SandboxInitPoint
-	}
-	if result.ID == "" || checkoutURL == "" {
-		writeError(w, http.StatusBadGateway, "Mercado Pago no devolvió un enlace de pago")
+	if !errors.Is(err, mongo.ErrNoDocuments) {
+		writeError(w, http.StatusServiceUnavailable, "No se pudo consultar la operación")
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"preferenciaId": result.ID, "urlPago": checkoutURL})
+	doc := payment{ID: bson.NewObjectID().Hex(), CheckoutID: req.CheckoutID, IdempotencyKey: key, Amount: req.Amount, Currency: req.Currency, Status: s.result, CreatedAt: time.Now().UTC()}
+	_, err = s.payments.InsertOne(ctx, doc)
+	if mongo.IsDuplicateKeyError(err) {
+		if s.payments.FindOne(ctx, bson.M{"checkoutId": req.CheckoutID}).Decode(&existing) == nil && existing.CheckoutID == req.CheckoutID && existing.Amount == req.Amount && existing.Currency == req.Currency {
+			writeJSON(w, http.StatusOK, existing)
+			return
+		}
+		writeError(w, http.StatusConflict, "La operación ya fue procesada con otros datos")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "No se pudo registrar el pago simulado")
+		return
+	}
+	writeJSON(w, http.StatusCreated, doc)
+}
+
+func (s *server) getPayment(w http.ResponseWriter, r *http.Request) {
+	var item payment
+	err := s.payments.FindOne(r.Context(), bson.M{"_id": r.PathValue("id")}).Decode(&item)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		writeError(w, http.StatusNotFound, "Operación no encontrada")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "No se pudo consultar la operación")
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *server) verify(w http.ResponseWriter, r *http.Request) {
+	var req verifyRequest
+	if decodeJSON(r, &req) != nil || !validID(req.PaymentID) || !validAmount(req.Amount) || req.Currency != "ARS" || req.Reference == "" {
+		writeError(w, http.StatusBadRequest, "Solicitud de verificación inválida")
+		return
+	}
+	var item payment
+	err := s.payments.FindOne(r.Context(), bson.M{"_id": req.PaymentID}).Decode(&item)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		writeJSON(w, http.StatusOK, map[string]any{"aprobado": false, "pagoId": req.PaymentID, "importe": 0, "moneda": req.Currency})
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "No se pudo verificar la operación")
+		return
+	}
+	approved := item.Status == "approved" && item.CheckoutID == req.Reference && item.Currency == req.Currency && math.Abs(item.Amount-req.Amount) < 0.009
+	writeJSON(w, http.StatusOK, map[string]any{"aprobado": approved, "pagoId": item.ID, "importe": item.Amount, "moneda": item.Currency})
+}
+
+func (s *server) reverse(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	res, err := s.payments.UpdateOne(r.Context(), bson.M{"_id": id, "estado": "approved"}, bson.M{"$set": bson.M{"estado": "reversed"}})
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "No se pudo revertir la simulación")
+		return
+	}
+	var item payment
+	if err = s.payments.FindOne(r.Context(), bson.M{"_id": id}).Decode(&item); err != nil {
+		writeError(w, http.StatusNotFound, "Operación no encontrada")
+		return
+	}
+	if item.Status != "reversed" {
+		writeError(w, http.StatusConflict, "La operación no puede revertirse en su estado actual")
+		return
+	}
+	_ = res
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *server) refund(w http.ResponseWriter, r *http.Request) {
+	var req refundRequest
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if decodeJSON(r, &req) != nil || key == "" || !validID(req.PaymentID) || !validAmount(req.Amount) || req.Currency != "ARS" {
+		writeError(w, http.StatusBadRequest, "Solicitud de devolución inválida")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
+	defer cancel()
+	var existing bson.M
+	if err := s.refunds.FindOne(ctx, bson.M{"_id": key}).Decode(&existing); err == nil {
+		writeJSON(w, http.StatusOK, existing)
+		return
+	}
+	var item payment
+	if err := s.payments.FindOne(ctx, bson.M{"_id": req.PaymentID}).Decode(&item); err != nil {
+		writeError(w, http.StatusNotFound, "Operación aprobada no encontrada")
+		return
+	}
+	session, err := s.payments.Database().Client().StartSession()
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "No se pudo iniciar la devolución simulada")
+		return
+	}
+	defer session.EndSession(ctx)
+	var result any
+	created := false
+	_, err = session.WithTransaction(ctx, func(tx context.Context) (any, error) {
+		var existing bson.M
+		if e := s.refunds.FindOne(tx, bson.M{"_id": key}).Decode(&existing); e == nil {
+			result = existing
+			created = false
+			return existing, nil
+		} else if !errors.Is(e, mongo.ErrNoDocuments) {
+			return nil, e
+		}
+		updated, e := s.payments.UpdateOne(tx, bson.M{"_id": req.PaymentID, "estado": "approved", "devuelto": bson.M{"$lte": item.Amount - req.Amount}}, bson.M{"$inc": bson.M{"devuelto": req.Amount}})
+		if e != nil {
+			return nil, e
+		}
+		if updated.MatchedCount != 1 {
+			return nil, errors.New("el importe excede el saldo disponible")
+		}
+		refund := bson.M{"_id": key, "pagoId": req.PaymentID, "importe": req.Amount, "moneda": req.Currency, "estado": "refunded", "motivo": req.Reason, "creadoEn": time.Now().UTC()}
+		if _, e = s.refunds.InsertOne(tx, refund); e != nil {
+			return nil, e
+		}
+		result = refund
+		created = true
+		return refund, nil
+	})
+	if err != nil {
+		writeError(w, http.StatusConflict, "No se pudo aplicar la devolución simulada")
+		return
+	}
+	status := http.StatusCreated
+	if !created {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, result)
 }
 
 func validAmount(amount float64) bool {
 	return amount > 0 && !math.IsNaN(amount) && !math.IsInf(amount, 0)
 }
-
-func validReference(reference string) bool {
-	if reference == "" || len(reference) > 128 {
-		return false
-	}
-	for _, char := range reference {
-		if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '-' || char == '_') {
-			return false
-		}
-	}
-	return true
-}
-
-func (s *server) verify(w http.ResponseWriter, r *http.Request) {
-	var req verifyRequest
-	if err := decodeJSON(r, &req); err != nil || !validPaymentID(req.PaymentID) ||
-		strings.TrimSpace(req.Reference) == "" || req.Amount <= 0 || req.Currency != "ARS" {
-		writeError(w, http.StatusBadRequest, "Solicitud de verificación inválida")
-		return
-	}
-	var payment mpPayment
-	if err := s.request(r, http.MethodGet, "/v1/payments/"+req.PaymentID, nil, "", &payment); err != nil {
-		writeError(w, http.StatusBadGateway, "Mercado Pago no pudo verificar el pago")
-		return
-	}
-	paymentID := strings.Trim(strings.TrimSpace(string(payment.ID)), "\"")
-	approved := payment.Status == "approved" &&
-		paymentID == req.PaymentID &&
-		payment.CurrencyID == req.Currency &&
-		payment.ExternalReference == req.Reference &&
-		math.Abs(payment.TransactionAmount-req.Amount) < 0.009
-	writeJSON(w, http.StatusOK, verifyResponse{
-		Approved: approved, PaymentID: paymentID,
-		Amount: payment.TransactionAmount, Currency: payment.CurrencyID,
-	})
-}
-
-func (s *server) refund(w http.ResponseWriter, r *http.Request) {
-	var req refundRequest
-	if err := decodeJSON(r, &req); err != nil || !validPaymentID(req.PaymentID) ||
-		req.Amount <= 0 || req.Currency != "ARS" {
-		writeError(w, http.StatusBadRequest, "Solicitud de devolución inválida")
-		return
-	}
-	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
-	if key == "" {
-		writeError(w, http.StatusBadRequest, "Falta el encabezado Idempotency-Key")
-		return
-	}
-	body, _ := json.Marshal(map[string]float64{"amount": req.Amount})
-	var result map[string]any
-	path := "/v1/payments/" + req.PaymentID + "/refunds"
-	if err := s.request(r, http.MethodPost, path, body, key, &result); err != nil {
-		writeError(w, http.StatusBadGateway, "Mercado Pago no confirmó la devolución")
-		return
-	}
-	if result["status"] != "approved" {
-		writeError(w, http.StatusBadGateway, "Mercado Pago recibió la solicitud, pero la devolución todavía no figura aprobada")
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{
-		"estado": "aceptada", "pagoId": req.PaymentID, "importe": req.Amount,
-		"moneda": req.Currency, "resultado": result,
-	})
-}
-
-func (s *server) request(r *http.Request, method, path string, body []byte, idempotencyKey string, out any) error {
-	if s.token == "" {
-		return errors.New("MP_ACCESS_TOKEN no está configurado")
-	}
-	var reader io.Reader
-	if body != nil {
-		reader = bytes.NewReader(body)
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 7*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, method, s.baseURL+path, reader)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+s.token)
-	req.Header.Set("Accept", "application/json")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if idempotencyKey != "" {
-		req.Header.Set("X-Idempotency-Key", idempotencyKey)
-	}
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("Mercado Pago respondió HTTP %d", resp.StatusCode)
-	}
-	if out == nil {
-		_, err = io.Copy(io.Discard, resp.Body)
-		return err
-	}
-	return json.NewDecoder(resp.Body).Decode(out)
-}
-
-func validPaymentID(id string) bool {
-	if id == "" {
+func validSimulatorResult(value string) bool { return value == "approved" || value == "rejected" }
+func validID(id string) bool {
+	if id == "" || len(id) > 128 {
 		return false
 	}
 	for _, ch := range id {
-		if ch < 48 || ch > 57 {
+		if !(ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '-' || ch == '_') {
 			return false
 		}
 	}
@@ -247,13 +256,11 @@ func decodeJSON(r *http.Request, out any) error {
 	dec.DisallowUnknownFields()
 	return dec.Decode(out)
 }
-
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
-
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
@@ -263,19 +270,44 @@ func main() {
 	if port == "" {
 		port = "8085"
 	}
-	baseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("MP_BASE_URL")), "/")
-	if baseURL == "" {
-		baseURL = defaultMPBaseURL
+	uri := strings.TrimSpace(os.Getenv("MONGODB_URI"))
+	if uri == "" {
+		uri = "mongodb://localhost:27017"
 	}
-	s := &server{
-		token:   strings.TrimSpace(os.Getenv("MP_ACCESS_TOKEN")),
-		baseURL: baseURL,
-		client:  &http.Client{Timeout: 8 * time.Second},
+	dbName := strings.TrimSpace(os.Getenv("PAGOS_MONGODB_DATABASE"))
+	if dbName == "" {
+		dbName = "pagos_db"
 	}
-	if os.Getenv("MP_ENV") != "test" {
-		log.Fatal("MP_ENV debe ser 'test'; este servicio está limitado al entorno de pruebas")
+	result := strings.ToLower(strings.TrimSpace(os.Getenv("PAYMENT_SIMULATOR_RESULT")))
+	if result == "" {
+		result = "approved"
 	}
-	log.Printf("Servicio pagos Mercado Pago (modo pruebas) escuchando en :%s", port)
+	if !validSimulatorResult(result) {
+		log.Fatal("PAYMENT_SIMULATOR_RESULT debe ser approved o rejected")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := mongo.Connect(options.Client().ApplyURI(uri))
+	if err != nil {
+		log.Fatal("no se pudo configurar MongoDB para Pagos")
+	}
+	defer client.Disconnect(context.Background())
+	if err := client.Ping(ctx, nil); err != nil {
+		log.Fatal("no se pudo conectar Pagos con MongoDB")
+	}
+	db := client.Database(dbName)
+	s := &server{payments: db.Collection("pagos_simulados"), refunds: db.Collection("devoluciones_simuladas"), internalKey: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY")), result: result}
+	if s.internalKey == "" {
+		log.Fatal("MELT_INTERNAL_KEY es necesario para operaciones internas")
+	}
+	_, err = s.payments.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "idempotencyKey", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_pago_idempotencia")})
+	if err != nil {
+		log.Fatal("no se pudo crear índice de idempotencia")
+	}
+	_, err = s.payments.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "checkoutId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_pago_checkout")})
+	if err != nil {
+		log.Fatal("no se pudo crear índice de checkout")
+	}
 	if err := http.ListenAndServe(":"+port, s.handler()); err != nil {
 		log.Fatal(err)
 	}

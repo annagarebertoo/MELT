@@ -34,7 +34,7 @@ El usuario administrador debe estar creado al iniciar Auth (`AUTH_ADMIN_EMAIL` y
    $headers = @{ Authorization = "Bearer $($admin.token)" }
    ```
 
-2. Crea una cuenta interna para quien atenderá el tratamiento. El ID devuelto debe usarse en catálogo y agenda:
+2. Crea una cuenta interna para quien atenderá el tratamiento. Conservá el ID Auth para vincular la cuenta; el perfil público tendrá su propio ID:
 
    ```powershell
    $professional = Invoke-RestMethod "$base/auth/usuarios" -Method Post -Headers $headers -ContentType 'application/json' -Body (@{
@@ -66,14 +66,16 @@ El usuario administrador debe estar creado al iniciar Auth (`AUTH_ADMIN_EMAIL` y
    }
    Invoke-RestMethod "$base/catalogo/tratamientos" -Method Post -Headers $headers -ContentType 'application/json' -Body ($treatment | ConvertTo-Json -Depth 5)
 
+   $profileID = 'profesional-demo-01'
    $profile = @{
-     id = $professionalID
+     id = $profileID
      nombre = $professional.usuario.nombre
      descripcion = 'Perfil local de demostración.'
      tratamientosIds = @($treatmentID)
      activo = $true
    }
    Invoke-RestMethod "$base/catalogo/profesionales" -Method Post -Headers $headers -ContentType 'application/json' -Body ($profile | ConvertTo-Json -Depth 5)
+   Invoke-RestMethod "$base/catalogo/admin/profesionales/$profileID/cuenta" -Method Put -Headers $headers -ContentType 'application/json' -Body (@{authUserId=$professionalID} | ConvertTo-Json)
    ```
 
 4. Activa una agenda semanal para ese ID. Este ejemplo habilita todos los días de 09:00 a 17:00:
@@ -81,7 +83,7 @@ El usuario administrador debe estar creado al iniciar Auth (`AUTH_ADMIN_EMAIL` y
    ```powershell
    0..6 | ForEach-Object {
      Invoke-RestMethod "$base/reservas/agenda" -Method Put -Headers $headers -ContentType 'application/json' -Body (@{
-       profesionalId = $professionalID
+     profesionalId = $profileID
        diaSemana = $_
        horaInicio = '09:00'
        horaFin = '17:00'
@@ -90,21 +92,45 @@ El usuario administrador debe estar creado al iniciar Auth (`AUTH_ADMIN_EMAIL` y
    }
    ```
 
-La relación debe quedar completa en ambos sentidos: `tratamiento.profesionalesIds`, `profesional.tratamientosIds` y la agenda de Reservas deben compartir el mismo ID. La interfaz solo ofrece perfiles activos que coincidan con el tratamiento.
+La relación debe quedar completa en ambos sentidos: `tratamiento.profesionalesIds`, `profesional.tratamientosIds` y la agenda de Reservas usan el ID del perfil de Catálogo; Auth mantiene su ID separado en `profesional.authUserId`. La interfaz solo ofrece perfiles activos que coincidan con el tratamiento.
 
 ## Recorrido de cliente
 
 1. Abre `http://localhost:8080`, crea una cuenta cliente e inicia sesión.
 2. Abre una ficha demo, por ejemplo **Limpieza facial hidratante · Demo**, elige a **Sofía Demo** y una fecha futura.
-3. Consulta horarios y elige uno. El backend genera el carrito de 10 minutos y la preferencia de pago por el 30 % del importe.
-4. Paga desde **Pagar seña en Mercado Pago**. El adaptador crea una preferencia en modo de prueba por el 30 % del precio. Al volver a MELT, ingresá el ID de pago si no configuraste `MP_RETURN_URL`; Reservas confirma únicamente si Mercado Pago devuelve estado aprobado, ARS, importe exacto y la referencia del carrito.
-5. En **Mis reservas**, cancela el turno. Con 24 horas o más de anticipación se solicita la devolución total; con menos de 24 horas no hay devolución. La cancelación libera la agenda.
+3. Consultá horarios y agregá uno al carrito. La retención dura 10 minutos y todavía no inicia un pago.
+4. Agregá otros tratamientos si querés. **Mi carrito** muestra subtotal, descuentos, total, seña total del 30 % y vencimiento de cada retención. Pulsá **Confirmar compra** para ejecutar una única simulación y confirmar todos los turnos en conjunto.
+5. En **Mis reservas**, cancela un turno. Con 24 horas o más de anticipación se registra la devolución simulada total; con menos de 24 horas no hay devolución. La cancelación libera la agenda.
 
-## Mercado Pago de prueba
+## Agenda y turnos profesionales
 
-Compose fuerza `MP_ENV=test`. Para crear enlaces de pago y verificar pagos de prueba, configura `MP_ACCESS_TOKEN` de prueba en el entorno local antes de iniciar los servicios. `MP_RETURN_URL` es opcional; si se usa, debe ser una URL HTTPS pública. Si no existe una credencial de prueba válida, la interfaz puede seguir mostrando el catálogo y la disponibilidad, pero no completar el checkout. No uses tokens de producción en la demostración ni los agregues a `.env.example` o al control de versiones. No se hicieron cobros reales.
+Una cuenta Auth con rol `profesional` debe estar vinculada a un perfil activo de Catálogo. Reservas resuelve internamente esa relación; el profesional no puede elegir un `profesionalId` distinto desde el formulario.
 
-Si el proveedor no está configurado o falla al crear la preferencia, Reservas libera el bloqueo y responde con `PAGO_NO_DISPONIBLE`; no deja una franja ocupada sin forma de pago. Las pruebas automatizadas usan un proveedor HTTP simulado y no requieren credenciales de Mercado Pago.
+- `GET /api/v1/reservas/agenda`: consulta los siete días de la propia agenda. Cada día devuelve `bloques: [{inicio, fin}]`; los registros históricos con `horaInicio` y `horaFin` siguen leyéndose como un bloque.
+- `PUT /api/v1/reservas/agenda`: guarda un día con `{diaSemana, bloques}` (domingo=0, lunes=1 … sábado=6). Se permiten hasta ocho bloques ordenados y no superpuestos, dentro de 08:00–20:00. También conserva el formato histórico `{diaSemana, horaInicio, horaFin, activo}`.
+- `GET /api/v1/reservas/turnos`: un profesional recibe únicamente los turnos de su perfil vinculado e incluye el nombre del cliente consultado internamente en Auth.
+- `DELETE /api/v1/reservas/turnos/{id}`: cancela un turno propio y aplica la política actual de seña/devolución; el turno y sus bloqueos se actualizan en una transacción.
+- `POST /api/v1/reservas/turnos/{id}/completar`: conserva el outbox idempotente `tratamiento.realizado` que consume Beneficios.
+- `POST /api/v1/reservas/turnos/{id}/no-asistio`: registra `no_asistio` cuando finalizó el horario. No publica el evento de tratamiento realizado ni acredita puntos; el mismo profesional puede reintentar sin duplicar cambios.
+
+Las ediciones de agenda se rechazan si desplazarían una reserva confirmada o una retención de checkout. Las nuevas retenciones comparten una fila de control por perfil/día con las ediciones, y los índices únicos de minutos conservan la exclusión ante solicitudes simultáneas. También se bloquea el solapamiento de la misma categoría para un mismo cliente usando el `categoriaId` estable devuelto por Catálogo.
+
+## Carrito de reservas
+
+Reservas conserva sin migración destructiva la colección `carritos_bloqueos`; el carrito único se obtiene de las retenciones activas de la identidad autenticada. La colección `checkouts` registra una operación por cliente y clave de idempotencia, con instantánea de importes y todos los turnos relacionados.
+
+- `GET /api/v1/reservas/carrito`: lista únicamente las retenciones propias vigentes y calcula subtotal, descuentos, total, seña y restante.
+- `POST /api/v1/reservas/carrito/bloqueos` con `diferirPago: true`: crea una retención por 10 minutos y no llama a Pagos. Omitir el campo conserva la integración antigua que inicia el pago inmediatamente.
+- `DELETE /api/v1/reservas/carrito/bloqueos/{id}`: quita el elemento, libera los minutos de manera transaccional y restituye el beneficio asociado.
+- `POST /api/v1/reservas/carrito/checkout` con `idempotencyKey`: recalcula precios vigentes y beneficios en backend, calcula una sola seña total del 30 %, registra una operación simulada y confirma todos los turnos dentro de una única transacción.
+
+Los elementos pueden corresponder a diferentes categorías, profesionales, fechas y horarios. Una falla de validación impide confirmar cualquier turno del checkout; si la simulación ya fue aprobada, Pagos la revierte. Una respuesta de rechazo conserva las retenciones vigentes para reintentar o quitar elementos. Repetir la clave de idempotencia recupera el mismo resultado. Los endpoints antiguos de pago por elemento se conservan como compatibilidad, pero la interfaz no los utiliza.
+
+## Simulador académico de pagos
+
+No se usa pasarela externa, preferencia ni webhook: el servicio Pagos registra una transacción simulada en su propia base MongoDB `pagos_db`. El resultado predeterminado es aprobado para que la demo funcione sin credenciales; configurar `PAYMENT_SIMULATOR_RESULT=rejected` solo en el backend permite probar rechazos. El frontend no acepta el resultado del cliente. No se efectúan cobros reales.
+
+Si Reservas no puede completar una compra aprobada, el checkout transaccional evita confirmaciones parciales y solicita a Pagos revertir la operación simulada. El estado de recuperación queda persistido si esa compensación no está disponible.
 
 ## Pruebas reproducibles
 
