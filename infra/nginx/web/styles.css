@@ -194,3 +194,38 @@ body.menu-open{overflow:hidden}
 .booking-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
 .booking-actions .button{min-height:36px;padding:0 12px;font-size:.75rem}
 @media(max-width:720px){.benefits-columns{grid-template-columns:1fr}.benefits-area{padding:18px}.movement-row,.reward-row{align-items:flex-start}.booking-actions{justify-content:flex-start}}
+
+/* Cocinas GhostKitchen cercanas: catálogo externo dentro del espacio de cliente */
+.ghostkitchen-area{scroll-margin-top:100px}
+.ghostkitchen-location-card,.ghostkitchen-sede-card{padding:22px;border:1px solid var(--line);border-radius:16px;background:var(--cream)}
+.ghostkitchen-location-card{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:center;margin:20px 0}
+.ghostkitchen-location-card p{margin:5px 0 0;color:var(--muted);font-size:.88rem}
+.ghostkitchen-coordinates{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr auto;gap:14px;align-items:end}
+.ghostkitchen-coordinates .form-field,.ghostkitchen-filters .form-field{margin:0}
+.ghostkitchen-sede-card{display:grid;grid-template-columns:1fr auto;gap:16px;margin:18px 0}
+.ghostkitchen-sede-card h3,.ghostkitchen-dish-card h3{margin:0 0 6px;font-family:'Playfair Display',Georgia,serif;font-size:1.45rem;font-weight:500}
+.ghostkitchen-sede-card p:not(.eyebrow){margin:0;color:var(--muted)}
+.ghostkitchen-sede-meta{display:flex;gap:24px;text-align:right}
+.ghostkitchen-sede-meta span{display:grid;color:var(--muted);font-size:.74rem}
+.ghostkitchen-sede-meta strong{color:var(--ink);font-size:.92rem}
+.ghostkitchen-restaurants{grid-column:1/-1;display:grid;gap:8px}
+.ghostkitchen-restaurants>div{display:flex;flex-wrap:wrap;gap:8px}
+.ghostkitchen-restaurants span,.ghostkitchen-dish-card .detail-keywords span{padding:5px 10px;border-radius:99px;background:#fff;color:var(--olive-dark);font-size:.76rem}
+.ghostkitchen-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:24px 0 18px}
+.ghostkitchen-availability{display:flex;align-items:center;gap:9px;font-size:.86rem}
+.ghostkitchen-availability input{accent-color:var(--olive-dark)}
+.ghostkitchen-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.ghostkitchen-dish-card{display:flex;flex-direction:column;gap:10px;padding:20px;border:1px solid var(--line);border-radius:16px;background:#fff;min-width:0}
+.ghostkitchen-dish-card>p:not(.eyebrow){margin:0;color:var(--muted);font-size:.86rem;flex:1}
+.ghostkitchen-dish-meta{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ghostkitchen-dish-meta>strong{font-size:1.08rem}
+.ghostkitchen-dish-meta span{font-size:.75rem;font-weight:700}
+.ghostkitchen-dish-meta .is-available{color:var(--olive-dark)}
+.ghostkitchen-dish-meta .is-unavailable{color:var(--muted)}
+.ghostkitchen-dish-card .detail-keywords{display:flex;flex-wrap:wrap;gap:6px}
+.ghostkitchen-dish-card>small{color:var(--muted)}
+.ghostkitchen-note{margin:20px 0 0;color:var(--muted);font-size:.78rem}
+.ghostkitchen-detail-dialog{max-width:620px}
+@media(max-width:900px){.ghostkitchen-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ghostkitchen-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.ghostkitchen-location-card,.ghostkitchen-sede-card{grid-template-columns:1fr}.ghostkitchen-coordinates,.ghostkitchen-filters{grid-template-columns:1fr}.ghostkitchen-sede-meta{justify-content:flex-start;text-align:left}.ghostkitchen-grid{grid-template-columns:1fr}.ghostkitchen-restaurants{grid-column:auto}}
+.profile-actions{flex-wrap:wrap}

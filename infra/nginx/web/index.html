@@ -8,6 +8,7 @@
     <title>MELT | Fundite con tu esencia</title>
     <link rel="stylesheet" href="/styles.css">
     <script src="/app.js" defer></script>
+    <script src="/ghostkitchen.js" defer></script>
   </head>
   <body>
     <header class="site-header">
@@ -109,7 +110,7 @@
             <div class="profile-top"><div class="avatar" id="profile-initials">M</div><div><p class="eyebrow">Tu espacio MELT</p><h3 id="profile-name">Hola</h3></div></div>
             <p id="profile-email" class="muted"></p>
             <div class="points-box"><span>Tu saldo de beneficios</span><strong><span id="points-balance">—</span> <small>puntos</small></strong></div>
-            <div class="profile-actions"><button id="refresh-account" class="button button-outline" type="button">Actualizar</button><button id="profile-reservations" class="text-button" type="button">Ver mis turnos ↓</button><button id="logout-button" class="text-button" type="button">Cerrar sesión</button></div>
+            <div class="profile-actions"><button id="refresh-account" class="button button-outline" type="button">Actualizar</button><button id="profile-reservations" class="text-button" type="button">Ver mis turnos ↓</button><button id="profile-ghostkitchen" class="text-button hidden" type="button">Cocinas GhostKitchen cercanas ↓</button><button id="logout-button" class="text-button" type="button">Cerrar sesión</button></div>
           </div>
           <div class="calendar-card">
             <div><p class="eyebrow">Disponibilidad</p><h3>Elegí tu turno</h3></div>
@@ -145,7 +146,34 @@
           </div>
           <div class="benefit-card redeemed-card"><h3>Mis canjes</h3><div id="my-rewards" class="movement-list" aria-live="polite"></div></div>
         </section>
-        <section id="professional-panel" class="benefits-area hidden" aria-labelledby="professional-title">
+        <section id="ghostkitchen-panel" class="benefits-area ghostkitchen-area hidden" aria-labelledby="ghostkitchen-title">
+          <div class="section-heading"><div><p class="eyebrow">Una opción rica cerca tuyo</p><h2 id="ghostkitchen-title">Cocinas GhostKitchen cercanas</h2></div><button id="ghostkitchen-retry" class="button button-outline" type="button">Actualizar</button></div>
+          <p class="section-description">Consultá la cocina más cercana y explorá sus restaurantes y platos disponibles.</p>
+          <div class="ghostkitchen-location-card">
+            <div><strong>Buscá por ubicación</strong><p>Podés compartir tu ubicación o ingresar las coordenadas manualmente.</p></div>
+            <button id="ghostkitchen-geolocate" class="button button-dark" type="button">Usar mi ubicación</button>
+            <form id="ghostkitchen-location-form" class="ghostkitchen-coordinates">
+              <label class="form-field">Latitud<input id="ghostkitchen-lat" type="number" min="-90" max="90" step="any" required placeholder="-31.4262"></label>
+              <label class="form-field">Longitud<input id="ghostkitchen-lng" type="number" min="-180" max="180" step="any" required placeholder="-64.1883"></label>
+              <button class="button button-outline" type="submit">Buscar cocina</button>
+            </form>
+          </div>
+          <p id="ghostkitchen-status" class="form-status" aria-live="polite"></p>
+          <div id="ghostkitchen-sede" class="ghostkitchen-sede"></div>
+          <form id="ghostkitchen-filters" class="ghostkitchen-filters hidden">
+            <label class="form-field">Buscar platos<input name="q" type="search" maxlength="100" placeholder="Nombre o descripción"></label>
+            <label class="form-field">Categoría<select name="categoria"><option value="">Todas las categorías</option><option>Hamburguesas</option><option>Sushi</option><option>Pizza</option><option>Pastas</option><option>Postres</option></select></label>
+            <label class="form-field">Etiqueta alimentaria<select name="etiqueta"><option value="">Todas las etiquetas</option><option>Vegano</option><option>Vegetariano</option><option>Sin TACC</option><option>Picante</option></select></label>
+            <label class="form-field">Restaurante<select id="ghostkitchen-restaurant" name="restauranteId"><option value="">Todos los restaurantes</option></select></label>
+            <label class="form-field">Precio máximo<input name="precioMax" type="number" min="0" step="1" placeholder="ARS"></label>
+            <label class="form-field">Ordenar<select name="orden"><option value="relevancia">Relevancia</option><option value="precio_asc">Menor precio</option><option value="precio_desc">Mayor precio</option></select></label>
+            <label class="ghostkitchen-availability"><input name="soloDisponibles" type="checkbox" checked> Mostrar solo disponibles</label>
+            <button class="button button-dark" type="submit">Aplicar filtros</button>
+          </form>
+          <div id="ghostkitchen-results" class="ghostkitchen-grid" aria-live="polite"></div>
+          <div id="ghostkitchen-pagination" class="pagination hidden"><button id="ghostkitchen-prev" class="button button-outline" type="button">← Anterior</button><span id="ghostkitchen-page">Página 1</span><button id="ghostkitchen-next" class="button button-outline" type="button">Siguiente →</button></div>
+          <p class="ghostkitchen-note">La disponibilidad es orientativa y no garantiza una reserva ni una compra.</p>
+        </section>        <section id="professional-panel" class="benefits-area hidden" aria-labelledby="professional-title">
           <div class="section-heading"><div><p class="eyebrow">Atención profesional</p><h2 id="professional-title">Mis tratamientos</h2></div><button id="refresh-professional-turns" class="button button-outline" type="button">Actualizar</button></div>
           <p class="muted">Cuando termines un turno, confirmalo para registrar la realización y habilitar la acreditación de puntos.</p>
           <div id="professional-turns" class="movement-list" aria-live="polite"></div>
@@ -183,6 +211,7 @@
       <form method="dialog" class="dialog-top"><span class="eyebrow">Un ritual MELT</span><button class="dialog-close" aria-label="Cerrar detalle">×</button></form>
       <div class="dialog-layout"><div class="dialog-visual" id="detail-visual" aria-hidden="true"><span id="detail-initial">M</span></div><div class="dialog-copy"><p class="eyebrow" id="detail-category"></p><h2 id="detail-title"></h2><p class="dialog-description" id="detail-description"></p><div class="dialog-meta"><div><span>Duración</span><strong id="detail-duration"></strong></div><div><span>Precio</span><strong id="detail-price"></strong></div></div><div class="detail-keywords" id="detail-keywords"></div><div class="detail-professionals" id="detail-professionals"></div><p id="detail-availability" class="detail-availability"></p><button class="button button-dark" id="detail-book" type="button">Elegir horario <span aria-hidden="true">↗</span></button></div></div>
     </dialog>
+    <dialog class="treatment-dialog ghostkitchen-detail-dialog" id="ghostkitchen-detail-dialog" aria-labelledby="ghostkitchen-detail-title"><form method="dialog" class="dialog-top"><span class="eyebrow">Detalle del plato</span><button class="dialog-close" aria-label="Cerrar detalle">×</button></form><div class="dialog-copy"><p class="eyebrow" id="ghostkitchen-detail-restaurant"></p><h2 id="ghostkitchen-detail-title"></h2><p id="ghostkitchen-detail-description" class="dialog-description"></p><div class="dialog-meta"><div><span>Precio</span><strong id="ghostkitchen-detail-price"></strong></div><div><span>Disponibilidad</span><strong id="ghostkitchen-detail-availability"></strong></div></div><div id="ghostkitchen-detail-tags" class="detail-keywords"></div><p id="ghostkitchen-detail-updated" class="muted"></p></div></dialog>
     <dialog class="confirm-dialog" id="cancel-dialog" aria-labelledby="cancel-title"><form method="dialog" class="cancel-dialog-card"><button class="dialog-close" aria-label="Cerrar">×</button><p class="eyebrow">Gestioná tu turno</p><h2 id="cancel-title">¿Querés cancelar esta reserva?</h2><p id="cancel-policy"></p><div class="cancel-actions"><button class="button button-outline" value="cancel">Mantener turno</button><button class="button button-dark" id="confirm-cancel" value="confirm">Cancelar turno</button></div></form></dialog>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </body>

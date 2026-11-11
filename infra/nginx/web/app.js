@@ -299,6 +299,8 @@ async function loadAccount() {
     const roles = Array.isArray(user.roles) ? user.roles : [];
     const isClient = roles.includes("cliente");
     $("#points-panel").classList.toggle("hidden", !isClient);
+    $("#ghostkitchen-panel").classList.toggle("hidden", !isClient);
+    $("#profile-ghostkitchen").classList.toggle("hidden", !isClient);
     $("#professional-panel").classList.toggle("hidden", !roles.includes("profesional"));
     $("#admin-panel").classList.toggle("hidden", !roles.some((role) => ["administrador", "superadministrador"].includes(role)));
     $("#auth-form").closest(".account-card").classList.add("hidden");
@@ -316,6 +318,8 @@ async function loadAccount() {
 function showSignedOut() {
   state.user = null;
   $("#points-panel").classList.add("hidden");
+  $("#ghostkitchen-panel").classList.add("hidden");
+  $("#profile-ghostkitchen").classList.add("hidden");
   $("#professional-panel").classList.add("hidden");
   $("#admin-panel").classList.add("hidden");
   $("#profile-panel").classList.add("hidden");

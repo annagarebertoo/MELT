@@ -101,6 +101,8 @@ services:
       BENEFICIOS_PARTNER_KEY: ${BENEFICIOS_PARTNER_KEY:-}
       MONGODB_URI: mongodb://mongodb:27017
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
+      GHOSTKITCHEN_API_KEY: ${GHOSTKITCHEN_API_KEY:-}
+      GHOSTKITCHEN_BASE_URL: ${GHOSTKITCHEN_BASE_URL:-}
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
       mongodb:

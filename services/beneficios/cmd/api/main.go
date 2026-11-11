@@ -178,6 +178,7 @@ func crearRouter(s *Servidor) *gin.Engine {
 	r.POST("/internal/invitaciones/confirmar", s.confirmarInvitacionInterna)
 	r.GET("/mis-puntos", s.requiereCliente(), s.misPuntos)
 	s.agregarRutasPrograma(r)
+	s.agregarRutasGhostKitchen(r)
 	return r
 }
 func errorJSON(c *gin.Context, status int, code, message string) {
