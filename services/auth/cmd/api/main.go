@@ -28,19 +28,22 @@ var rolesValidos = map[string]bool{
 }
 
 type Usuario struct {
-	ID           string    `bson:"id" json:"id"`
-	Nombre       string    `bson:"nombre" json:"nombre"`
-	Email        string    `bson:"email" json:"email"`
-	PasswordHash string    `bson:"passwordHash" json:"-"`
-	Roles        []string  `bson:"roles" json:"roles"`
-	Activo       bool      `bson:"activo" json:"activo"`
-	CreadoEn     time.Time `bson:"creadoEn" json:"creadoEn"`
+	ID                    string    `bson:"id" json:"id"`
+	Nombre                string    `bson:"nombre" json:"nombre"`
+	Email                 string    `bson:"email" json:"email"`
+	PasswordHash          string    `bson:"passwordHash" json:"-"`
+	Roles                 []string  `bson:"roles" json:"roles"`
+	Activo                bool      `bson:"activo" json:"activo"`
+	CreadoEn              time.Time `bson:"creadoEn" json:"creadoEn"`
+	EmailVerificado       bool      `bson:"emailVerificado,omitempty" json:"emailVerificado"`
+	AcreditacionPendiente string    `bson:"acreditacionPendiente,omitempty" json:"-"`
 }
 
 type registroRequest struct {
-	Nombre   string `json:"nombre" binding:"required"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=8"`
+	Nombre          string `json:"nombre" binding:"required"`
+	Email           string `json:"email" binding:"required,email"`
+	Password        string `json:"password" binding:"required,min=8"`
+	InvitacionToken string `json:"invitacionToken,omitempty"`
 }
 
 type crearUsuarioRequest struct {
@@ -56,11 +59,12 @@ type loginRequest struct {
 }
 
 type authServer struct {
-	client       *mongo.Client
-	users        *mongo.Collection
-	jwtSecret    []byte
-	tokenTTL     time.Duration
-	claveInterna string
+	client        *mongo.Client
+	users         *mongo.Collection
+	jwtSecret     []byte
+	tokenTTL      time.Duration
+	claveInterna  string
+	beneficiosURL string
 }
 
 type claims struct {
@@ -98,6 +102,9 @@ func main() {
 	if err != nil {
 		log.Fatal("no se pudo crear el índice de email")
 	}
+	if _, err := users.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "acreditacionPendiente", Value: 1}, {Key: "acreditacionIntentoEn", Value: 1}}, Options: options.Index().SetSparse(true).SetName("ix_acreditaciones_pendientes")}); err != nil {
+		log.Fatal("no se pudo preparar la entrega de acreditaciones")
+	}
 	if err := crearAdminInicial(ctx, users); err != nil {
 		log.Fatal("no se pudo configurar el administrador inicial")
 	}
@@ -109,7 +116,10 @@ func main() {
 		}
 		ttl = minutes
 	}
-	s := &authServer{client: client, users: users, jwtSecret: []byte(secret), tokenTTL: ttl, claveInterna: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY"))}
+	s := &authServer{client: client, users: users, jwtSecret: []byte(secret), tokenTTL: ttl, claveInterna: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY")), beneficiosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("BENEFICIOS_URL")), "/")}
+	workerCtx, stopWorker := context.WithCancel(context.Background())
+	defer stopWorker()
+	go s.recuperarAcreditaciones(workerCtx)
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
 		port = "8084"
@@ -132,6 +142,8 @@ func (s *authServer) router() *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"servicio": "auth", "estado": "ok"})
 	})
 	r.GET("/internal/usuarios/:id", s.usuarioInterno)
+	r.POST("/internal/usuarios/buscar", s.buscarUsuarioInterno)
+	r.POST("/internal/usuarios/verificar-email", s.verificarEmailInterno)
 	r.POST("/registro", s.registrarCliente)
 	r.POST("/login", s.login)
 	r.GET("/me", s.requiereAuth(), s.me)
@@ -153,11 +165,28 @@ func (s *authServer) registrarCliente(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "PASSWORD_INVALIDA", "message": "La contraseña debe tener entre 8 y 72 bytes."}})
 		return
 	}
-	usuario, err := s.nuevoUsuario(c, req.Nombre, req.Email, req.Password, []string{"cliente"})
+	solicitud := ""
+	if req.InvitacionToken != "" {
+		var e error
+		solicitud, e = s.validarInvitacion(c.Request.Context(), req.InvitacionToken, req.Email)
+		if e != nil {
+			responderErrorInvitacion(c, e)
+			return
+		}
+	}
+	usuario, err := s.nuevoUsuario(c, req.Nombre, req.Email, req.Password, []string{"cliente"}, solicitud)
 	if err != nil {
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"usuario": usuario})
+	respuesta := gin.H{"usuario": usuario}
+	if solicitud != "" {
+		estado := "pendiente_reintento"
+		if s.entregarAcreditacion(c.Request.Context(), usuario) == nil {
+			estado = "acreditada"
+		}
+		respuesta["acreditacion"] = gin.H{"solicitudId": solicitud, "estado": estado}
+	}
+	c.JSON(http.StatusCreated, respuesta)
 }
 
 func (s *authServer) crearUsuario(c *gin.Context) {
@@ -211,7 +240,7 @@ func passwordValida(password string) bool {
 	return len([]byte(password)) >= 8 && len([]byte(password)) <= 72
 }
 
-func (s *authServer) nuevoUsuario(c *gin.Context, nombre, email, password string, roles []string) (*Usuario, error) {
+func (s *authServer) nuevoUsuario(c *gin.Context, nombre, email, password string, roles []string, invitacion ...string) (*Usuario, error) {
 	nombre = strings.TrimSpace(nombre)
 	email = strings.ToLower(strings.TrimSpace(email))
 	if nombre == "" {
@@ -224,6 +253,10 @@ func (s *authServer) nuevoUsuario(c *gin.Context, nombre, email, password string
 		return nil, err
 	}
 	usuario := &Usuario{ID: bson.NewObjectID().Hex(), Nombre: nombre, Email: email, PasswordHash: string(hash), Roles: roles, Activo: true, CreadoEn: time.Now().UTC()}
+	if len(invitacion) > 0 && invitacion[0] != "" {
+		usuario.AcreditacionPendiente = invitacion[0]
+		usuario.EmailVerificado = true
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	if _, err := s.users.InsertOne(ctx, usuario); err != nil {

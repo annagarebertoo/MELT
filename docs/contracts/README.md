@@ -144,3 +144,8 @@ El gateway verifica la sesión en las rutas privadas de Reservas y Beneficios. P
 Las operaciones `POST /api/v1/catalogo/profesionales`, `POST /api/v1/catalogo/tratamientos` y `PUT /api/v1/catalogo/tratamientos/{id}` son administrativas, no parte del contrato público de solo lectura. Requieren Bearer válido con rol administrador o superadministrador. Para habilitar reservas, el ID debe figurar en `profesionalesIds` del tratamiento, el perfil debe incluir ese tratamiento en `tratamientosIds` y Reservas debe tener una agenda activa para el mismo ID.
 
 La guía de [configuración y prueba del flujo web de reservas](../RESERVAS-WEB.md) documenta el orden de carga, la agenda y el pago de prueba.
+
+
+### Flujo por email y registro seguro
+
+La API v1.1 admite `email` en lugar de `usuarioId`, `referencia` en lugar de `solicitudId` y `descripcion` opcional, en `/api/v1/beneficios/acreditaciones` o `/acreditar-puntos`. Sin cuenta verificada devuelve 202 con un enlace de registro; al registrarse o iniciar sesión desde ese enlace se vincula y acredita una sola vez. El consumidor entrega el enlace privadamente al destinatario. Configurar `BENEFICIOS_INVITATION_SECRET` y `MELT_PUBLIC_URL` en Beneficios y `BENEFICIOS_URL` en Auth. No hay reglas de membresías ni canje manual de códigos. Ver [manual completo](../ACREDITACION-PUNTOS.md) para contrato, seguridad, vencimiento, recuperación y pruebas.

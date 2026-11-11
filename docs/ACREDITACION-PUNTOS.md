@@ -74,8 +74,7 @@ revisada de identidad, igual que antes de este cambio.
 No mezclar versiones antiguas y nuevas de Auth/Beneficios: detener escritores
 antiguos, respaldar datos e índices, desplegar ambos servicios y Gateway juntos.
 El rollback requiere revisar el índice de email antes de restaurarlo, ya que las
-cuentas nuevas pueden no tener email en Beneficios. El endpoint interno de Auth
-solo devuelve 204/404, exige clave interna y está bloqueado en el gateway. En Render,
+cuentas nuevas pueden no tener email en Beneficios. La consulta interna por ID de Auth devuelve 204/404; todas las rutas internas exigen clave interna y están bloqueadas en el gateway. En Render,
 preferir servicios privados/red interna y configurar AUTH_URL de Beneficios con
 la URL confiable de Auth (HTTPS si se usa una dirección pública). Aunque Beneficios
 quede publicado, `/mis-puntos` exige un Bearer validado con Auth y
@@ -115,3 +114,84 @@ además el acceso directo contra Auth real, ejecutar el smoke desde la red Docke
 con `BENEFICIOS_DIRECT_URL=http://beneficios:8083` y `BASE_URL=http://gateway`.
 Sin esa variable, el smoke comprueba las rutas del gateway; las pruebas Go de
 middleware siguen verificando el rechazo de headers falsificados.
+
+## Acreditaciones pendientes y enlace seguro (v1.1)
+
+El consumidor decide los puntos; MELT no consulta planes ni membresías. Se mantiene
+el contrato por `usuarioId`. Ambos endpoints `/acreditar-puntos` y `/acreditaciones`
+admiten exactamente un destinatario (`usuarioId` o `email`) y exactamente una
+referencia (`solicitudId` o `referencia`). `descripcion` es opcional, hasta 500
+caracteres. No se ingresan códigos manualmente ni hay puntos fijos por registro.
+
+Ejemplo servidor a servidor, con Content-Type application/json y X-Partner-Key:
+
+```json
+{"email":"persona@example.com","puntos":500,"referencia":"gym-operacion-001","descripcion":"Puntos externos"}
+```
+
+- Cuenta activa con email verificado: 201 y movimiento con saldo actualizado.
+- Sin cuenta o con email todavía no verificado: 202 con `solicitudId`,
+  `estado: pendiente`, `puntos: 500`, `puntosAcreditados: 0`, `registroUrl` y `venceEn`.
+  No modifica ningún saldo hasta completar la vinculación.
+- El consumidor entrega privadamente `registroUrl` al destinatario. MELT no envía
+  correos. La seguridad depende de que el consumidor compruebe el email y entregue
+  el enlace únicamente a su titular; no debe publicarlo ni registrarlo en logs.
+- La web abre el formulario habitual, fija el email del destinatario y envía
+  `invitacionToken` al registro. Auth valida el enlace antes de crear la cuenta.
+  Después crea el usuario, vincula la operación y acredita automáticamente.
+- Si ya tiene cuenta, inicia sesión desde el mismo enlace. La confirmación exige
+  Bearer de esa cuenta, rol cliente y email coincidente. La posesión del enlace
+  entregado por el canal confiable verifica ese email. No basta conocer el email.
+- El registro ordinario sigue sin puntos automáticos y no depende de Beneficios.
+  Login sigue funcionando sin Beneficios. Solo registrar con invitación requiere
+  validarlo. Si la acreditación falla después de crear la cuenta, Auth conserva
+  una entrega pendiente y reintenta cada cinco segundos, incluso tras reiniciar.
+
+Una cuenta antigua sin email verificado requiere el enlace antes de recibir su
+primera acreditación por email; esto evita otorgar puntos a alguien que haya
+registrado una dirección ajena. Por `usuarioId` continúa la acreditación directa.
+
+El token es impredecible, ligado al destinatario y operación, de un solo uso para
+vincular, con vencimiento de siete días. Se guarda hash y nonce, no el token en
+claro. La URL usa fragmento `/#invitacion=...`; la web lo retira de la dirección y
+lo conserva en sessionStorage hasta confirmar o descartarlo. Un reintento del
+mismo usuario ya acreditado es idempotente; otra cuenta no puede reclamarlo.
+
+La referencia es global entre operaciones pendientes y acreditadas. Repetir los
+mismos datos devuelve 202 pendiente o 200 acreditada sin duplicar; cambiarlos
+devuelve 409. Token vencido: 410. La operación pendiente no se elimina por TTL:
+el partner puede repetir exactamente la solicitud para renovar el enlace vencido.
+Saldo e historial se actualizan juntos mediante transacción; ante desborde (422)
+se conserva el pendiente sin incrementar el saldo.
+
+### Configuración adicional
+
+- Beneficios: `BENEFICIOS_INVITATION_SECRET`, secreto estable distinto de las otras
+  claves, de al menos 32 caracteres; `MELT_PUBLIC_URL`, origen público de la web
+  (HTTPS; se permite HTTP únicamente para localhost en desarrollo).
+- Auth: `BENEFICIOS_URL=http://beneficios:8083` en Compose; en Render usar la URL
+  confiable del servicio. Beneficios conserva `AUTH_URL=http://auth:8084`.
+- Ambos comparten `MELT_INTERNAL_KEY` secreto. Auth sigue usando `AUTH_JWT_SECRET`;
+  solo el consumidor conoce `BENEFICIOS_PARTNER_KEY`. No exponer estas variables
+  en el frontend. Compose ya configura las URLs internas.
+- Configurar el secreto de invitaciones antes de habilitar el flujo. Rotarlo
+  invalida los enlaces pendientes; requiere un procedimiento coordinado de
+  renovación. No cambiarlo arbitrariamente en cada arranque.
+- NGINX local y Render permiten consulta de enlace y acreditación de partner sin
+  sesión de usuario; confirmar exige sesión. Los prefijos internos devuelven 404.
+  Auth verifica internamente invitaciones y Beneficios verifica las sesiones aun
+  cuando se accede directamente; usar red privada entre servicios cuando exista.
+
+```powershell
+$env:BENEFICIOS_INVITATION_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+$env:MELT_PUBLIC_URL = 'http://localhost:8080'
+```
+
+### Verificación del nuevo flujo
+
+Con un entorno y una base exclusivamente de prueba, ejecutar
+`scripts/smoke-invitaciones.py` con `BASE_URL` y `BENEFICIOS_PARTNER_KEY`.
+Prueba 100, 500 y 137 puntos, registro por enlace, cuenta existente, reintentos,
+conflictos, saldo/historial y rutas internas. Las pruebas Go agregan concurrencia,
+reinicios, recuperación de entrega, vencimiento, cambio de destinatario y rollback.
+No usar el smoke sobre datos de producción: crea cuentas y movimientos reales.

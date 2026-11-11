@@ -89,7 +89,7 @@ La arquitectura interna de los microservicios combinará al menos dos estilos tr
 
 El servicio de autenticación se publica por el gateway en `/api/v1/auth`. Permite registrar clientes, iniciar sesión y consultar la cuenta actual. Las cuentas internas se crean con permisos administrativos; el registro público no permite elegir roles. Ver [guía local](docs/LOCAL-DEV.md) y [contrato OpenAPI](docs/contracts/autenticacion-v1.openapi.yaml).
 
-Las rutas de negocio protegidas integran autenticación y permisos por operación. Reservas aplica una matriz de roles con denegación por defecto y comprueba además la propiedad de turnos y agendas en cada handler. La recuperación de contraseña y la verificación de email quedan pendientes.
+Las rutas de negocio protegidas integran autenticación y permisos por operación. Reservas aplica una matriz de roles con denegación por defecto y comprueba además la propiedad de turnos y agendas en cada handler. La recuperación de contraseña y la verificación general de email quedan pendientes; el flujo de invitaciones verifica la dirección mediante el enlace seguro entregado al destinatario.
 
 ## Ejecución local
 
@@ -224,9 +224,9 @@ No guardes el Access Token en el repositorio, en el frontend ni en logs. Usá cu
 `puntos` y exige `X-Partner-Key`. Verifica la cuenta en Auth, acumula puntos y
 registra el movimiento mediante una transacción MongoDB. Repetir una solicitud
 no duplica puntos; reutilizar su ID con otros datos devuelve 409.
-Registro y login ya no generan acreditaciones.
+El registro normal y el login no regalan puntos. Por email se puede guardar una acreditación pendiente y devolver un enlace seguro; el registro desde ese enlace vincula y acredita automáticamente. Una cuenta existente sin email verificado confirma el enlace con su sesión. El consumidor entrega el enlace privadamente al destinatario.
 
-Configurar `BENEFICIOS_PARTNER_KEY`, `MELT_INTERNAL_KEY` y `AUTH_URL` de Beneficios.
+Configurar `BENEFICIOS_PARTNER_KEY`, `MELT_INTERNAL_KEY`, `AUTH_URL`, `BENEFICIOS_INVITATION_SECRET` y `MELT_PUBLIC_URL` en Beneficios; `BENEFICIOS_URL` en Auth.
 MongoDB debe ser replica set (Compose lo inicializa); Atlas admite transacciones.
 Ver [guía y migración](docs/ACREDITACION-PUNTOS.md) y
 [contrato OpenAPI](docs/contracts/acreditar-puntos-v1.openapi.yaml).

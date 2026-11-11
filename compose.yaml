@@ -75,6 +75,7 @@ services:
       PORT: "8084"
       MONGODB_URI: mongodb://mongodb:27017
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Defini AUTH_JWT_SECRET en tu entorno}
+      BENEFICIOS_URL: http://beneficios:8083
       AUTH_TOKEN_TTL_MINUTES: ${AUTH_TOKEN_TTL_MINUTES:-15}
       AUTH_ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL:-}
       AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-}
@@ -90,6 +91,8 @@ services:
     environment:
       PORT: "8083"
       AUTH_URL: http://auth:8084
+      BENEFICIOS_INVITATION_SECRET: ${BENEFICIOS_INVITATION_SECRET:-}
+      MELT_PUBLIC_URL: ${MELT_PUBLIC_URL:-http://localhost:8080}
       BENEFICIOS_PARTNER_KEY: ${BENEFICIOS_PARTNER_KEY:-}
       MONGODB_URI: mongodb://mongodb:27017
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}

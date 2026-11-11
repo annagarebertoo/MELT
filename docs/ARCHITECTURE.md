@@ -323,7 +323,7 @@ Los roles definidos son `cliente`, `profesional`, `recepcion`, `administrador` y
 
 El contrato está en [`docs/contracts/autenticacion-v1.openapi.yaml`](contracts/autenticacion-v1.openapi.yaml), y la ejecución local en [`docs/LOCAL-DEV.md`](LOCAL-DEV.md). `AUTH_JWT_SECRET` y las credenciales opcionales del superadministrador inicial se inyectan por entorno; no deben guardarse en el repositorio.
 
-**Límites conocidos:** no hay recuperación de contraseña ni verificación de email; los tokens emitidos no tienen revocación inmediata. Reservas aplica autenticación, permisos por operación y autorización por recurso; Catálogo protege las operaciones administrativas mediante verificación de rol contra Auth. Beneficios conserva la autenticación independiente de la integración externa mediante clave de partner.
+**Límites conocidos:** no hay recuperación de contraseña ni verificación general de email (las invitaciones sí verifican el destinatario mediante enlace seguro); los tokens emitidos no tienen revocación inmediata. Reservas aplica autenticación, permisos por operación y autorización por recurso; Catálogo protege las operaciones administrativas mediante verificación de rol contra Auth. Beneficios conserva la autenticación independiente de la integración externa mediante clave de partner.
 
 ### Estado implementado de identidad, catálogo y reservas (8/11/2026)
 
@@ -349,7 +349,7 @@ Auth ofrece `GET /internal/usuarios/:id`, protegido con `MELT_INTERNAL_KEY` y si
 datos personales en la respuesta; Beneficios lo consulta vía `AUTH_URL`. NGINX
 bloquea el prefijo interno en ambos servicios. El POST público exige la clave
 `BENEFICIOS_PARTNER_KEY` mediante `X-Partner-Key`; el frontend no recibe secretos.
-Registro y login no dependen de Beneficios. MongoDB requiere replica set.
+Registro ordinario y login no dependen de Beneficios; el registro con invitación valida el enlace y conserva una entrega recuperable si la acreditación queda pendiente. MongoDB requiere replica set.
 Ver [migración y límites](ACREDITACION-PUNTOS.md).
 
 ### Protección de la consulta de puntos
@@ -359,3 +359,8 @@ valida el Bearer mediante `/verify` de Auth y exige el rol cliente confirmado
 por Auth. Se comprueba así la cuenta activa también en accesos directos al servicio.
 NGINX local y Render reenvían Authorization y eliminan los headers X-Auth-User-* hacia
 Beneficios. La clave de partner se conserva exclusivamente para la acreditación externa.
+
+
+### Flujo por email y registro seguro
+
+La API v1.1 admite `email` en lugar de `usuarioId`, `referencia` en lugar de `solicitudId` y `descripcion` opcional, en `/api/v1/beneficios/acreditaciones` o `/acreditar-puntos`. Sin cuenta verificada devuelve 202 con un enlace de registro; al registrarse o iniciar sesión desde ese enlace se vincula y acredita una sola vez. El consumidor entrega el enlace privadamente al destinatario. Configurar `BENEFICIOS_INVITATION_SECRET` y `MELT_PUBLIC_URL` en Beneficios y `BENEFICIOS_URL` en Auth. No hay reglas de membresías ni canje manual de códigos. Ver [manual completo](ACREDITACION-PUNTOS.md) para contrato, seguridad, vencimiento, recuperación y pruebas.

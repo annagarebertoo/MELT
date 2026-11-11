@@ -1,11 +1,15 @@
 openapi: 3.0.3
 info:
   title: MELT - Acreditación externa de puntos
-  version: 1.0.0
+  version: 1.1.0
   description: >-
     API servidor a servidor. El consumidor calcula la cantidad; MELT valida al
     usuario activo en Auth, acumula saldo y registra un movimiento atómico.
-    solicitudId es global y no vence. Las repeticiones devuelven el resultado original.
+    solicitudId o referencia identifica una operación global y no vence.
+    El destinatario puede ser usuarioId o email (exactamente uno).
+    Con email verificado de una cuenta activa, acredita directamente; en otro
+    caso crea una operación pendiente y devuelve registroUrl con token seguro.
+    Un enlace no decide puntos: solo vincula una acreditación ya recibida.
 servers:
   - url: http://localhost:8080/api/v1
     description: Gateway local; usar HTTPS en el despliegue externo.
@@ -40,9 +44,15 @@ paths:
                 saldoPuntos: 250
                 tipo: acreditacion_externa
                 creadoEn: '2026-11-10T18:00:00Z'
+        '202':
+          description: Pendiente de registro o verificación del destinatario. No suma puntos todavía.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pendiente'
         '200':
           description: >-
-            solicitudId repetido con el mismo usuario y puntos. No acredita otra vez.
+            solicitudId o referencia repetidos con el mismo destinatario, puntos y descripcion. No acredita otra vez.
             Devuelve el movimiento original y su saldo resultante, incluso si hubo
             operaciones posteriores. El saldo actual se consulta con mis-puntos.
           content:
@@ -65,13 +75,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: USUARIO_NO_EXISTE. Usuario inexistente o inactivo en Auth.
+          description: USUARIO_NO_EXISTE. UsuarioId inexistente o inactivo en Auth. Por email, la ausencia crea un pendiente.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: SOLICITUD_EN_CONFLICTO. solicitudId usado con otro usuario o cantidad.
+          description: SOLICITUD_EN_CONFLICTO o CUENTA_NO_DISPONIBLE. Referencia usada con otros datos o cuenta inactiva.
           content:
             application/json:
               schema:
@@ -101,24 +111,196 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /beneficios/acreditaciones:
+    post:
+      operationId: crearAcreditacion
+      summary: Alias de acreditar-puntos; admite referencia y email.
+      security:
+        - PartnerKey: []
+      requestBody:
+        $ref: '#/paths/~1beneficios~1acreditar-puntos/post/requestBody'
+      responses:
+        '200':
+          $ref: '#/paths/~1beneficios~1acreditar-puntos/post/responses/200'
+        '201':
+          $ref: '#/paths/~1beneficios~1acreditar-puntos/post/responses/201'
+        '202':
+          $ref: '#/paths/~1beneficios~1acreditar-puntos/post/responses/202'
+        '400':
+          $ref: '#/paths/~1beneficios~1acreditar-puntos/post/responses/400'
+        '401':
+          $ref: '#/paths/~1beneficios~1acreditar-puntos/post/responses/401'
+        '404':
+          $ref: '#/paths/~1beneficios~1acreditar-puntos/post/responses/404'
+        '409':
+          $ref: '#/paths/~1beneficios~1acreditar-puntos/post/responses/409'
+        '415':
+          $ref: '#/paths/~1beneficios~1acreditar-puntos/post/responses/415'
+        '422':
+          $ref: '#/paths/~1beneficios~1acreditar-puntos/post/responses/422'
+        '503':
+          $ref: '#/paths/~1beneficios~1acreditar-puntos/post/responses/503'
+  /beneficios/invitaciones/consultar:
+    post:
+      operationId: consultarInvitacion
+      summary: Consultar la invitación usando su token; nunca incluir el token en query strings.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenInvitacion'
+      responses:
+        '200':
+          description: Datos para mostrar el registro. Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [email, puntos, estado, venceEn]
+                properties:
+                  email:
+                    type: string
+                    format: email
+                  puntos:
+                    type: integer
+                    format: int64
+                  estado:
+                    type: string
+                    enum: [pendiente, acreditada]
+                  venceEn:
+                    type: string
+                    format: date-time
+        '400':
+          description: Cuerpo inválido o Content-Type incorrecto.
+        '404':
+          description: INVITACION_INVALIDA.
+        '410':
+          description: INVITACION_VENCIDA. La operación no se borra; el partner puede pedir otro enlace repitiendo la misma solicitud.
+        '503':
+          description: Servicio no disponible.
+  /beneficios/invitaciones/confirmar:
+    post:
+      operationId: confirmarInvitacion
+      summary: Vincular con la cuenta autenticada del mismo email y acreditar una única vez.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenInvitacion'
+      responses:
+        '201':
+          description: Invitación acreditada; email verificado por posesión del enlace y sesión de la misma cuenta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Movimiento'
+        '200':
+          description: Reintento idempotente de la cuenta que ya recibió los puntos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Movimiento'
+        '400':
+          description: Cuerpo inválido.
+        '401':
+          description: Bearer ausente, inválido o cuenta inactiva.
+        '403':
+          description: Rol no cliente, email distinto o invitación usada por otra cuenta.
+        '404':
+          description: Token inválido.
+        '410':
+          description: Token pendiente vencido.
+        '422':
+          description: El saldo excede el máximo; conserva la operación pendiente.
+        '503':
+          description: Auth o Beneficios no disponibles.
 components:
   securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
     PartnerKey:
       type: apiKey
       in: header
       name: X-Partner-Key
       description: Secreto BENEFICIOS_PARTNER_KEY compartido solo con el servidor consumidor.
   schemas:
+    TokenInvitacion:
+      type: object
+      required: [token]
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+          minLength: 43
+          maxLength: 43
+    Pendiente:
+      type: object
+      required: [solicitudId, estado, puntos, puntosAcreditados, registroUrl, venceEn]
+      properties:
+        solicitudId:
+          type: string
+        estado:
+          type: string
+          enum: [pendiente]
+        puntos:
+          type: integer
+          format: int64
+        puntosAcreditados:
+          type: integer
+          enum: [0]
+        registroUrl:
+          type: string
+          format: uri
+          description: Enlace con token en fragmento; el consumidor lo entrega de forma privada al email destinatario. Vence en siete días.
+        venceEn:
+          type: string
+          format: date-time
     Acreditacion:
       type: object
       additionalProperties: false
-      required: [solicitudId, usuarioId, puntos]
+      required: [puntos]
+      allOf:
+        - oneOf:
+            - required: [solicitudId]
+              not:
+                required: [referencia]
+            - required: [referencia]
+              not:
+                required: [solicitudId]
+        - oneOf:
+            - required: [usuarioId]
+              not:
+                required: [email]
+            - required: [email]
+              not:
+                required: [usuarioId]
       properties:
         solicitudId:
           type: string
           minLength: 1
           maxLength: 128
           description: ID global de operación; máximo 128 caracteres Unicode, sin espacios extremos.
+        referencia:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Alias de solicitudId. Enviar solo uno de ambos nombres.
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          pattern: '^[\x00-\x7F]+$'
+          description: Email ASCII del destinatario; se normaliza a minúsculas y sin espacios extremos.
+        descripcion:
+          type: string
+          maxLength: 500
         usuarioId:
           type: string
           minLength: 1
@@ -144,6 +326,12 @@ components:
           type: integer
           format: int64
           maximum: 9007199254740991
+        descripcion:
+          type: string
+          maxLength: 500
+        estado:
+          type: string
+          enum: [acreditada]
         tipo:
           type: string
           enum: [acreditacion_externa]

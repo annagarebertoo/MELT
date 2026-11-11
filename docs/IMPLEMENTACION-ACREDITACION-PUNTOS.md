@@ -1,5 +1,28 @@
 # Implementación de acreditación externa de puntos
 
+## Ampliación actual: pendientes y enlace seguro
+
+La ampliación sin commit en `feature/api-acreditacion-puntos-externos` incorpora
+email, referencia y descripción; pendientes persistentes y enlace con token de
+siete días; registro y login desde el enlace; verificación del destinatario;
+idempotencia global y recuperación durable de acreditaciones después del registro.
+El consumidor entrega privadamente el enlace. MELT no envía correos ni calcula puntos.
+El registro ordinario y login siguen sin regalar puntos.
+
+Se modificaron Auth, Beneficios, frontend y configuración de Gateway/Compose,
+contratos, documentación y CI; se añadieron pruebas Go y el smoke de invitaciones.
+No se modificaron los servicios de Catálogo, Reservas, Pagos ni la API externa consumida.
+Verificación local de la ampliación (base aislada, sin Render):
+- Auth y Beneficios: `go test -race -count=1 ./...` con MongoDB de prueba: aprobado.
+- Smoke real por Gateway: 49 comprobaciones de invitaciones aprobadas con cantidades
+  100, 500 y 137, más regresión de Auth/Gateway y seguridad directa de Beneficios.
+- Web: registro real desde enlace y saldo visible de 500 puntos, sin ingreso manual de código.
+- Contratos Auth y acreditación: validados con openapi-spec-validator.
+- NGINX local y Render: sintaxis válida; JavaScript y git diff sin errores.
+
+La descripción siguiente corresponde a la entrega anterior, antes de esta ampliación.
+Ver [manual vigente](ACREDITACION-PUNTOS.md).
+
 ## Rama y alcance
 
 Rama: `feature/api-acreditacion-puntos-externos`.

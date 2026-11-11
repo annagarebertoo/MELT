@@ -1,6 +1,8 @@
 const API = "/api/v1";
 const TOKEN_KEY = "melt.session";
 const CART_KEY = "melt.pending-cart";
+const INVITATION_KEY = "melt.pending-invitation";
+let invitation = null;
 const state = { page: 1, pageSize: 8, hasNext: false, search: "", category: "", priceMax: "", sort: "nombre", order: "asc", bookingTreatment: null, heldCartId: null, holdExpiresAt: null, holdTimer: null, cancelling: null, mode: "login" };
 
 const $ = (selector) => document.querySelector(selector);
@@ -179,6 +181,57 @@ function selectTreatment(item) {
   document.querySelector("#reservas").scrollIntoView({ behavior: "smooth" });
 }
 
+function invitationMessage(message) {
+  $("#invitation-panel").classList.remove("hidden");
+  $("#invitation-details").textContent = message;
+}
+
+function clearInvitation() {
+  invitation = null;
+  sessionStorage.removeItem(INVITATION_KEY);
+  $("#auth-email").readOnly = false;
+  $("#invitation-panel").classList.add("hidden");
+}
+
+async function initializeInvitation() {
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const incoming = params.get("invitacion");
+  if (incoming) {
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+    sessionStorage.setItem(INVITATION_KEY, incoming);
+  }
+  const pendingToken = sessionStorage.getItem(INVITATION_KEY);
+  if (!pendingToken) return;
+  try {
+    const info = await request("/beneficios/invitaciones/consultar", { method: "POST", body: JSON.stringify({ token: pendingToken }) });
+    invitation = { ...info, token: pendingToken };
+    if (!token()) {
+      setAuthMode(info.estado === "acreditada" ? "login" : "register");
+      $("#auth-email").value = info.email;
+      $("#auth-email").readOnly = true;
+    }
+    invitationMessage(info.estado === "acreditada" ? "Este enlace ya fue utilizado. Ingresá con tu cuenta para consultar el saldo." : `Tenés ${info.puntos} puntos pendientes para ${info.email}. Creá tu cuenta o ingresá si ya tenés una; los puntos se vincularán automáticamente.`);
+    $("#auth-panel").scrollIntoView({ behavior: "smooth" });
+  } catch (error) {
+    // Un fallo temporal no descarta el enlace: se puede volver a abrir o recargar.
+    invitationMessage(error.message);
+  }
+}
+
+async function confirmInvitation() {
+  if (!invitation || !token()) return;
+  try {
+    const result = await request("/beneficios/invitaciones/confirmar", { method: "POST", body: JSON.stringify({ token: invitation.token }) });
+    invitation = null;
+    sessionStorage.removeItem(INVITATION_KEY);
+    $("#auth-email").readOnly = false;
+    invitationMessage(`Acreditación confirmada: ${result.puntos} puntos. Tu saldo después de esa operación es ${result.saldoPuntos}.`);
+    $("#discard-invitation").textContent = "Cerrar aviso";
+  } catch (error) {
+    invitationMessage(error.message + " Podés volver a intentar actualizando tu cuenta; si acabás de registrarte, MELT también recupera la acreditación automáticamente.");
+  }
+}
+
 function setAuthMode(mode) {
   state.mode = mode;
   const register = mode === "register";
@@ -199,11 +252,20 @@ async function submitAuth(event) {
   const email = $("#auth-email").value.trim();
   const password = $("#auth-password").value;
   const path = state.mode === "register" ? "/auth/registro" : "/auth/login";
-  const body = state.mode === "register" ? { nombre: name, email, password } : { email, password };
+  const body = state.mode === "register" ? { nombre: name, email, password, ...(invitation ? { invitacionToken: invitation.token } : {}) } : { email, password };
   $("#auth-submit").disabled = true;
   setStatus("#auth-status", state.mode === "register" ? "Creando tu cuenta…" : "Ingresando…");
   try {
     const result = await request(path, { method: "POST", body: JSON.stringify(body) });
+    if (state.mode === "register" && invitation) {
+      const session = await request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      sessionStorage.setItem(TOKEN_KEY, session.token);
+      $("#auth-form").reset();
+      updateAuthChrome();
+      await loadAccount();
+      showToast(result.acreditacion?.estado === "pendiente_reintento" ? "Tu cuenta está lista. Si la acreditación sigue pendiente, MELT la reintentará automáticamente." : "Tu cuenta está lista y los puntos están vinculados.");
+      return;
+    }
     if (state.mode === "register") {
       setStatus("#auth-status", "Tu cuenta está lista. Ingresá con tu email y contraseña.");
       $("#auth-password").value = "";
@@ -234,6 +296,7 @@ async function loadAccount() {
     $("#profile-initials").textContent = (user.nombre || "M").trim().slice(0, 1).toLocaleUpperCase("es-AR");
     $("#my-bookings").classList.remove("hidden");
     $("#auth-form").closest(".account-card").classList.add("hidden");
+    await confirmInvitation();
     await Promise.all([loadPoints(), loadBookings()]);
   } catch {
     sessionStorage.removeItem(TOKEN_KEY);
@@ -466,6 +529,10 @@ function initialize() {
   $("#login-tab").addEventListener("click", () => setAuthMode("login"));
   $("#register-tab").addEventListener("click", () => setAuthMode("register"));
   $("#auth-form").addEventListener("submit", submitAuth);
+  $("#discard-invitation").addEventListener("click", clearInvitation);
+  window.addEventListener("hashchange", () => {
+    if (new URLSearchParams(window.location.hash.slice(1)).has("invitacion")) initializeInvitation().then(() => loadAccount());
+  });
   $("#availability-form").addEventListener("submit", loadAvailability);
   $("#booking-treatment").addEventListener("change", updateProfessionals);
   $("#booking-date").addEventListener("change", () => { $("#time-slots").innerHTML = ""; updateSteps(1); });
@@ -499,7 +566,7 @@ function initialize() {
   dateInput.value = dateInput.min;
   updateAuthChrome();
   loadTreatments();
-  loadAccount();
+  initializeInvitation().then(() => loadAccount());
   restorePendingCart();
 }
 

@@ -34,12 +34,15 @@ type AcreditarRequest struct {
 	Puntos      int64  `json:"puntos"`
 }
 type Movimiento struct {
-	SolicitudID string    `bson:"_id" json:"solicitudId"`
-	UsuarioID   string    `bson:"usuarioId" json:"usuarioId"`
-	Puntos      int64     `bson:"puntos" json:"puntos"`
-	SaldoPuntos int64     `bson:"saldoPuntos" json:"saldoPuntos"`
-	Tipo        string    `bson:"tipo" json:"tipo"`
-	CreadoEn    time.Time `bson:"creadoEn" json:"creadoEn"`
+	SolicitudID  string    `bson:"_id" json:"solicitudId"`
+	UsuarioID    string    `bson:"usuarioId" json:"usuarioId"`
+	Puntos       int64     `bson:"puntos" json:"puntos"`
+	SaldoPuntos  int64     `bson:"saldoPuntos" json:"saldoPuntos"`
+	Tipo         string    `bson:"tipo" json:"tipo"`
+	CreadoEn     time.Time `bson:"creadoEn" json:"creadoEn"`
+	EmailDestino string    `bson:"emailDestino,omitempty" json:"-"`
+	Descripcion  string    `bson:"descripcion,omitempty" json:"descripcion,omitempty"`
+	Estado       string    `bson:"estado,omitempty" json:"estado,omitempty"`
 }
 type Cuenta struct {
 	UsuarioID   string `bson:"usuarioId"`
@@ -59,6 +62,11 @@ type Servidor struct {
 	claveAPI         string
 	verificarUsuario func(context.Context, string) error
 	verificarSesion  func(context.Context, string) (identidadCliente, error)
+	resolverEmail    func(context.Context, string) (string, error)
+	claveInterna     string
+	invitacionSecret []byte
+	publicURL        string
+	verificarEmail   func(context.Context, string, string) error
 }
 type almacenMongo struct {
 	cliente                *mongo.Client
@@ -86,7 +94,7 @@ func main() {
 	}
 	authURL := strings.TrimRight(strings.TrimSpace(os.Getenv("AUTH_URL")), "/")
 	claveInterna := strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY"))
-	s := &Servidor{cliente: cliente, almacen: a, claveAPI: strings.TrimSpace(os.Getenv("BENEFICIOS_PARTNER_KEY")), verificarUsuario: verificadorAuth(authURL, claveInterna), verificarSesion: verificadorSesionAuth(authURL)}
+	s := &Servidor{cliente: cliente, almacen: a, claveAPI: strings.TrimSpace(os.Getenv("BENEFICIOS_PARTNER_KEY")), verificarUsuario: verificadorAuth(authURL, claveInterna), verificarSesion: verificadorSesionAuth(authURL), resolverEmail: resolverEmailAuth(authURL, claveInterna), verificarEmail: verificadorEmailAuth(authURL, claveInterna), claveInterna: claveInterna, invitacionSecret: []byte(os.Getenv("BENEFICIOS_INVITATION_SECRET")), publicURL: strings.TrimRight(strings.TrimSpace(os.Getenv("MELT_PUBLIC_URL")), "/")}
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
 		port = "8083"
@@ -119,6 +127,9 @@ func (a *almacenMongo) preparar(ctx context.Context) error {
 	if _, err := a.registros.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "usuarioId", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true).SetName("uq_registro_gym_usuario")}); err != nil {
 		return err
 	}
+	if _, err = a.movimientos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "tokenHash", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true)}); err != nil {
+		return err
+	}
 	_, err = a.movimientos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "usuarioId", Value: 1}, {Key: "creadoEn", Value: 1}}})
 	return err
 }
@@ -135,6 +146,11 @@ func crearRouter(s *Servidor) *gin.Engine {
 		c.JSON(200, gin.H{"servicio": "beneficios", "estado": "ok"})
 	})
 	r.POST("/acreditar-puntos", s.acreditarPuntos)
+	r.POST("/acreditaciones", s.acreditarPuntos)
+	r.POST("/invitaciones/consultar", s.consultarInvitacion)
+	r.POST("/invitaciones/confirmar", s.requiereCliente(), s.confirmarInvitacionPublica)
+	r.POST("/internal/invitaciones/verificar", s.verificarInvitacionInterna)
+	r.POST("/internal/invitaciones/confirmar", s.confirmarInvitacionInterna)
 	r.GET("/mis-puntos", s.requiereCliente(), s.misPuntos)
 	return r
 }
@@ -156,8 +172,12 @@ func (s *Servidor) acreditarPuntos(c *gin.Context) {
 		return
 	}
 	req, err := decodificarAcreditacion(http.MaxBytesReader(c.Writer, c.Request.Body, 4096))
-	if err != nil || req.SolicitudID != strings.TrimSpace(req.SolicitudID) || req.UsuarioID != strings.TrimSpace(req.UsuarioID) || utf8.RuneCountInString(req.SolicitudID) == 0 || utf8.RuneCountInString(req.SolicitudID) > 128 || utf8.RuneCountInString(req.UsuarioID) == 0 || utf8.RuneCountInString(req.UsuarioID) > 128 || req.Puntos <= 0 || req.Puntos > maxPuntos {
-		errorJSON(c, 400, "DATOS_INVALIDOS", "solicitudId y usuarioId deben tener entre 1 y 128 caracteres Unicode sin espacios extremos; puntos debe ser un entero positivo hasta 9007199254740991.")
+	if err != nil || req.SolicitudID != strings.TrimSpace(req.SolicitudID) || req.UsuarioID != strings.TrimSpace(req.UsuarioID) || utf8.RuneCountInString(req.SolicitudID) == 0 || utf8.RuneCountInString(req.SolicitudID) > 128 || (req.Email == "" && (utf8.RuneCountInString(req.UsuarioID) == 0 || utf8.RuneCountInString(req.UsuarioID) > 128)) || utf8.RuneCountInString(req.Descripcion) > 500 || req.Puntos <= 0 || req.Puntos > maxPuntos {
+		errorJSON(c, 400, "DATOS_INVALIDOS", "Enviá solicitudId o referencia, usuarioId o email, puntos enteros positivos y descripcion opcional de hasta 500 caracteres.")
+		return
+	}
+	if req.Email != "" {
+		s.acreditarPorEmail(c, req)
 		return
 	}
 	if s.almacen == nil || s.verificarUsuario == nil {
@@ -170,7 +190,7 @@ func (s *Servidor) acreditarPuntos(c *gin.Context) {
 	// si Auth está caído, y garantiza conflicto por ID global con cualquier payload.
 	previo, err := s.almacen.buscarSolicitud(ctx, req.SolicitudID)
 	if err == nil {
-		movimiento, _, e := resolverRepetida(previo, req)
+		movimiento, _, e := resolverDetalle(previo, req.AcreditarRequest, "", req.Descripcion)
 		if e != nil {
 			errorJSON(c, 409, "SOLICITUD_EN_CONFLICTO", "solicitudId ya se utilizó con otros datos.")
 			return
@@ -190,7 +210,7 @@ func (s *Servidor) acreditarPuntos(c *gin.Context) {
 		}
 		return
 	}
-	movimiento, repetida, err := s.almacen.acreditar(ctx, req)
+	movimiento, repetida, err := acreditarEntrada(ctx, s.almacen, req.AcreditarRequest, "", req.Descripcion)
 	switch {
 	case errors.Is(err, errConflicto):
 		errorJSON(c, 409, "SOLICITUD_EN_CONFLICTO", "solicitudId ya se utilizó con otros datos.")
@@ -246,19 +266,22 @@ func verificadorAuth(base, clave string) func(context.Context, string) error {
 	}
 }
 func resolverRepetida(m Movimiento, req AcreditarRequest) (Movimiento, bool, error) {
-	if m.UsuarioID != req.UsuarioID || m.Puntos != req.Puntos {
-		return Movimiento{}, false, errConflicto
-	}
-	return m, true, nil
+	return resolverDetalle(m, req, "", "")
 }
 func (a *almacenMongo) acreditar(ctx context.Context, req AcreditarRequest) (Movimiento, bool, error) {
+	return a.acreditarDetalle(ctx, req, "", "")
+}
+func (a *almacenMongo) acreditarDetalle(ctx context.Context, req AcreditarRequest, email, descripcion string) (Movimiento, bool, error) {
 	// El _id de movimientos es la clave global de idempotencia. Ante una carrera
 	// de inserción se reconsulta luego del abort; jamás se incrementa fuera del commit.
 	for intento := 0; intento < 4; intento++ {
 		var previo Movimiento
 		err := a.movimientos.FindOne(ctx, bson.M{"_id": req.SolicitudID}).Decode(&previo)
 		if err == nil {
-			return resolverRepetida(previo, req)
+			if email != "" && previo.UsuarioID == "" && previo.EmailDestino == email && previo.Puntos == req.Puntos && previo.Descripcion == descripcion {
+				return Movimiento{}, false, errOperacionPendiente
+			}
+			return resolverDetalle(previo, req, email, descripcion)
 		}
 		if !errors.Is(err, mongo.ErrNoDocuments) {
 			return Movimiento{}, false, err
@@ -269,7 +292,7 @@ func (a *almacenMongo) acreditar(ctx context.Context, req AcreditarRequest) (Mov
 		}
 		var resultado Movimiento
 		_, err = session.WithTransaction(ctx, func(tx context.Context) (any, error) {
-			resultado = Movimiento{SolicitudID: req.SolicitudID, UsuarioID: req.UsuarioID, Puntos: req.Puntos, Tipo: "acreditacion_externa", CreadoEn: time.Now().UTC().Truncate(time.Millisecond)}
+			resultado = Movimiento{SolicitudID: req.SolicitudID, UsuarioID: req.UsuarioID, Puntos: req.Puntos, Tipo: "acreditacion_externa", CreadoEn: time.Now().UTC().Truncate(time.Millisecond), EmailDestino: email, Descripcion: descripcion, Estado: "acreditada"}
 			// Reservar primero la solicitud; el registro y el incremento se revierten juntos.
 			if _, e := a.movimientos.InsertOne(tx, resultado); e != nil {
 				return nil, e
