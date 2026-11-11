@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - develop
       - docs/correcciones-reglas-negocio
       - 'feature/**'
   pull_request:
@@ -19,18 +20,8 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      mongodb:
-        image: mongo:7
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     env:
-      AUTH_TEST_MONGODB_URI: mongodb://localhost:27017
+      AUTH_TEST_MONGODB_URI: mongodb://localhost:27017/?replicaSet=auth-test
     strategy:
       fail-fast: false
       matrix:
@@ -44,6 +35,24 @@ jobs:
         working-directory: ${{ matrix.service }}
     steps:
       - uses: actions/checkout@v4
+      - name: Iniciar MongoDB replica set para las pruebas
+        run: |
+          docker run -d --name melt-auth-test-mongodb -p 27017:27017 mongo:7 --replSet auth-test --bind_ip_all
+          for attempt in $(seq 1 30); do
+            if docker exec melt-auth-test-mongodb mongosh --quiet --eval 'db.adminCommand({ping:1}).ok' | grep -q 1; then
+              break
+            fi
+            sleep 2
+          done
+          docker exec melt-auth-test-mongodb mongosh --quiet --eval 'rs.initiate({_id:"auth-test",members:[{_id:0,host:"localhost:27017"}]})'
+          for attempt in $(seq 1 30); do
+            if docker exec melt-auth-test-mongodb mongosh --quiet --eval 'db.hello().isWritablePrimary' | grep -q true; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'MongoDB no alcanzó estado PRIMARY' >&2
+          exit 1
       - uses: actions/setup-go@v5
         with:
           go-version-file: ${{ matrix.service }}/go.mod
