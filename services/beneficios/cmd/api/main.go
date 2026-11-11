@@ -88,7 +88,11 @@ func main() {
 	if err = cliente.Ping(ctx, nil); err != nil {
 		log.Fatal("no se pudo conectar con MongoDB")
 	}
-	a := nuevoAlmacen(cliente, "beneficios_db")
+	dbName := strings.TrimSpace(os.Getenv("BENEFICIOS_MONGODB_DATABASE"))
+	if dbName == "" {
+		dbName = "beneficios_db"
+	}
+	a := nuevoAlmacen(cliente, dbName)
 	if err = a.preparar(ctx); err != nil {
 		log.Fatalf("no se pudo preparar Beneficios: %v", err)
 	}

@@ -195,3 +195,7 @@ Prueba 100, 500 y 137 puntos, registro por enlace, cuenta existente, reintentos,
 conflictos, saldo/historial y rutas internas. Las pruebas Go agregan concurrencia,
 reinicios, recuperación de entrega, vencimiento, cambio de destinatario y rollback.
 No usar el smoke sobre datos de producción: crea cuentas y movimientos reales.
+
+## Pruebas Render en el clúster existente
+
+En servicios separados de prueba, configurar `AUTH_MONGODB_DATABASE=usuarios_prueba_db` en Auth y `BENEFICIOS_MONGODB_DATABASE=beneficios_prueba_db` en Beneficios. Ambos pueden usar el MongoDB existente, siempre que el usuario de conexión tenga permisos sobre estas bases. No cambiar los servicios existentes. Los valores predeterminados siguen siendo `usuarios_db` y `beneficios_db`. No basta cambiar el nombre dentro de MONGODB_URI. Las pruebas comparten recursos del clúster, pero no las colecciones del equipo.

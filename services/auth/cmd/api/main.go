@@ -94,7 +94,11 @@ func main() {
 	if err := client.Ping(ctx, nil); err != nil {
 		log.Fatal("no se pudo conectar con MongoDB")
 	}
-	users := client.Database("usuarios_db").Collection("usuarios")
+	dbName := strings.TrimSpace(os.Getenv("AUTH_MONGODB_DATABASE"))
+	if dbName == "" {
+		dbName = "usuarios_db"
+	}
+	users := client.Database(dbName).Collection("usuarios")
 	_, err = users.Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "email", Value: 1}},
 		Options: options.Index().SetUnique(true).SetName("uq_usuarios_email"),
