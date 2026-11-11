@@ -3,7 +3,7 @@ const TOKEN_KEY = "melt.session";
 const CART_KEY = "melt.pending-cart";
 const INVITATION_KEY = "melt.pending-invitation";
 let invitation = null;
-const state = { page: 1, pageSize: 8, hasNext: false, search: "", category: "", priceMax: "", sort: "nombre", order: "asc", bookingTreatment: null, heldCartId: null, holdExpiresAt: null, holdTimer: null, cancelling: null, mode: "login" };
+const state = { page: 1, pageSize: 8, hasNext: false, search: "", category: "", priceMax: "", sort: "nombre", order: "asc", bookingTreatment: null, heldCartId: null, holdExpiresAt: null, holdTimer: null, cancelling: null, mode: "login", user: null, rewardRequests: new Map(), rewards: [], canjes: [] };
 
 const $ = (selector) => document.querySelector(selector);
 const token = () => sessionStorage.getItem(TOKEN_KEY);
@@ -289,15 +289,23 @@ async function loadAccount() {
   try {
     const result = await request("/auth/me");
     const user = result.usuario;
+    state.user = user;
     $("#auth-panel").classList.remove("signed-out");
     $("#profile-panel").classList.remove("hidden");
     $("#profile-name").textContent = `Hola, ${user.nombre || ""}`;
     $("#profile-email").textContent = user.email || "";
     $("#profile-initials").textContent = (user.nombre || "M").trim().slice(0, 1).toLocaleUpperCase("es-AR");
     $("#my-bookings").classList.remove("hidden");
+    const roles = Array.isArray(user.roles) ? user.roles : [];
+    const isClient = roles.includes("cliente");
+    $("#points-panel").classList.toggle("hidden", !isClient);
+    $("#professional-panel").classList.toggle("hidden", !roles.includes("profesional"));
+    $("#admin-panel").classList.toggle("hidden", !roles.some((role) => ["administrador", "superadministrador"].includes(role)));
     $("#auth-form").closest(".account-card").classList.add("hidden");
     await confirmInvitation();
-    await Promise.all([loadPoints(), loadBookings()]);
+    await Promise.all([loadBookings(), ...(isClient ? [loadPoints(), loadBenefits()] : [])]);
+    if (roles.includes("profesional")) await loadProfessionalTurns();
+    if (roles.some((role) => ["administrador", "superadministrador"].includes(role))) await loadAdminBenefits();
   } catch {
     sessionStorage.removeItem(TOKEN_KEY);
     updateAuthChrome();
@@ -306,6 +314,10 @@ async function loadAccount() {
 }
 
 function showSignedOut() {
+  state.user = null;
+  $("#points-panel").classList.add("hidden");
+  $("#professional-panel").classList.add("hidden");
+  $("#admin-panel").classList.add("hidden");
   $("#profile-panel").classList.add("hidden");
   $("#my-bookings").classList.add("hidden");
   $("#auth-form").closest(".account-card").classList.remove("hidden");
@@ -317,7 +329,54 @@ async function loadPoints() {
   try {
     const result = await request("/beneficios/mis-puntos");
     $("#points-balance").textContent = new Intl.NumberFormat("es-AR").format(result.saldoPuntos || 0);
+    const movements = result.movimientos || [];
+    $("#points-history").innerHTML = movements.length ? movements.map((movement) => {
+      const amount = Number(movement.puntos || 0);
+      const date = movement.creadoEn ? new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(movement.creadoEn)) : "Movimiento histórico";
+      const label = movement.descripcion || movement.tipo || "Movimiento de puntos";
+      return `<article class="movement-row"><div><strong>${escapeHTML(label)}</strong><small>${escapeHTML(date)}</small></div><b class="${amount < 0 ? "points-negative" : "points-positive"}">${amount > 0 ? "+" : ""}${new Intl.NumberFormat("es-AR").format(amount)} pts</b></article>`;
+    }).join("") : `<p class="empty-state">Todavía no hay movimientos de puntos.</p>`;
   } catch { $("#points-balance").textContent = "—"; }
+}
+
+async function loadBenefits() {
+  try {
+    const [rewards, redemptions] = await Promise.all([request("/beneficios/recompensas"), request("/beneficios/mis-canjes")]);
+    state.rewards = rewards.recompensas || [];
+    state.canjes = redemptions.canjes || [];
+    $("#rewards-list").innerHTML = state.rewards.length ? state.rewards.map((reward) => {
+      const value = reward.tipo === "descuento_porcentaje" ? `${Number(reward.porcentaje)}% de descuento` : "Tratamiento sin cargo";
+      return `<article class="reward-row"><div><strong>${escapeHTML(reward.nombre)}</strong><span>${escapeHTML(reward.descripcion || value)}</span><small>${new Intl.NumberFormat("es-AR").format(reward.costoPuntos)} puntos · ${escapeHTML(value)}</small></div><button class="button button-outline redeem-reward" type="button" data-id="${escapeHTML(reward.id)}">Canjear</button></article>`;
+    }).join("") : `<p class="empty-state">Pronto vas a encontrar recompensas para canjear.</p>`;
+    $("#rewards-list").querySelectorAll(".redeem-reward").forEach((button) => button.addEventListener("click", () => redeemReward(button.dataset.id, button)));
+    $("#my-rewards").innerHTML = state.canjes.length ? state.canjes.map((canje) => `<article class="movement-row"><div><strong>${escapeHTML(canje.recompensa?.nombre || "Recompensa")}</strong><small>${escapeHTML(canje.estado)}${canje.reservaExpiraEn ? " · reservada para una compra" : ""}</small></div><span class="reward-state">${escapeHTML(canje.estado)}</span></article>`).join("") : `<p class="empty-state">Todavía no hiciste canjes.</p>`;
+    const available = state.canjes.filter((canje) => canje.estado === "disponible");
+    $("#booking-benefit").innerHTML = `<option value="">Sin beneficio</option>${available.map((canje) => `<option value="${escapeHTML(canje.id)}">${escapeHTML(canje.recompensa?.nombre || "Recompensa")}</option>`).join("")}`;
+  } catch (error) {
+    $("#rewards-list").innerHTML = `<p class="form-status error-text">No pudimos cargar las recompensas: ${escapeHTML(error.message)}</p>`;
+  }
+}
+
+function createRequestId() {
+  return globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `canje-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function redeemReward(rewardId, button) {
+  if (!token()) return showToast("Ingresá a tu cuenta para canjear una recompensa.", true);
+  let requestId = state.rewardRequests.get(rewardId);
+  if (!requestId) {
+    requestId = createRequestId();
+    state.rewardRequests.set(rewardId, requestId);
+  }
+  button.disabled = true;
+  try {
+    await request("/beneficios/canjes", { method: "POST", body: JSON.stringify({ solicitudId: requestId, recompensaId: rewardId }) });
+    state.rewardRequests.delete(rewardId);
+    showToast("Canje confirmado. Ya podés usarlo al reservar.");
+    await Promise.all([loadPoints(), loadBenefits()]);
+  } catch (error) {
+    showToast(error.message, true);
+  } finally { button.disabled = false; }
 }
 
 async function loadBookings() {
@@ -339,13 +398,71 @@ async function loadBookings() {
     }));
     list.innerHTML = bookings.map((booking) => {
       const date = new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(booking.inicio));
-      const status = booking.estado === "confirmado" ? "Confirmado" : booking.estado;
-      const amount = booking.sena != null ? `<small>Seña: ${formatPrice(booking.sena)}</small>` : "";
+      const status = booking.estado === "confirmado" ? "Confirmado" : booking.estado === "completado" ? "Tratamiento realizado" : booking.estado;
+      const amount = booking.sena != null ? `<small>Seña: ${formatPrice(booking.sena)}${booking.descuentoBeneficio ? ` · beneficio: −${formatPrice(booking.descuentoBeneficio)}` : ""}</small>` : "";
       const professional = professionalNames.get(booking.profesionalId) || professionalLabel(booking.profesionalId, 0);
-      return `<article class="booking-row"><div><strong>${escapeHTML(names.get(booking.tratamientoId) || "Tratamiento")}</strong><span>${escapeHTML(date)} · ${escapeHTML(professional)}</span><small class="booking-status">${escapeHTML(status)}</small>${amount}</div>${booking.estado === "confirmado" ? `<button class="text-link cancel-booking" type="button" data-id="${escapeHTML(booking.id)}" data-start="${escapeHTML(booking.inicio)}">Cancelar turno</button>` : ""}</article>`;
+      const actions = `${booking.estado === "confirmado" && state.user?.roles?.includes("profesional") ? `<button class="button button-outline complete-treatment" type="button" data-id="${escapeHTML(booking.id)}">Confirmar realizado</button>` : ""}${booking.estado === "confirmado" && state.user?.roles?.includes("cliente") ? `<button class="text-link cancel-booking" type="button" data-id="${escapeHTML(booking.id)}" data-start="${escapeHTML(booking.inicio)}">Cancelar turno</button>` : ""}`;
+      return `<article class="booking-row"><div><strong>${escapeHTML(names.get(booking.tratamientoId) || "Tratamiento")}</strong><span>${escapeHTML(date)} · ${escapeHTML(professional)}</span><small class="booking-status">${escapeHTML(status)}</small>${amount}</div><div class="booking-actions">${actions}</div></article>`;
     }).join("") || `<p class="empty-state">Todavía no tenés reservas. Elegí un tratamiento y buscá un horario.</p>`;
     list.querySelectorAll(".cancel-booking").forEach((button) => button.addEventListener("click", () => askCancel(button.dataset.id, button.dataset.start)));
+    list.querySelectorAll(".complete-treatment").forEach((button) => button.addEventListener("click", () => completeTreatment(button.dataset.id, button)));
   } catch (error) { list.innerHTML = `<p class="form-status error-text">No pudimos cargar las reservas: ${escapeHTML(error.message)}</p>`; }
+}
+
+async function completeTreatment(id, button) {
+  button.disabled = true;
+  try {
+    const result = await request(`/reservas/turnos/${encodeURIComponent(id)}/completar`, { method: "POST", body: "{}" });
+    showToast(result.acreditacion?.mensaje || "Tratamiento confirmado.");
+    await Promise.all([loadBookings(), loadProfessionalTurns(), loadPoints()]);
+  } catch (error) {
+    showToast(error.message, true);
+    button.disabled = false;
+  }
+}
+
+async function loadProfessionalTurns() {
+  const list = $("#professional-turns");
+  try {
+    const result = await request("/reservas/turnos");
+    const turns = result.turnos || [];
+    list.innerHTML = turns.length ? turns.map((turn) => {
+      const date = new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(turn.inicio));
+      const completed = turn.estado === "completado";
+      const confirm = turn.estado === "confirmado" ? `<button class="button button-outline complete-treatment" type="button" data-id="${escapeHTML(turn.id)}">Confirmar realizado</button>` : "";
+      return `<article class="movement-row"><div><strong>${escapeHTML(turn.tratamientoId)}</strong><small>${escapeHTML(date)} · ${completed ? "Tratamiento realizado" : escapeHTML(turn.estado)}</small></div>${confirm}</article>`;
+    }).join("") : `<p class="empty-state">No hay turnos asignados para mostrar.</p>`;
+    list.querySelectorAll(".complete-treatment").forEach((button) => button.addEventListener("click", () => completeTreatment(button.dataset.id, button)));
+  } catch (error) {
+    list.innerHTML = `<p class="form-status error-text">No pudimos cargar tus turnos: ${escapeHTML(error.message)}</p>`;
+  }
+}
+
+async function loadAdminBenefits() {
+  try {
+    const [rewards, rules, failed] = await Promise.all([
+      request("/beneficios/admin/recompensas"), request("/beneficios/admin/reglas-tratamientos"), request("/beneficios/admin/mensajes-fallidos")
+    ]);
+    $("#admin-rewards-list").innerHTML = `<h3>Recompensas configuradas</h3>${(rewards.recompensas || []).map((reward) => `<article class="movement-row"><div><strong>${escapeHTML(reward.nombre)}</strong><small>${escapeHTML(reward.id)} · ${reward.activa ? "activa" : "inactiva"}</small></div><button class="button button-outline edit-reward" type="button" data-id="${escapeHTML(reward.id)}">Editar</button></article>`).join("") || `<p class="empty-state">Todavía no hay recompensas configuradas.</p>`}`;
+    $("#admin-rewards-list").querySelectorAll(".edit-reward").forEach((button) => button.addEventListener("click", () => {
+      const reward = (rewards.recompensas || []).find((item) => item.id === button.dataset.id);
+      if (!reward) return;
+      const form = $("#reward-admin-form");
+      for (const key of ["id", "nombre", "descripcion", "tipo", "costoPuntos", "porcentaje", "tratamientoId"]) form.elements[key].value = reward[key] ?? "";
+      form.elements.activa.checked = Boolean(reward.activa);
+      form.scrollIntoView({ behavior: "smooth", block: "center" });
+    }));
+    $("#rules-list").innerHTML = (rules.reglas || []).map((rule) => `<article class="movement-row"><div><strong>${escapeHTML(rule.tratamientoId)}</strong><small>${new Intl.NumberFormat("es-AR").format(rule.puntos)} puntos por realización</small></div></article>`).join("") || `<p class="empty-state">Todavía no hay reglas.</p>`;
+    $("#failed-messages").innerHTML = (failed.mensajes || []).map((message) => `<article class="movement-row"><div><strong>${escapeHTML(message.evento?.tipo || "Evento")}</strong><small>${escapeHTML(message.error || "Error sin detalle")} · ${Number(message.intentos || 0)} intentos</small></div><button class="button button-outline retry-failed" type="button" data-id="${escapeHTML(message.id)}">Reintentar</button></article>`).join("") || `<p class="empty-state">No hay mensajes pendientes de revisión.</p>`;
+    $("#failed-messages").querySelectorAll(".retry-failed").forEach((button) => button.addEventListener("click", async () => {
+      button.disabled = true;
+      try { await request(`/beneficios/admin/mensajes-fallidos/${encodeURIComponent(button.dataset.id)}/reintentar`, { method: "POST", body: "{}" }); await loadAdminBenefits(); }
+      catch (error) { showToast(error.message, true); button.disabled = false; }
+    }));
+  } catch (error) {
+    $("#rules-list").innerHTML = `<p class="form-status error-text">${escapeHTML(error.message)}</p>`;
+    $("#failed-messages").innerHTML = `<p class="form-status error-text">${escapeHTML(error.message)}</p>`;
+  }
 }
 
 function askCancel(id, start) {
@@ -432,10 +549,10 @@ async function holdSlot(time) {
     if (state.heldCartId) await releaseHold(false);
     const result = await request("/reservas/carrito/bloqueos", {
       method: "POST",
-      body: JSON.stringify({ profesionalId: $("#booking-professional").value, tratamientoId: $("#booking-treatment").value, inicio: localStart.toISOString() })
+      body: JSON.stringify({ profesionalId: $("#booking-professional").value, tratamientoId: $("#booking-treatment").value, inicio: localStart.toISOString(), beneficioCanjeId: $("#booking-benefit").value || undefined })
     });
     state.heldCartId = result.bloqueo.id;
-    $("#hold-message").textContent = `El horario está protegido durante diez minutos. Completá el pago antes de que venza el contador.`;
+    $("#hold-message").textContent = result.bloqueo.descuentoBeneficio ? `Beneficio aplicado: ${formatPrice(result.bloqueo.descuentoBeneficio)} de descuento. El horario está protegido durante diez minutos.` : `El horario está protegido durante diez minutos. Completá el pago antes de que venza el contador.`;
     $("#hold-amount").textContent = formatPrice(result.bloqueo.sena);
     $("#checkout-link").href = result.bloqueo.urlPago || result.urlPago;
     sessionStorage.setItem(CART_KEY, JSON.stringify({ id: result.bloqueo.id, expiresAt: result.bloqueo.expiraEn, urlPago: result.bloqueo.urlPago || result.urlPago, sena: result.bloqueo.sena }));
@@ -487,7 +604,7 @@ async function confirmBooking(event) {
     $("#payment-form").reset();
     setStatus("#availability-status", "¡Turno confirmado! Ya está en tu lista de reservas.");
     showToast("¡Tu turno quedó confirmado!");
-    await loadBookings();
+    await Promise.all([loadBookings(), loadBenefits(), loadPoints()]);
     updateSteps(1);
     $("#my-bookings").scrollIntoView({ behavior: "smooth" });
   } catch (error) { setStatus("#availability-status", error.message, true); }
@@ -506,6 +623,38 @@ async function releaseHold(showMessage = true) {
     if (showMessage) setStatus("#availability-status", error.message, true);
     else throw error;
   }
+}
+
+async function saveRewardAdmin(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const reward = {
+    id: String(data.get("id") || "").trim(), nombre: String(data.get("nombre") || "").trim(),
+    descripcion: String(data.get("descripcion") || "").trim(), tipo: String(data.get("tipo") || ""),
+    costoPuntos: Number(data.get("costoPuntos")), porcentaje: Number(data.get("porcentaje") || 0),
+    tratamientoId: String(data.get("tratamientoId") || "").trim(), activa: data.get("activa") === "on"
+  };
+  try {
+    await request("/beneficios/admin/recompensas", { method: "POST", body: JSON.stringify(reward) });
+    setStatus("#reward-admin-status", "Recompensa guardada.");
+    form.reset();
+    form.elements.activa.checked = true;
+    await Promise.all([loadBenefits(), loadAdminBenefits()]);
+  } catch (error) { setStatus("#reward-admin-status", error.message, true); }
+}
+
+async function saveRuleAdmin(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const treatmentId = String(data.get("tratamientoId") || "").trim();
+  try {
+    await request(`/beneficios/admin/reglas-tratamientos/${encodeURIComponent(treatmentId)}`, { method: "PUT", body: JSON.stringify({ puntos: Number(data.get("puntos")) }) });
+    setStatus("#rule-admin-status", "Regla de puntos guardada.");
+    form.reset();
+    await loadAdminBenefits();
+  } catch (error) { setStatus("#rule-admin-status", error.message, true); }
 }
 
 function initialize() {
@@ -541,6 +690,11 @@ function initialize() {
   $("#logout-button").addEventListener("click", async () => { if (state.heldCartId) await releaseHold(false); sessionStorage.removeItem(TOKEN_KEY); showSignedOut(); showToast("Cerraste sesión."); });
   $("#refresh-account").addEventListener("click", loadAccount);
   $("#refresh-bookings").addEventListener("click", loadBookings);
+  $("#refresh-benefits").addEventListener("click", async () => { await Promise.all([loadPoints(), loadBenefits()]); });
+  $("#refresh-professional-turns").addEventListener("click", loadProfessionalTurns);
+  $("#refresh-admin").addEventListener("click", loadAdminBenefits);
+  $("#reward-admin-form").addEventListener("submit", saveRewardAdmin);
+  $("#rule-admin-form").addEventListener("submit", saveRuleAdmin);
   $("#profile-reservations").addEventListener("click", () => $("#my-bookings").scrollIntoView({ behavior: "smooth" }));
   document.querySelectorAll("[data-booking-auth]").forEach((button) => button.addEventListener("click", () => { setAuthMode(button.dataset.bookingAuth); $("#auth-email").focus({ preventScroll: true }); }));
   document.querySelectorAll("[data-scroll]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.scroll).scrollIntoView({ behavior: "smooth" })));

@@ -118,6 +118,7 @@
             <form id="availability-form" class="calendar-form">
               <label class="form-field">Tratamiento<select id="booking-treatment" required><option value="">Elegí un tratamiento</option></select></label>
               <label class="form-field">Profesional<select id="booking-professional" required><option value="">Elegí un profesional</option></select></label>
+              <label class="form-field">Beneficio (opcional)<select id="booking-benefit"><option value="">Sin beneficio</option></select></label>
               <label class="form-field">Fecha<input id="booking-date" type="date" required></label>
               <button class="button button-dark full-width" type="submit">Ver horarios</button>
             </form>
@@ -136,6 +137,43 @@
             </form>
           </div>
         </div>
+        <section id="points-panel" class="benefits-area hidden" aria-labelledby="points-title">
+          <div class="section-heading"><div><p class="eyebrow">Tu recorrido MELT</p><h2 id="points-title">Puntos y recompensas</h2></div><button id="refresh-benefits" class="button button-outline" type="button">Actualizar</button></div>
+          <div class="benefits-columns">
+            <div class="benefit-card"><h3>Historial de puntos</h3><div id="points-history" class="movement-list" aria-live="polite"></div></div>
+            <div class="benefit-card"><h3>Catálogo de recompensas</h3><div id="rewards-list" class="rewards-list" aria-live="polite"></div></div>
+          </div>
+          <div class="benefit-card redeemed-card"><h3>Mis canjes</h3><div id="my-rewards" class="movement-list" aria-live="polite"></div></div>
+        </section>
+        <section id="professional-panel" class="benefits-area hidden" aria-labelledby="professional-title">
+          <div class="section-heading"><div><p class="eyebrow">Atención profesional</p><h2 id="professional-title">Mis tratamientos</h2></div><button id="refresh-professional-turns" class="button button-outline" type="button">Actualizar</button></div>
+          <p class="muted">Cuando termines un turno, confirmalo para registrar la realización y habilitar la acreditación de puntos.</p>
+          <div id="professional-turns" class="movement-list" aria-live="polite"></div>
+        </section>
+        <section id="admin-panel" class="benefits-area hidden" aria-labelledby="admin-title">
+          <div class="section-heading"><div><p class="eyebrow">Administración MELT</p><h2 id="admin-title">Reglas y recompensas</h2></div><button id="refresh-admin" class="button button-outline" type="button">Actualizar</button></div>
+          <div class="benefits-columns">
+            <form id="reward-admin-form" class="benefit-card admin-form"><h3>Crear o actualizar recompensa</h3>
+              <label class="form-field">Identificador<input name="id" required maxlength="128" placeholder="descuento-10"></label>
+              <label class="form-field">Nombre<input name="nombre" required maxlength="120"></label>
+              <label class="form-field">Descripción<textarea name="descripcion" maxlength="500" rows="2"></textarea></label>
+              <label class="form-field">Modalidad<select name="tipo"><option value="descuento_porcentaje">Descuento porcentual</option><option value="tratamiento_gratis">Tratamiento gratis</option></select></label>
+              <label class="form-field">Puntos necesarios<input name="costoPuntos" type="number" min="1" step="1" required></label>
+              <label class="form-field">Porcentaje<input name="porcentaje" type="number" min="1" max="100" step="1"></label>
+              <label class="form-field">ID de tratamiento<input name="tratamientoId" maxlength="128"></label>
+              <label class="check-field"><input name="activa" type="checkbox" checked> Disponible para canjear</label>
+              <button class="button button-dark" type="submit">Guardar recompensa</button><p id="reward-admin-status" class="form-status" aria-live="polite"></p>
+            </form>
+            <form id="rule-admin-form" class="benefit-card admin-form"><h3>Puntos por tratamiento realizado</h3>
+              <label class="form-field">ID de tratamiento<input name="tratamientoId" required maxlength="128"></label>
+              <label class="form-field">Puntos a acreditar<input name="puntos" type="number" min="0" step="1" required></label>
+              <button class="button button-dark" type="submit">Guardar regla</button><p id="rule-admin-status" class="form-status" aria-live="polite"></p>
+              <h4>Reglas actuales</h4><div id="rules-list" class="movement-list"></div>
+            </form>
+          </div>
+          <div id="admin-rewards-list" class="movement-list"></div>
+          <div class="benefit-card redeemed-card"><h3>Mensajes que requieren revisión</h3><div id="failed-messages" class="movement-list"></div></div>
+        </section>
         <div id="my-bookings" class="bookings-panel hidden"><div class="bookings-heading"><div><p class="eyebrow">Tus próximos encuentros</p><h3>Mis reservas</h3></div><button id="refresh-bookings" class="button button-outline" type="button">Actualizar</button></div><div id="bookings-list"></div></div>
       </section>
     </main>
