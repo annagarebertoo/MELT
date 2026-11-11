@@ -3,7 +3,7 @@
   "info": {
     "title": "Administración de Catálogo y Profesionales MELT",
     "version": "1.0.0",
-    "description": "Primera etapa backend. CRUD protegido por Auth /verify-admin; sin OpenSearch ni Memcached. Consultas y bajas no alteran Reservas. JSON sensible a mayúsculas, sin propiedades repetidas ni null. GET /tratamientos y sus filtros se documentan en tratamientos-v1.openapi.yaml."
+    "description": "Operaciones administrativas CRUD protegidas por Auth /verify-admin. Consultas y bajas no alteran Reservas. JSON sensible a mayúsculas, sin propiedades repetidas ni null. GET /tratamientos y sus filtros se documentan en tratamientos-v1.openapi.yaml."
   },
   "servers": [
     {

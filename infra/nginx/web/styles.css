@@ -229,3 +229,73 @@ body.menu-open{overflow:hidden}
 @media(max-width:900px){.ghostkitchen-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ghostkitchen-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.ghostkitchen-location-card,.ghostkitchen-sede-card{grid-template-columns:1fr}.ghostkitchen-coordinates,.ghostkitchen-filters{grid-template-columns:1fr}.ghostkitchen-sede-meta{justify-content:flex-start;text-align:left}.ghostkitchen-grid{grid-template-columns:1fr}.ghostkitchen-restaurants{grid-column:auto}}
 .profile-actions{flex-wrap:wrap}
+
+/* Catálogo público: categorías y perfiles usan los mismos tonos editoriales. */
+.category-status{min-height:1.3em;margin:-12px 0 10px;color:var(--muted);font-size:.76rem}
+.site-header.site-header-scrolled{position:fixed;height:74px;background:rgba(248,243,233,.96);color:var(--chocolate);border-bottom:1px solid var(--line);backdrop-filter:blur(14px)}
+.site-header.site-header-scrolled .header-register{background:var(--chocolate);color:var(--cream)}
+.category-navigation{display:flex;flex-wrap:nowrap;gap:clamp(18px,4vw,38px);margin:0 0 24px;overflow-x:auto;border-bottom:1px solid var(--line);scrollbar-width:none}
+.category-navigation::-webkit-scrollbar,.professionals-grid::-webkit-scrollbar{display:none}
+.category-chip{flex:none;padding:10px 2px 12px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:.81rem;white-space:nowrap;transition:color .18s,border-color .18s}
+.category-chip:hover,.category-chip:focus-visible,.category-chip[aria-pressed="true"]{border-bottom-color:var(--chocolate);color:var(--chocolate)}
+.treatment-card-photo,.treatment-detail-photo,.professional-photo{display:block;width:100%;height:100%;object-fit:cover}
+.treatment-visual .treatment-card-photo,.featured-image .treatment-card-photo{position:absolute;inset:0;z-index:1}
+.treatment-visual:has(.treatment-card-photo):before,.treatment-visual:has(.treatment-card-photo):after,.featured-image:has(.treatment-card-photo):before,.featured-image:has(.treatment-card-photo):after{display:none}
+.featured-image{padding:0;border:0;cursor:pointer}
+.featured-image .treatment-card-photo{aspect-ratio:1}
+.detail-professionals{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.detail-professional-link{padding:4px 0;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--chocolate);font-size:.75rem}
+.detail-professional-link:hover{text-decoration:underline}
+.dialog-visual .treatment-detail-photo{position:absolute;inset:0}
+.treatment-visual{aspect-ratio:4/5!important;border-radius:7px}
+.professionals-section{padding:0 0 clamp(74px,10vw,130px);background:var(--paper)}
+.professional-intro{min-height:330px;padding:105px max(6vw,28px) 76px;background:var(--cream-deep)}
+.professional-intro h2{margin:0 0 16px;font-family:var(--serif);font-size:clamp(2.9rem,6vw,4.65rem);font-weight:400;letter-spacing:-.04em;line-height:1}
+.professional-intro>p:last-child{max-width:470px;margin:0;color:var(--muted);font-size:.9rem;line-height:1.65}
+.professionals-carousel-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:65px max(6vw,28px) 28px}
+.professionals-carousel-heading h3{margin:0;font-family:var(--serif);font-size:1.55rem;font-weight:400;color:var(--chocolate)}
+.professionals-carousel-heading .featured-controls button{width:40px;height:40px}
+.professionals-section #professionals-status{margin:0 max(6vw,28px) 12px}
+.professionals-grid{display:flex;gap:30px;overflow-x:auto;margin:0 max(6vw,28px);padding:8px 0 20px;scroll-snap-type:x mandatory;scrollbar-width:none}
+.professional-card{min-width:0}
+.professional-card{flex:0 0 178px;scroll-snap-align:start}
+.professional-card-link{display:flex;width:100%;height:100%;flex-direction:column;align-items:center;gap:12px;padding:10px 8px 18px;border:0;background:transparent;color:var(--chocolate);text-align:center;transition:transform .2s}
+.professional-card-link:hover{transform:translateY(-3px)}
+.professional-portrait,.professional-profile-portrait{display:grid;flex:none;place-items:center;overflow:hidden;border-radius:50%;background:var(--vanilla);color:var(--chocolate);font-family:var(--serif);font-size:2.4rem}
+.professional-portrait{width:92px;aspect-ratio:1}
+.professional-card-copy{display:flex;min-width:0;flex-direction:column;align-items:center;gap:7px}
+.professional-card-copy .eyebrow{margin:0;font-size:.59rem}
+.professional-card-copy strong{font-family:var(--serif);font-size:1.3rem;font-weight:400}
+.professional-card-description{display:none}
+.professional-card-more{margin-top:4px;border-bottom:1px solid currentColor;color:var(--chocolate);font-size:.7rem}
+.professional-profile{min-height:340px}
+.professional-back{margin-bottom:32px}
+.professional-profile-header{display:grid;grid-template-columns:220px 1fr;align-items:center;gap:clamp(28px,6vw,76px);max-width:900px;margin:0 auto 68px}
+.professional-profile-portrait{width:min(240px,100%);aspect-ratio:4/5;border-radius:7px;font-size:4rem}
+.professional-profile-header h2{margin:0 0 18px;font-family:var(--serif);font-size:clamp(2.5rem,5vw,4.2rem);font-weight:400;line-height:1.05;color:var(--chocolate)}
+.professional-bio{max-width:560px;color:var(--muted);font-size:.9rem;line-height:1.75}
+.professional-treatments{max-width:900px;margin:0 auto}
+.professional-treatments h3{margin:0 0 20px;font-family:var(--serif);font-size:2rem;font-weight:400;color:var(--chocolate)}
+.professional-treatment-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.professional-treatment-link{display:flex;justify-content:space-between;gap:16px;padding:16px 18px;border:1px solid var(--line);background:var(--paper);color:var(--chocolate);text-align:left}
+.professional-treatment-link:hover{border-color:var(--chocolate)}
+.professional-treatment-link span:last-child{flex:none;color:var(--muted);font-size:.78rem}
+@media(max-width:900px){.professional-profile-header{grid-template-columns:minmax(180px,.65fr) 1fr}}
+@media(max-width:600px){.site-header.site-header-scrolled{height:68px}.professional-intro{min-height:280px;padding:84px 22px 60px}.professionals-carousel-heading{margin:48px 22px 20px}.professionals-section #professionals-status{margin-right:22px;margin-left:22px}.professionals-grid{gap:20px;margin-right:0;margin-left:22px;padding-right:22px}.professional-card{flex-basis:145px}.professional-portrait{width:112px}.professional-profile-header{grid-template-columns:1fr;justify-items:start;gap:24px;margin-bottom:48px}.professional-profile-portrait{width:190px}.professional-treatment-list{grid-template-columns:1fr}.professional-treatment-link{padding:14px}.category-navigation{gap:20px}.treatment-visual{aspect-ratio:4/5!important}}
+@media(min-width:701px){.treatment-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* Administración del catálogo: estilos limitados al panel para no afectar la web pública. */
+.catalog-admin{margin:30px 0;padding:26px;border:1px solid var(--line);border-radius:8px;background:var(--paper)}
+.catalog-admin .section-heading{margin-bottom:12px}
+.catalog-admin h3,.catalog-admin h4{color:var(--chocolate)}
+.catalog-admin-columns{grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));align-items:start}
+.catalog-admin .admin-form{display:flex;flex-direction:column;gap:12px;min-width:0}
+.catalog-admin .form-field{width:100%}
+.catalog-admin-checkboxes{display:grid;gap:6px;max-height:240px;overflow:auto;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--cream)}
+.catalog-admin-checkbox{display:flex;align-items:center;gap:10px;padding:7px 4px;color:var(--chocolate);cursor:pointer}
+.catalog-admin-checkbox input[type=checkbox]{width:17px;height:17px;margin:0;accent-color:var(--chocolate)}
+.catalog-admin-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.catalog-admin-row>span:first-child{display:grid;gap:3px;min-width:0}
+.catalog-admin-row small{overflow-wrap:anywhere;color:var(--muted)}
+.catalog-admin-actions{display:flex;flex-wrap:wrap;gap:10px;flex:none}
+@media(max-width:600px){.catalog-admin{margin:20px 0;padding:16px}.catalog-admin-row{align-items:flex-start;flex-direction:column}.catalog-admin-actions{width:100%}}

@@ -24,7 +24,7 @@
     <aside class="site-menu" id="site-menu" aria-hidden="true" aria-label="Menú principal" inert>
       <div class="site-menu-top"><span class="brand">MELT</span><button id="menu-close" type="button" aria-label="Cerrar menú">×</button></div>
       <nav aria-label="Navegación principal">
-        <a href="#inicio">Inicio</a><a href="#seleccion">Selección MELT</a><a href="#tratamientos">Tratamientos</a><a href="#reservas">Reservar turno</a><a href="#cuenta">Mi cuenta</a>
+        <a href="#inicio">Inicio</a><a href="#seleccion">Selección MELT</a><a href="#tratamientos">Tratamientos</a><a href="#profesionales">Profesionales</a><a href="#reservas">Reservar turno</a><a href="#cuenta">Mi cuenta</a><a id="catalog-admin-link" class="hidden" href="#catalog-admin">Administrar catálogo</a>
       </nav>
       <p>Tu tiempo, tu ritual.</p>
     </aside>
@@ -61,9 +61,11 @@
           <div><p class="eyebrow">Encontrá tu próximo ritual</p><h2>Tratamientos</h2></div>
           <p class="section-description">Explorá el catálogo vigente, compará duración y precio, y elegí tu próximo momento.</p>
         </div>
+        <p id="category-status" class="category-status" aria-live="polite"></p>
+        <nav id="category-navigation" class="category-navigation" aria-label="Explorar categorías"></nav>
         <form id="search-form" class="search-bar">
           <label class="search-field"><span class="sr-only">Buscar tratamientos</span><span aria-hidden="true">⌕</span><input id="search-query" type="search" placeholder="¿Qué te gustaría hacer?" autocomplete="off"></label>
-          <label><span class="sr-only">Categoría</span><select id="search-category"><option value="">Todas las categorías</option><option>Facial</option><option>Corporal</option><option>Depilación</option><option>Manos y uñas</option></select></label>
+          <label><span class="sr-only">Categoría</span><select id="search-category"><option value="">Todas las categorías</option></select></label>
           <label class="price-filter"><span class="sr-only">Precio máximo</span><span>$</span><input id="search-price" type="number" min="0" placeholder="Precio máx."></label>
           <label class="sort-filter"><span class="sr-only">Ordenar resultados</span><select id="search-sort"><option value="nombre:asc">Orden: A–Z</option><option value="precio:asc">Menor precio</option><option value="precio:desc">Mayor precio</option></select></label>
           <button class="button button-dark" type="submit">Aplicar filtros</button>
@@ -72,6 +74,19 @@
         <p id="catalog-status" class="status-line" aria-live="polite"></p>
         <div id="treatments-list" class="treatment-grid" aria-live="polite"></div>
         <div class="pagination"><button class="button button-outline" id="previous-page" disabled>← Anterior</button><span id="page-label">Página 1</span><button class="button button-outline" id="next-page">Siguiente →</button></div>
+      </section>
+
+      <section class="section professionals-section" id="profesionales" aria-labelledby="professionals-title">
+        <div id="professionals-list-view">
+          <div class="professional-intro"><p class="eyebrow">El corazón de MELT</p><h2 id="professionals-title">Nuestros profesionales</h2><p>Personas que combinan conocimiento, sensibilidad y una escucha atenta.</p></div>
+          <div class="professionals-carousel-heading"><h3 id="professionals-count">Profesionales para acompañarte</h3><div class="featured-controls"><button type="button" id="professionals-prev" aria-label="Profesionales anteriores">←</button><button type="button" id="professionals-next" aria-label="Profesionales siguientes">→</button></div></div>
+          <p id="professionals-status" class="status-line" aria-live="polite">Cargando profesionales…</p>
+          <div id="professionals-list" class="professionals-grid" aria-live="polite"></div>
+        </div>
+        <div id="professional-profile" class="professional-profile hidden" aria-live="polite" aria-labelledby="professional-profile-name">
+          <button class="text-link professional-back" type="button" data-professional-back>← Volver a profesionales</button>
+          <div id="professional-profile-content"></div>
+        </div>
       </section>
 
       <section class="booking-band" id="reservas">
@@ -180,6 +195,39 @@
         </section>
         <section id="admin-panel" class="benefits-area hidden" aria-labelledby="admin-title">
           <div class="section-heading"><div><p class="eyebrow">Administración MELT</p><h2 id="admin-title">Reglas y recompensas</h2></div><button id="refresh-admin" class="button button-outline" type="button">Actualizar</button></div>
+          <section id="catalog-admin" class="catalog-admin" aria-labelledby="catalog-admin-title">
+            <div class="section-heading"><div><p class="eyebrow">Catálogo y profesionales</p><h3 id="catalog-admin-title">Administrar catálogo</h3></div><button id="refresh-catalog-admin" class="button button-outline" type="button">Actualizar listas</button></div>
+            <p id="catalog-admin-access" class="form-status" aria-live="polite"></p>
+            <div class="benefits-columns catalog-admin-columns">
+              <form id="admin-category-form" class="benefit-card admin-form"><h4>Categorías</h4>
+                <label class="form-field">ID<input name="id" required maxlength="128" placeholder="facial"></label>
+                <label class="form-field">Nombre<input name="nombre" required maxlength="100"></label>
+                <label class="form-field">Descripción<textarea name="descripcion" maxlength="1000" rows="2"></textarea></label>
+                <button class="button button-dark" type="submit">Guardar categoría</button><button class="text-link hidden" type="button" data-admin-cancel="category">Cancelar edición</button><p class="form-status" data-admin-status="category" aria-live="polite"></p>
+                <div class="movement-list" data-admin-list="categories"></div>
+              </form>
+              <form id="admin-treatment-form" class="benefit-card admin-form"><h4>Tratamientos</h4>
+                <label class="form-field">ID<input name="id" required maxlength="128" placeholder="limpieza-facial"></label>
+                <label class="form-field">Nombre<input name="nombre" required maxlength="200"></label>
+                <label class="form-field">Descripción<textarea name="descripcion" required maxlength="5000" rows="2"></textarea></label>
+                <label class="form-field">Categoría<select name="categoria" required></select></label>
+                <label class="form-field">Precio (ARS)<input name="precio" type="number" min="0" step="0.01" required></label>
+                <label class="form-field">Duración (minutos)<input name="duracionMinutos" type="number" min="5" max="480" step="1" required></label>
+                <label class="form-field">Palabras clave (separadas por coma)<input name="keywords"></label>
+                <label class="form-field">Imágenes (URLs separadas por coma)<input name="imagenes"></label>
+                <button class="button button-dark" type="submit">Guardar tratamiento</button><button class="text-link hidden" type="button" data-admin-cancel="treatment">Cancelar edición</button><p class="form-status" data-admin-status="treatment" aria-live="polite"></p>
+                <div class="movement-list" data-admin-list="treatments"></div>
+              </form>
+              <form id="admin-professional-form" class="benefit-card admin-form"><h4>Profesionales</h4>
+                <label class="form-field">ID<input name="id" required maxlength="128" placeholder="profesional-01"></label>
+                <label class="form-field">Nombre<input name="nombre" required maxlength="200"></label>
+                <label class="form-field">Descripción<textarea name="descripcion" maxlength="5000" rows="2"></textarea></label>
+                <div class="form-field"><span>Tratamientos asociados</span><div id="admin-professional-treatments" class="catalog-admin-checkboxes" aria-label="Tratamientos asociados"></div></div>
+                <button class="button button-dark" type="submit">Guardar profesional</button><button class="text-link hidden" type="button" data-admin-cancel="professional">Cancelar edición</button><p class="form-status" data-admin-status="professional" aria-live="polite"></p>
+                <div class="movement-list" data-admin-list="professionals"></div>
+              </form>
+            </div>
+          </section>
           <div class="benefits-columns">
             <form id="reward-admin-form" class="benefit-card admin-form"><h3>Crear o actualizar recompensa</h3>
               <label class="form-field">Identificador<input name="id" required maxlength="128" placeholder="descuento-10"></label>
@@ -206,7 +254,7 @@
       </section>
     </main>
 
-    <footer class="site-footer"><div class="footer-brand"><a class="brand" href="#inicio">MELT</a><p>Cuidarte también es hacerte un espacio.</p></div><div class="footer-links"><a href="#seleccion">Selección</a><a href="#tratamientos">Tratamientos</a><a href="#reservas">Reservas</a><a href="#cuenta">Mi cuenta</a></div><span>© MELT · Centro de estética</span></footer>
+    <footer class="site-footer"><div class="footer-brand"><a class="brand" href="#inicio">MELT</a><p>Cuidarte también es hacerte un espacio.</p></div><div class="footer-links"><a href="#seleccion">Selección</a><a href="#tratamientos">Tratamientos</a><a href="#profesionales">Profesionales</a><a href="#reservas">Reservas</a><a href="#cuenta">Mi cuenta</a></div><span>© MELT · Centro de estética</span></footer>
     <dialog class="treatment-dialog" id="treatment-dialog" aria-labelledby="detail-title">
       <form method="dialog" class="dialog-top"><span class="eyebrow">Un ritual MELT</span><button class="dialog-close" aria-label="Cerrar detalle">×</button></form>
       <div class="dialog-layout"><div class="dialog-visual" id="detail-visual" aria-hidden="true"><span id="detail-initial">M</span></div><div class="dialog-copy"><p class="eyebrow" id="detail-category"></p><h2 id="detail-title"></h2><p class="dialog-description" id="detail-description"></p><div class="dialog-meta"><div><span>Duración</span><strong id="detail-duration"></strong></div><div><span>Precio</span><strong id="detail-price"></strong></div></div><div class="detail-keywords" id="detail-keywords"></div><div class="detail-professionals" id="detail-professionals"></div><p id="detail-availability" class="detail-availability"></p><button class="button button-dark" id="detail-book" type="button">Elegir horario <span aria-hidden="true">↗</span></button></div></div>
