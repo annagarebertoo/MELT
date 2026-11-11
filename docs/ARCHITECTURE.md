@@ -319,7 +319,7 @@ Las decisiones siguientes actualizan el diseño inicial y deben prevalecer sobre
 
 Se incorpora el microservicio `auth`, publicado detrás del API Gateway bajo `/api/v1/auth`. Es responsable de las cuentas, la verificación de credenciales, la emisión de tokens Bearer y la autorización de operaciones de administración de cuentas. Mantiene la colección `usuarios` en la base lógica `usuarios_db` de MongoDB, con índice único por email. Las contraseñas se guardan como hashes bcrypt; los tokens HS256 tienen vencimiento y se validan en los endpoints protegidos.
 
-Los roles definidos son `cliente`, `profesional`, `recepcion`, `administrador` y `superadministrador`. El registro público asigna exclusivamente el rol cliente. La creación de cuentas internas exige un token administrativo; la asignación de roles administrativos queda reservada al superadministrador. La autorización de creación de usuarios consulta los roles actuales en la base, para no depender únicamente de los roles que tenía el token al emitirse. NGINX realiza una verificación interna de sesión antes de enrutar las rutas privadas de Reservas y Beneficios; el alta externa del gimnasio conserva su autenticación independiente mediante clave de partner.
+Los roles definidos son `cliente`, `profesional`, `recepcion`, `administrador` y `superadministrador`. El registro público asigna exclusivamente el rol cliente. La creación de cuentas internas exige un token administrativo; la asignación de roles administrativos queda reservada al superadministrador. La autorización de creación de usuarios consulta los roles actuales en la base, para no depender únicamente de los roles que tenía el token al emitirse. NGINX realiza una verificación interna de sesión antes de enrutar las rutas privadas de Reservas y Beneficios; la acreditación externa conserva su autenticación independiente mediante clave de partner.
 
 El contrato está en [`docs/contracts/autenticacion-v1.openapi.yaml`](contracts/autenticacion-v1.openapi.yaml), y la ejecución local en [`docs/LOCAL-DEV.md`](LOCAL-DEV.md). `AUTH_JWT_SECRET` y las credenciales opcionales del superadministrador inicial se inyectan por entorno; no deben guardarse en el repositorio.
 
@@ -335,3 +335,27 @@ Este snapshot describe la implementación local y complementa el diseño objetiv
 - El adaptador `pagos` crea preferencias y verifica/refunda operaciones en Mercado Pago test. Producción no está habilitada; el retorno automático requiere configurar una URL HTTPS pública.
 - La web se sirve desde NGINX y consume las rutas de catálogo, Auth, Reservas, Beneficios y Pagos del Gateway. Hay datos demo locales de tratamientos, profesionales y agendas; no se consideran datos comerciales ni cuentas de Auth. Ver `docs/RESERVAS-WEB.md`.
 - La API externa asignada a Cocina Fantasma (búsqueda de sedes cercanas) no está entregada todavía. Puntos por tratamientos completados, canjes, notificaciones por correo y consola administrativa tampoco forman parte de este flujo implementado.
+
+## Acreditación externa de puntos (implementación)
+
+Beneficios conserva `beneficios_db.registros_externos` para saldos y agrega
+`movimientos_puntos`, cuyo `_id` es `solicitudId` global. Una transacción con
+read concern snapshot y write concern majority inserta el movimiento e incrementa
+el saldo; cualquier fallo aborta ambos cambios. El índice único de usuario y los
+reintentos transaccionales protegen solicitudes concurrentes. La lectura de saldo
+e historial también usa un snapshot consistente.
+
+Auth ofrece `GET /internal/usuarios/:id`, protegido con `MELT_INTERNAL_KEY` y sin
+datos personales en la respuesta; Beneficios lo consulta vía `AUTH_URL`. NGINX
+bloquea el prefijo interno en ambos servicios. El POST público exige la clave
+`BENEFICIOS_PARTNER_KEY` mediante `X-Partner-Key`; el frontend no recibe secretos.
+Registro y login no dependen de Beneficios. MongoDB requiere replica set.
+Ver [migración y límites](ACREDITACION-PUNTOS.md).
+
+### Protección de la consulta de puntos
+
+Beneficios no utiliza los headers de identidad del request. Para `/mis-puntos`,
+valida el Bearer mediante `/verify` de Auth y exige el rol cliente confirmado
+por Auth. Se comprueba así la cuenta activa también en accesos directos al servicio.
+NGINX local y Render reenvían Authorization y eliminan los headers X-Auth-User-* hacia
+Beneficios. La clave de partner se conserva exclusivamente para la acreditación externa.

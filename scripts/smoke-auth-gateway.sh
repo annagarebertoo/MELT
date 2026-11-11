@@ -43,27 +43,6 @@ login_code=$(http_code /tmp/melt-login.json -X POST "$BASE_URL/api/v1/auth/login
 [[ "$login_code" == "200" ]] || fail "login de cliente: se esperaba 200, se obtuvo $login_code ($(cat /tmp/melt-login.json))"
 TOKEN=$(jq -er '.token' /tmp/melt-login.json) || fail "login no devolvió token"
 
-# 1b. El alta con el código válido del gimnasio acredita el regalo una sola vez.
-GYM_EMAIL="${GYM_EMAIL:-cliente.gimnasio.integracion@melt.test}"
-GYM_CODE="${CODIGO_GIMNASIO:-GIMNASIO_CI_TEST}"
-gym_register_code=$(http_code /tmp/melt-gym-register.json -X POST "$BASE_URL/api/v1/auth/registro" \
-  -H 'Content-Type: application/json' \
-  -d "{\"nombre\":\"Cliente Gimnasio\",\"email\":\"$GYM_EMAIL\",\"password\":\"$CLIENT_PASSWORD\",\"codigoReferido\":\"$GYM_CODE\"}")
-[[ "$gym_register_code" == "201" ]] || fail "registro referido: se esperaba 201, se obtuvo $gym_register_code ($(cat /tmp/melt-gym-register.json))"
-[[ "$(jq -er '.beneficioRegistro' /tmp/melt-gym-register.json)" == "acreditado" ]] || fail "el registro referido no informó beneficio acreditado"
-gym_login_code=$(http_code /tmp/melt-gym-login.json -X POST "$BASE_URL/api/v1/auth/login" \
-  -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$GYM_EMAIL\",\"password\":\"$CLIENT_PASSWORD\"}")
-[[ "$gym_login_code" == "200" ]] || fail "login referido: se esperaba 200, se obtuvo $gym_login_code"
-GYM_TOKEN=$(jq -er '.token' /tmp/melt-gym-login.json) || fail "login referido no devolvió token"
-gym_points_code=$(http_code /tmp/melt-gym-points.json "$BASE_URL/api/v1/beneficios/mis-puntos" -H "Authorization: Bearer $GYM_TOKEN")
-[[ "$gym_points_code" == "200" ]] || fail "consulta puntos referido: se esperaba 200, se obtuvo $gym_points_code"
-[[ "$(jq -er '.saldoPuntos' /tmp/melt-gym-points.json)" == "${PUNTOS_REGISTRO_GIMNASIO:-100}" ]] || fail "el saldo referido no coincide con los puntos configurados"
-# Un login posterior no vuelve a acreditar el mismo regalo.
-gym_points_again_code=$(http_code /tmp/melt-gym-points-again.json "$BASE_URL/api/v1/beneficios/mis-puntos" -H "Authorization: Bearer $GYM_TOKEN")
-[[ "$gym_points_again_code" == "200" ]] || fail "segunda consulta de puntos: se esperaba 200, se obtuvo $gym_points_again_code"
-[[ "$(jq -er '.saldoPuntos' /tmp/melt-gym-points-again.json)" == "${PUNTOS_REGISTRO_GIMNASIO:-100}" ]] || fail "el regalo se duplicó o cambió luego del login"
-
 me_code=$(http_code /tmp/melt-me.json "$BASE_URL/api/v1/auth/me" -H "Authorization: Bearer $TOKEN")
 [[ "$me_code" == "200" ]] || fail "GET /auth/me: se esperaba 200, se obtuvo $me_code"
 
@@ -94,4 +73,49 @@ ADMIN_TOKEN=$(jq -er '.token' /tmp/melt-admin-login.json) || fail "login de supe
 admin_points_code=$(http_code /tmp/melt-points-admin.json "$BASE_URL/api/v1/beneficios/mis-puntos" -H "Authorization: Bearer $ADMIN_TOKEN")
 [[ "$admin_points_code" == "403" ]] || fail "Beneficios debe denegar rol administrador con 403, obtuvo $admin_points_code"
 
-echo "OK: registro normal y referido, regalo único del gimnasio, login, /me, protección de Reservas, identidad no falsificable y permisos."
+echo "OK: registro sin acreditación automática, login, /me, protección de Reservas, identidad no falsificable y permisos."
+
+# Acreditación externa por gateway; registro y login no acreditan puntos.
+USER_ID=$(jq -er '.usuario.id' /tmp/melt-register.json)
+: "${BENEFICIOS_PARTNER_KEY:?Definí la clave externa para probar acreditaciones}"
+for spec in "op-ci-1 200 201" "op-ci-1 200 200" "op-ci-1 201 409" "op-ci-2 50 201"; do
+  read -r op points expected <<< "$spec"
+  code=$(http_code /tmp/melt-credit.json -X POST "$BASE_URL/api/v1/beneficios/acreditar-puntos" -H 'Content-Type: application/json' -H "X-Partner-Key: $BENEFICIOS_PARTNER_KEY" -d "{\"solicitudId\":\"$op\",\"usuarioId\":\"$USER_ID\",\"puntos\":$points}")
+  [[ "$code" == "$expected" ]] || fail "acreditación: esperado $expected, recibido $code ($(cat /tmp/melt-credit.json))"
+done
+code=$(http_code /tmp/melt-credit.json -X POST "$BASE_URL/api/v1/beneficios/acreditar-puntos" -H 'Content-Type: application/json' -d '{}')
+[[ "$code" == "401" ]] || fail "acreditación sin clave debe devolver 401"
+http_code /tmp/melt-final.json "$BASE_URL/api/v1/beneficios/mis-puntos" -H "Authorization: Bearer $TOKEN" >/dev/null
+[[ "$(jq -er '.saldoPuntos' /tmp/melt-final.json)" == "250" ]] || fail "saldo acumulado incorrecto"
+for path in auth/internal/usuarios/$USER_ID beneficios/internal/registro-gym; do
+  code=$(http_code /tmp/melt-internal.json "$BASE_URL/api/v1/$path")
+  [[ "$code" == "404" ]] || fail "el gateway publicó una ruta interna"
+done
+echo "OK: acreditación externa, acumulación, idempotencia y rutas internas."
+
+# Validación contractual estricta del POST.
+code=$(http_code /tmp/melt-case.json -X POST "$BASE_URL/api/v1/beneficios/acreditar-puntos" -H 'Content-Type: application/json' -H "X-Partner-Key: $BENEFICIOS_PARTNER_KEY" -d "{\"solicitudId\":\"case-invalid\",\"usuarioId\":\"$USER_ID\",\"PUNTOS\":7}")
+[[ "$code" == "400" ]] || fail "PUNTOS no debe sustituir puntos"
+code=$(http_code /tmp/melt-content-type.json -X POST "$BASE_URL/api/v1/beneficios/acreditar-puntos" -H 'Content-Type: text/plain' -H "X-Partner-Key: $BENEFICIOS_PARTNER_KEY" -d "{\"solicitudId\":\"type-invalid\",\"usuarioId\":\"$USER_ID\",\"puntos\":7}")
+[[ "$code" == "415" ]] || fail "Content-Type incorrecto debe devolver 415"
+UNICODE_ID=$(jq -nr '"\u00e9" * 100')
+UNICODE_BODY=$(jq -nc --arg id "$UNICODE_ID" --arg user "$USER_ID" '{solicitudId:$id,usuarioId:$user,puntos:1}')
+for expected in 201 200; do
+  code=$(http_code /tmp/melt-unicode.json -X POST "$BASE_URL/api/v1/beneficios/acreditar-puntos" -H 'Content-Type: application/json; charset=utf-8' -H "X-Partner-Key: $BENEFICIOS_PARTNER_KEY" -d "$UNICODE_BODY")
+  [[ "$code" == "$expected" ]] || fail "ID Unicode de 100 caracteres: esperado $expected, obtenido $code"
+done
+
+# Opcional: ejecutar desde la red Docker para comprobar el servicio sin gateway.
+if [[ -n "${BENEFICIOS_DIRECT_URL:-}" ]]; then
+  for token in "" "Bearer falso"; do
+    code=$(http_code /tmp/melt-direct-anon.json "$BENEFICIOS_DIRECT_URL/mis-puntos" -H "Authorization: $token" -H "X-Auth-User-ID: $USER_ID" -H 'X-Auth-User-Email: falso@melt.test' -H 'X-Auth-User-Roles: cliente')
+    [[ "$code" == "401" ]] || fail "Beneficios directo aceptó identidad falsificada"
+  done
+  code=$(http_code /tmp/melt-direct.json "$BENEFICIOS_DIRECT_URL/mis-puntos" -H "Authorization: Bearer $TOKEN" -H 'X-Auth-User-ID: victima-falsa' -H 'X-Auth-User-Email: falso@melt.test' -H 'X-Auth-User-Roles: administrador')
+  [[ "$code" == "200" ]] || fail "Beneficios directo rechazó Bearer válido"
+  [[ "$(jq -er '.usuarioId' /tmp/melt-direct.json)" == "$USER_ID" ]] || fail "Beneficios confió en el ID falsificado"
+  [[ "$(jq -er '.saldoPuntos' /tmp/melt-direct.json)" == "251" ]] || fail "saldo incorrecto tras Unicode y reintento"
+  code=$(http_code /tmp/melt-direct-admin.json "$BENEFICIOS_DIRECT_URL/mis-puntos" -H "Authorization: Bearer $ADMIN_TOKEN" -H 'X-Auth-User-Roles: cliente')
+  [[ "$code" == "403" ]] || fail "Beneficios permitió alterar el rol con headers"
+fi
+echo "OK: contrato estricto, Unicode y seguridad del acceso directo cuando se configura BENEFICIOS_DIRECT_URL."

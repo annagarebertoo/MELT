@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/subtle"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -35,14 +35,12 @@ type Usuario struct {
 	Roles        []string  `bson:"roles" json:"roles"`
 	Activo       bool      `bson:"activo" json:"activo"`
 	CreadoEn     time.Time `bson:"creadoEn" json:"creadoEn"`
-	ReferidoGym bool `bson:"referidoGym,omitempty" json:"-"`
 }
 
 type registroRequest struct {
 	Nombre   string `json:"nombre" binding:"required"`
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=8"`
-	CodigoReferido string `json:"codigoReferido,omitempty"`
 }
 
 type crearUsuarioRequest struct {
@@ -58,12 +56,10 @@ type loginRequest struct {
 }
 
 type authServer struct {
-	client    *mongo.Client
-	users     *mongo.Collection
-	jwtSecret []byte
-	tokenTTL  time.Duration
-	beneficiosURL string
-	codigoGimnasio string
+	client       *mongo.Client
+	users        *mongo.Collection
+	jwtSecret    []byte
+	tokenTTL     time.Duration
 	claveInterna string
 }
 
@@ -96,7 +92,7 @@ func main() {
 	}
 	users := client.Database("usuarios_db").Collection("usuarios")
 	_, err = users.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "email", Value: 1}},
+		Keys:    bson.D{{Key: "email", Value: 1}},
 		Options: options.Index().SetUnique(true).SetName("uq_usuarios_email"),
 	})
 	if err != nil {
@@ -113,10 +109,14 @@ func main() {
 		}
 		ttl = minutes
 	}
-	s := &authServer{client: client, users: users, jwtSecret: []byte(secret), tokenTTL: ttl, beneficiosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("BENEFICIOS_URL")), "/"), codigoGimnasio: strings.TrimSpace(os.Getenv("CODIGO_GIMNASIO")), claveInterna: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY"))}
+	s := &authServer{client: client, users: users, jwtSecret: []byte(secret), tokenTTL: ttl, claveInterna: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY"))}
 	port := strings.TrimSpace(os.Getenv("PORT"))
-	if port == "" { port = "8084" }
-	if err := s.router().Run(":" + port); err != nil { log.Fatal("no se pudo iniciar autenticación") }
+	if port == "" {
+		port = "8084"
+	}
+	if err := s.router().Run(":" + port); err != nil {
+		log.Fatal("no se pudo iniciar autenticación")
+	}
 }
 
 func (s *authServer) router() *gin.Engine {
@@ -126,18 +126,19 @@ func (s *authServer) router() *gin.Engine {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
 		if s == nil || s.client == nil || s.client.Ping(ctx, nil) != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"servicio":"auth","estado":"degradado"})
+			c.JSON(http.StatusServiceUnavailable, gin.H{"servicio": "auth", "estado": "degradado"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"servicio":"auth","estado":"ok"})
+		c.JSON(http.StatusOK, gin.H{"servicio": "auth", "estado": "ok"})
 	})
+	r.GET("/internal/usuarios/:id", s.usuarioInterno)
 	r.POST("/registro", s.registrarCliente)
 	r.POST("/login", s.login)
 	r.GET("/me", s.requiereAuth(), s.me)
 	r.GET("/verify", s.verificarSesion)
 	r.GET("/verify-admin", s.requiereRol("administrador", "superadministrador"), func(c *gin.Context) {
-    c.Status(http.StatusNoContent)
-})
+		c.Status(http.StatusNoContent)
+	})
 	r.POST("/usuarios", s.requiereRol("administrador", "superadministrador"), s.crearUsuario)
 	return r
 }
@@ -145,64 +146,64 @@ func (s *authServer) router() *gin.Engine {
 func (s *authServer) registrarCliente(c *gin.Context) {
 	var req registroRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code":"DATOS_INVALIDOS","message":"Completá nombre, email válido y contraseña de al menos 8 caracteres."}})
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "DATOS_INVALIDOS", "message": "Completá nombre, email válido y contraseña de al menos 8 caracteres."}})
 		return
 	}
 	if !passwordValida(req.Password) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code":"PASSWORD_INVALIDA","message":"La contraseña debe tener entre 8 y 72 bytes."}})
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "PASSWORD_INVALIDA", "message": "La contraseña debe tener entre 8 y 72 bytes."}})
 		return
 	}
 	usuario, err := s.nuevoUsuario(c, req.Nombre, req.Email, req.Password, []string{"cliente"})
-	if err != nil { return }
-	beneficio := "no_aplica"
-	if req.CodigoReferido != "" && s.codigoGimnasio != "" && subtle.ConstantTimeCompare([]byte(req.CodigoReferido), []byte(s.codigoGimnasio)) == 1 {
-		usuario.ReferidoGym = true
-		_, _ = s.users.UpdateOne(c.Request.Context(), bson.D{{Key:"id",Value:usuario.ID}}, bson.D{{Key:"$set",Value:bson.D{{Key:"referidoGym",Value:true}}}})
-		if s.acreditarRegistroGym(c.Request.Context(), usuario) == nil { beneficio = "acreditado" } else { beneficio = "pendiente_reintento_en_login" }
+	if err != nil {
+		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"usuario": usuario, "beneficioRegistro": beneficio})
+	c.JSON(http.StatusCreated, gin.H{"usuario": usuario})
 }
 
 func (s *authServer) crearUsuario(c *gin.Context) {
 	var req crearUsuarioRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code":"DATOS_INVALIDOS","message":"Completá nombre, email, contraseña y al menos un rol válido."}})
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "DATOS_INVALIDOS", "message": "Completá nombre, email, contraseña y al menos un rol válido."}})
 		return
 	}
 	if !passwordValida(req.Password) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code":"PASSWORD_INVALIDA","message":"La contraseña debe tener entre 8 y 72 bytes."}})
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "PASSWORD_INVALIDA", "message": "La contraseña debe tener entre 8 y 72 bytes."}})
 		return
 	}
 	for _, rol := range req.Roles {
 		if !rolesValidos[rol] {
-			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code":"ROL_INVALIDO","message":"Uno o más roles no son válidos."}})
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "ROL_INVALIDO", "message": "Uno o más roles no son válidos."}})
 			return
 		}
 	}
 	cl, ok := c.Get("claims")
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code":"TOKEN_INVALIDO","message":"Iniciá sesión para continuar."}})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "TOKEN_INVALIDO", "message": "Iniciá sesión para continuar."}})
 		return
 	}
 	claimsActuales, ok := cl.(*claims)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code":"TOKEN_INVALIDO","message":"Iniciá sesión para continuar."}})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "TOKEN_INVALIDO", "message": "Iniciá sesión para continuar."}})
 		return
 	}
 	esSuperadmin := false
 	for _, rol := range claimsActuales.Roles {
-		if rol == "superadministrador" { esSuperadmin = true }
+		if rol == "superadministrador" {
+			esSuperadmin = true
+		}
 	}
 	if !esSuperadmin {
 		for _, rol := range req.Roles {
 			if rol == "administrador" || rol == "superadministrador" {
-				c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code":"PERMISOS_INSUFICIENTES","message":"Solo un superadministrador puede asignar roles administrativos."}})
+				c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "PERMISOS_INSUFICIENTES", "message": "Solo un superadministrador puede asignar roles administrativos."}})
 				return
 			}
 		}
 	}
 	usuario, err := s.nuevoUsuario(c, req.Nombre, req.Email, req.Password, req.Roles)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	c.JSON(http.StatusCreated, gin.H{"usuario": usuario})
 }
 
@@ -214,12 +215,12 @@ func (s *authServer) nuevoUsuario(c *gin.Context, nombre, email, password string
 	nombre = strings.TrimSpace(nombre)
 	email = strings.ToLower(strings.TrimSpace(email))
 	if nombre == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code":"DATOS_INVALIDOS","message":"El nombre no puede estar vacío."}})
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "DATOS_INVALIDOS", "message": "El nombre no puede estar vacío."}})
 		return nil, errors.New("nombre vacío")
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code":"ERROR_INTERNO","message":"No se pudo crear la cuenta."}})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "ERROR_INTERNO", "message": "No se pudo crear la cuenta."}})
 		return nil, err
 	}
 	usuario := &Usuario{ID: bson.NewObjectID().Hex(), Nombre: nombre, Email: email, PasswordHash: string(hash), Roles: roles, Activo: true, CreadoEn: time.Now().UTC()}
@@ -227,67 +228,55 @@ func (s *authServer) nuevoUsuario(c *gin.Context, nombre, email, password string
 	defer cancel()
 	if _, err := s.users.InsertOne(ctx, usuario); err != nil {
 		if mongo.IsDuplicateKeyError(err) {
-			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code":"EMAIL_EXISTENTE","message":"Ya existe una cuenta con ese email."}})
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "EMAIL_EXISTENTE", "message": "Ya existe una cuenta con ese email."}})
 			return nil, err
 		}
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code":"USUARIOS_NO_DISPONIBLE","message":"No se pudo guardar la cuenta."}})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "USUARIOS_NO_DISPONIBLE", "message": "No se pudo guardar la cuenta."}})
 		return nil, err
 	}
 	return usuario, nil
 }
 
-
-func (s *authServer) acreditarRegistroGym(parent context.Context, u *Usuario) error {
-	if s.beneficiosURL == "" || s.claveInterna == "" || u == nil || !u.ReferidoGym { return errors.New("integración de beneficios no configurada") }
-	body, err := json.Marshal(map[string]string{"usuarioId":u.ID,"nombre":u.Nombre,"email":u.Email})
-	if err != nil { return err }
-	ctx,cancel := context.WithTimeout(parent,3*time.Second); defer cancel()
-	req,err := http.NewRequestWithContext(ctx,http.MethodPost,s.beneficiosURL+"/internal/registro-gym",strings.NewReader(string(body)))
-	if err != nil { return err }
-	req.Header.Set("Content-Type","application/json"); req.Header.Set("X-Melt-Internal-Key",s.claveInterna)
-	resp,err := (&http.Client{Timeout:3*time.Second}).Do(req)
-	if err != nil { return err }; defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK { return errors.New("beneficios no confirmó la acreditación") }
-	return nil
-}
-
 func (s *authServer) login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code":"DATOS_INVALIDOS","message":"Ingresá un email válido y la contraseña."}})
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "DATOS_INVALIDOS", "message": "Ingresá un email válido y la contraseña."}})
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	var usuario Usuario
-	err := s.users.FindOne(ctx, bson.D{{Key:"email", Value:strings.ToLower(strings.TrimSpace(req.Email))}}).Decode(&usuario)
+	err := s.users.FindOne(ctx, bson.D{{Key: "email", Value: strings.ToLower(strings.TrimSpace(req.Email))}}).Decode(&usuario)
 	if !passwordValida(req.Password) || err != nil || bcrypt.CompareHashAndPassword([]byte(usuario.PasswordHash), []byte(req.Password)) != nil || !usuario.Activo {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code":"CREDENCIALES_INVALIDAS","message":"Email o contraseña incorrectos."}})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "CREDENCIALES_INVALIDAS", "message": "Email o contraseña incorrectos."}})
 		return
 	}
-	if usuario.ReferidoGym { _ = s.acreditarRegistroGym(c.Request.Context(), &usuario) }
 	token, err := s.emitirToken(usuario)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code":"ERROR_INTERNO","message":"No se pudo iniciar sesión."}})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "ERROR_INTERNO", "message": "No se pudo iniciar sesión."}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"token":token,"tipo":"Bearer","expiraEnSegundos":int(s.tokenTTL.Seconds()),"usuario":usuario})
+	c.JSON(http.StatusOK, gin.H{"token": token, "tipo": "Bearer", "expiraEnSegundos": int(s.tokenTTL.Seconds()), "usuario": usuario})
 }
 
 func (s *authServer) emitirToken(u Usuario) (string, error) {
-	header, _ := json.Marshal(map[string]string{"alg":"HS256","typ":"JWT"})
+	header, _ := json.Marshal(map[string]string{"alg": "HS256", "typ": "JWT"})
 	now := time.Now()
-	payload, err := json.Marshal(claims{Subject:u.ID,Email:u.Email,Roles:u.Roles,Issued:now.Unix(),Expires:now.Add(s.tokenTTL).Unix()})
-	if err != nil { return "", err }
-	unsigned := base64.RawURLEncoding.EncodeToString(header)+"."+base64.RawURLEncoding.EncodeToString(payload)
+	payload, err := json.Marshal(claims{Subject: u.ID, Email: u.Email, Roles: u.Roles, Issued: now.Unix(), Expires: now.Add(s.tokenTTL).Unix()})
+	if err != nil {
+		return "", err
+	}
+	unsigned := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(payload)
 	mac := hmac.New(sha256.New, s.jwtSecret)
 	_, _ = mac.Write([]byte(unsigned))
-	return unsigned+"."+base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+	return unsigned + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }
 
 func (s *authServer) validarToken(token string) (*claims, error) {
 	parts := strings.Split(token, ".")
-	if len(parts) != 3 { return nil, errors.New("token inválido") }
+	if len(parts) != 3 {
+		return nil, errors.New("token inválido")
+	}
 	headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
 		return nil, errors.New("header inválido")
@@ -296,16 +285,24 @@ func (s *authServer) validarToken(token string) (*claims, error) {
 	if err := json.Unmarshal(headerJSON, &header); err != nil || header["alg"] != "HS256" || header["typ"] != "JWT" {
 		return nil, errors.New("algoritmo de token inválido")
 	}
-	unsigned := parts[0]+"."+parts[1]
+	unsigned := parts[0] + "." + parts[1]
 	mac := hmac.New(sha256.New, s.jwtSecret)
 	_, _ = mac.Write([]byte(unsigned))
 	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil || !hmac.Equal(signature, mac.Sum(nil)) { return nil, errors.New("firma inválida") }
+	if err != nil || !hmac.Equal(signature, mac.Sum(nil)) {
+		return nil, errors.New("firma inválida")
+	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	var cl claims
-	if err := json.Unmarshal(payload, &cl); err != nil { return nil, err }
-	if cl.Subject == "" || cl.Expires <= time.Now().Unix() { return nil, errors.New("token vencido") }
+	if err := json.Unmarshal(payload, &cl); err != nil {
+		return nil, err
+	}
+	if cl.Subject == "" || cl.Expires <= time.Now().Unix() {
+		return nil, errors.New("token vencido")
+	}
 	return &cl, nil
 }
 
@@ -313,12 +310,12 @@ func (s *authServer) requiereAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := strings.TrimSpace(c.GetHeader("Authorization"))
 		if !strings.HasPrefix(header, "Bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error":gin.H{"code":"TOKEN_REQUERIDO","message":"Iniciá sesión para continuar."}})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "TOKEN_REQUERIDO", "message": "Iniciá sesión para continuar."}})
 			return
 		}
 		cl, err := s.validarToken(strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")))
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error":gin.H{"code":"TOKEN_INVALIDO","message":"La sesión venció o el token no es válido."}})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "TOKEN_INVALIDO", "message": "La sesión venció o el token no es válido."}})
 			return
 		}
 		c.Set("claims", cl)
@@ -330,32 +327,35 @@ func (s *authServer) requiereRol(roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := strings.TrimSpace(c.GetHeader("Authorization"))
 		if !strings.HasPrefix(header, "Bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error":gin.H{"code":"TOKEN_REQUERIDO","message":"Iniciá sesión para continuar."}})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "TOKEN_REQUERIDO", "message": "Iniciá sesión para continuar."}})
 			return
 		}
 		cl, err := s.validarToken(strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")))
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error":gin.H{"code":"TOKEN_INVALIDO","message":"La sesión venció o el token no es válido."}})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "TOKEN_INVALIDO", "message": "La sesión venció o el token no es válido."}})
 			return
 		}
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 		defer cancel()
 		var usuario Usuario
 		if err := s.users.FindOne(ctx, bson.D{{Key: "id", Value: cl.Subject}}).Decode(&usuario); err != nil || !usuario.Activo {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code":"CUENTA_NO_DISPONIBLE","message":"La cuenta no está disponible."}})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "CUENTA_NO_DISPONIBLE", "message": "La cuenta no está disponible."}})
 			return
 		}
 		cl.Roles = usuario.Roles
 		cl.Email = usuario.Email
 		for _, actual := range usuario.Roles {
 			for _, permitido := range roles {
-				if actual == permitido { c.Set("claims",cl); c.Next(); return }
+				if actual == permitido {
+					c.Set("claims", cl)
+					c.Next()
+					return
+				}
 			}
 		}
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error":gin.H{"code":"PERMISOS_INSUFICIENTES","message":"No tenés permisos para realizar esta acción."}})
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "PERMISOS_INSUFICIENTES", "message": "No tenés permisos para realizar esta acción."}})
 	}
 }
-
 
 func (s *authServer) verificarSesion(c *gin.Context) {
 	header := strings.TrimSpace(c.GetHeader("Authorization"))
@@ -386,19 +386,24 @@ func (s *authServer) verificarSesion(c *gin.Context) {
 
 func (s *authServer) me(c *gin.Context) {
 	cl, ok := c.Get("claims")
-	if !ok { c.JSON(http.StatusUnauthorized, gin.H{"error":"token inválido"}); return }
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "token inválido"})
+		return
+	}
 	tokenClaims, ok := cl.(*claims)
-	if !ok { c.JSON(http.StatusUnauthorized, gin.H{"error":"token inválido"}); return }
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "token inválido"})
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	var usuario Usuario
-	if err := s.users.FindOne(ctx, bson.D{{Key:"id",Value:tokenClaims.Subject}}).Decode(&usuario); err != nil || !usuario.Activo {
-		c.JSON(http.StatusUnauthorized, gin.H{"error":gin.H{"code":"CUENTA_NO_DISPONIBLE","message":"La cuenta no está disponible."}})
+	if err := s.users.FindOne(ctx, bson.D{{Key: "id", Value: tokenClaims.Subject}}).Decode(&usuario); err != nil || !usuario.Activo {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "CUENTA_NO_DISPONIBLE", "message": "La cuenta no está disponible."}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"usuario":usuario})
+	c.JSON(http.StatusOK, gin.H{"usuario": usuario})
 }
-
 
 func crearAdminInicial(ctx context.Context, users *mongo.Collection) error {
 	email := strings.ToLower(strings.TrimSpace(os.Getenv("AUTH_ADMIN_EMAIL")))
@@ -434,3 +439,26 @@ func crearAdminInicial(ctx context.Context, users *mongo.Collection) error {
 	return err
 }
 
+// Solo consulta existencia: no publica datos personales ni roles.
+func (s *authServer) usuarioInterno(c *gin.Context) {
+	if s.claveInterna == "" {
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(c.GetHeader("X-Melt-Internal-Key")), []byte(s.claveInterna)) != 1 {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+	defer cancel()
+	err := s.users.FindOne(ctx, bson.M{"id": c.Param("id"), "activo": true}, options.FindOne().SetProjection(bson.M{"_id": 1})).Err()
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}

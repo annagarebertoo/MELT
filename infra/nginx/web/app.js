@@ -187,7 +187,6 @@ function setAuthMode(mode) {
   $("#register-tab").setAttribute("aria-selected", String(register));
   $("#login-tab").setAttribute("aria-selected", String(!register));
   $("#name-field").classList.toggle("hidden", !register);
-  $("#referral-field").classList.toggle("hidden", !register);
   $("#auth-name").required = register;
   $("#auth-submit").textContent = register ? "Crear cuenta" : "Ingresar";
   $("#auth-password").autocomplete = register ? "new-password" : "current-password";
@@ -200,7 +199,7 @@ async function submitAuth(event) {
   const email = $("#auth-email").value.trim();
   const password = $("#auth-password").value;
   const path = state.mode === "register" ? "/auth/registro" : "/auth/login";
-  const body = state.mode === "register" ? { nombre: name, email, password, codigoReferido: $("#auth-referral").value.trim() } : { email, password };
+  const body = state.mode === "register" ? { nombre: name, email, password } : { email, password };
   $("#auth-submit").disabled = true;
   setStatus("#auth-status", state.mode === "register" ? "Creando tu cuenta…" : "Ingresando…");
   try {
@@ -498,8 +497,6 @@ function initialize() {
   const dateInput = $("#booking-date");
   dateInput.min = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   dateInput.value = dateInput.min;
-  const referral = new URLSearchParams(window.location.search).get("referencia");
-  if (referral) { setAuthMode("register"); $("#auth-referral").value = referral; }
   updateAuthChrome();
   loadTreatments();
   loadAccount();

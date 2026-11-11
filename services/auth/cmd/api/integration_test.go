@@ -2,9 +2,9 @@ package main
 
 import (
 	"bytes"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"context"
 	"encoding/json"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,21 +24,29 @@ func TestIntegracionRegistroLoginYMeConMongo(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	client, err := mongo.Connect(options.Client().ApplyURI(uri))
-	if err != nil { t.Fatalf("no se pudo configurar MongoDB de prueba: %v", err) }
+	if err != nil {
+		t.Fatalf("no se pudo configurar MongoDB de prueba: %v", err)
+	}
 	defer client.Disconnect(context.Background())
-	if err := client.Ping(ctx, nil); err != nil { t.Fatalf("MongoDB de prueba no responde: %v", err) }
+	if err := client.Ping(ctx, nil); err != nil {
+		t.Fatalf("MongoDB de prueba no responde: %v", err)
+	}
 
 	db := client.Database("melt_auth_integration_test")
 	users := db.Collection("usuarios")
-	if err := users.Drop(ctx); err != nil { t.Fatalf("no se pudo limpiar la colección de prueba: %v", err) }
+	if err := users.Drop(ctx); err != nil {
+		t.Fatalf("no se pudo limpiar la colección de prueba: %v", err)
+	}
 	t.Cleanup(func() { _ = users.Drop(context.Background()) })
 	_, err = users.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "email", Value: 1}},
+		Keys:    bson.D{{Key: "email", Value: 1}},
 		Options: options.Index().SetUnique(true).SetName("uq_usuarios_email_test"),
 	})
-	if err != nil { t.Fatalf("no se pudo crear índice de prueba: %v", err) }
+	if err != nil {
+		t.Fatalf("no se pudo crear índice de prueba: %v", err)
+	}
 
-	s := &authServer{client: client, users: users, jwtSecret: []byte("clave-de-prueba-de-al-menos-32-caracteres"), tokenTTL: time.Minute}
+	s := &authServer{client: client, users: users, jwtSecret: []byte("clave-de-prueba-de-al-menos-32-caracteres"), tokenTTL: time.Minute, claveInterna: "test-internal"}
 	gin.SetMode(gin.TestMode)
 	router := s.router()
 
@@ -47,29 +55,64 @@ func TestIntegracionRegistroLoginYMeConMongo(t *testing.T) {
 	registroReq := httptest.NewRequest(http.MethodPost, "/registro", bytes.NewReader(body))
 	registroReq.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(recorder, registroReq)
-	if recorder.Code != http.StatusCreated { t.Fatalf("registro: se esperaba 201 y se obtuvo %d: %s", recorder.Code, recorder.Body.String()) }
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("registro: se esperaba 201 y se obtuvo %d: %s", recorder.Code, recorder.Body.String())
+	}
 
+	if bytes.Contains(recorder.Body.Bytes(), []byte("beneficioRegistro")) {
+		t.Fatal("el registro conserva el beneficio antiguo")
+	}
+	var alta struct {
+		Usuario Usuario `json:"usuario"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &alta); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		id, key string
+		status  int
+	}{{alta.Usuario.ID, "", 401}, {alta.Usuario.ID, "wrong", 401}, {alta.Usuario.ID, "test-internal", 204}, {"missing", "test-internal", 404}} {
+		q := httptest.NewRequest("GET", "/internal/usuarios/"+tc.id, nil)
+		q.Header.Set("X-Melt-Internal-Key", tc.key)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, q)
+		if w.Code != tc.status {
+			t.Fatalf("consulta interna: %d", w.Code)
+		}
+	}
 	recorder = httptest.NewRecorder()
 	loginBody := []byte(`{"email":"cliente.integracion@example.com","password":"clave-segura-123"}`)
 	loginReq := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(loginBody))
 	loginReq.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(recorder, loginReq)
-	if recorder.Code != http.StatusOK { t.Fatalf("login: se esperaba 200 y se obtuvo %d: %s", recorder.Code, recorder.Body.String()) }
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("login: se esperaba 200 y se obtuvo %d: %s", recorder.Code, recorder.Body.String())
+	}
 	var login map[string]any
-	if err := json.Unmarshal(recorder.Body.Bytes(), &login); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(recorder.Body.Bytes(), &login); err != nil {
+		t.Fatal(err)
+	}
 	token, ok := login["token"].(string)
-	if !ok || token == "" { t.Fatal("el login no devolvió un token") }
+	if !ok || token == "" {
+		t.Fatal("el login no devolvió un token")
+	}
 
 	recorder = httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	router.ServeHTTP(recorder, req)
-	if recorder.Code != http.StatusOK { t.Fatalf("me: se esperaba 200 y se obtuvo %d: %s", recorder.Code, recorder.Body.String()) }
-	if bytes.Contains(recorder.Body.Bytes(), []byte("passwordHash")) { t.Fatal("la respuesta no debe exponer passwordHash") }
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("me: se esperaba 200 y se obtuvo %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if bytes.Contains(recorder.Body.Bytes(), []byte("passwordHash")) {
+		t.Fatal("la respuesta no debe exponer passwordHash")
+	}
 
 	recorder = httptest.NewRecorder()
 	registroDuplicadoReq := httptest.NewRequest(http.MethodPost, "/registro", bytes.NewReader(body))
 	registroDuplicadoReq.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(recorder, registroDuplicadoReq)
-	if recorder.Code != http.StatusConflict { t.Fatalf("email duplicado: se esperaba 409 y se obtuvo %d", recorder.Code) }
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("email duplicado: se esperaba 409 y se obtuvo %d", recorder.Code)
+	}
 }

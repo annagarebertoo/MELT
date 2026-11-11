@@ -3,58 +3,66 @@ package main
 import (
 	"context"
 	"crypto/subtle"
-	"encoding/json"
 	"errors"
 	"log"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
-	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readconcern"
+	"go.mongodb.org/mongo-driver/v2/mongo/writeconcern"
 )
 
-type RegistroGymRequest struct {
-	UsuarioID string `json:"usuarioId" binding:"required"`
-	Nombre string `json:"nombre" binding:"required"`
-	Email string `json:"email" binding:"required,email"`
-}
+// Limita los enteros al rango exacto interoperable con clientes JavaScript.
+const maxPuntos int64 = 9007199254740991
 
-type RegistroExternoRequest struct {
-	SolicitudID string `json:"solicitudId" binding:"required"`
-	Nombre      string `json:"nombre" binding:"required"`
-	Email       string `json:"email" binding:"required,email"`
-	Codigo      string `json:"codigoReferido" binding:"required"`
-	Plan        string `json:"plan" binding:"required"`
-	Membresia   string `json:"membresia" binding:"required"`
-}
+var errConflicto = errors.New("solicitud reutilizada con otros datos")
+var errLimite = errors.New("saldo fuera del rango admitido")
+var errUsuario = errors.New("usuario inexistente o inactivo")
 
-type RegistroExterno struct {
-	ID              string    `bson:"id" json:"id"`
-	SolicitudID     string    `bson:"solicitudId" json:"solicitudId"`
-	Nombre          string    `bson:"nombre" json:"nombre"`
-	Email           string    `bson:"email" json:"email"`
-	Origen          string    `bson:"origen" json:"origen"`
-	Plan            string    `bson:"plan" json:"plan"`
-	Membresia       string    `bson:"membresia" json:"membresia"`
-	PuntosRegalo     int       `bson:"puntosRegalo" json:"puntosRegalo"`
-	SaldoPuntos      int       `bson:"saldoPuntos" json:"saldoPuntos"`
-	RegaloAcreditado bool      `bson:"regaloAcreditado" json:"regaloAcreditado"`
-	CreadoEn        time.Time `bson:"creadoEn" json:"creadoEn"`
+type AcreditarRequest struct {
+	SolicitudID string `json:"solicitudId"`
+	UsuarioID   string `json:"usuarioId"`
+	Puntos      int64  `json:"puntos"`
 }
-
+type Movimiento struct {
+	SolicitudID string    `bson:"_id" json:"solicitudId"`
+	UsuarioID   string    `bson:"usuarioId" json:"usuarioId"`
+	Puntos      int64     `bson:"puntos" json:"puntos"`
+	SaldoPuntos int64     `bson:"saldoPuntos" json:"saldoPuntos"`
+	Tipo        string    `bson:"tipo" json:"tipo"`
+	CreadoEn    time.Time `bson:"creadoEn" json:"creadoEn"`
+}
+type Cuenta struct {
+	UsuarioID   string `bson:"usuarioId"`
+	SaldoPuntos int64  `bson:"saldoPuntos"`
+	// Campos históricos preservados para mostrar el movimiento original.
+	PuntosRegalo int64     `bson:"puntosRegalo"`
+	CreadoEn     time.Time `bson:"creadoEn"`
+}
+type almacenPuntos interface {
+	buscarSolicitud(context.Context, string) (Movimiento, error)
+	acreditar(context.Context, AcreditarRequest) (Movimiento, bool, error)
+	consultar(context.Context, string) (int64, []Movimiento, error)
+}
 type Servidor struct {
-	cliente            *mongo.Client
-	registros          *mongo.Collection
-	codigoGimnasio     string
-	claveAPI           string
-	puntosPorMembresia map[string]int
-	puntosRegistroGym int
-	claveInterna string
+	cliente          *mongo.Client
+	almacen          almacenPuntos
+	claveAPI         string
+	verificarUsuario func(context.Context, string) error
+	verificarSesion  func(context.Context, string) (identidadCliente, error)
+}
+type almacenMongo struct {
+	cliente                *mongo.Client
+	registros, movimientos *mongo.Collection
 }
 
 func main() {
@@ -62,278 +70,268 @@ func main() {
 	if uri == "" {
 		uri = "mongodb://localhost:27017"
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-
 	cliente, err := mongo.Connect(options.Client().ApplyURI(uri))
 	if err != nil {
-		log.Fatal("no se pudo configurar MongoDB")
+		log.Fatal(err)
 	}
-	defer func() {
-		if err := cliente.Disconnect(context.Background()); err != nil {
-			log.Printf("no se pudo cerrar MongoDB: %v", err)
-		}
-	}()
-	if err := cliente.Ping(ctx, nil); err != nil {
+	defer cliente.Disconnect(context.Background())
+	if err = cliente.Ping(ctx, nil); err != nil {
 		log.Fatal("no se pudo conectar con MongoDB")
 	}
-
-	coleccion := cliente.Database("beneficios_db").Collection("registros_externos")
-	_, err = coleccion.Indexes().CreateMany(ctx, []mongo.IndexModel{
-		{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_registro_externo_email")},
-		{Keys: bson.D{{Key: "solicitudId", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true).SetName("uq_registro_externo_solicitud_v2")},
-		{Keys: bson.D{{Key: "usuarioId", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true).SetName("uq_registro_gym_usuario")},
-	})
-	if err != nil {
-		log.Fatal("no se pudieron crear los índices de registros externos")
+	a := nuevoAlmacen(cliente, "beneficios_db")
+	if err = a.preparar(ctx); err != nil {
+		log.Fatalf("no se pudo preparar Beneficios: %v", err)
 	}
-
-	puntos, err := cargarPuntos(os.Getenv("PUNTOS_POR_PLAN_MEMBRESIA"))
-	if err != nil {
-		log.Fatal("PUNTOS_POR_PLAN_MEMBRESIA debe ser un JSON válido con puntos no negativos")
-	}
-	puntosGym := 100
-	if raw := strings.TrimSpace(os.Getenv("PUNTOS_REGISTRO_GIMNASIO")); raw != "" {
-		valor, parseErr := strconv.Atoi(raw)
-		if parseErr != nil || valor < 0 { log.Fatal("PUNTOS_REGISTRO_GIMNASIO debe ser un entero no negativo") }
-		puntosGym = valor
-	}
-	servidor := &Servidor{
-		cliente:            cliente,
-		registros:          coleccion,
-		codigoGimnasio:     strings.TrimSpace(os.Getenv("CODIGO_GIMNASIO")),
-		claveAPI:           strings.TrimSpace(os.Getenv("CLAVE_API_GIMNASIO")),
-		puntosPorMembresia: puntos,
-		puntosRegistroGym: puntosGym,
-		claveInterna: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY")),
-	}
+	authURL := strings.TrimRight(strings.TrimSpace(os.Getenv("AUTH_URL")), "/")
+	claveInterna := strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY"))
+	s := &Servidor{cliente: cliente, almacen: a, claveAPI: strings.TrimSpace(os.Getenv("BENEFICIOS_PARTNER_KEY")), verificarUsuario: verificadorAuth(authURL, claveInterna), verificarSesion: verificadorSesionAuth(authURL)}
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
 		port = "8083"
 	}
-	if err := crearRouter(servidor).Run(":" + port); err != nil {
-		log.Fatal("no se pudo iniciar el servicio de beneficios")
+	if err := crearRouter(s).Run(":" + port); err != nil {
+		log.Fatal(err)
 	}
 }
-
-func crearRouter(servidor *Servidor) *gin.Engine {
-	router := gin.New()
-	router.Use(gin.Logger(), gin.Recovery())
-
-	router.GET("/health", func(c *gin.Context) {
-		if servidor == nil || servidor.cliente == nil || servidor.registros == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"servicio": "beneficios", "estado": "degradado"})
-			return
-		}
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
-		defer cancel()
-		if err := servidor.cliente.Ping(ctx, nil); err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"servicio": "beneficios", "estado": "degradado"})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"servicio": "beneficios", "estado": "ok"})
-	})
-
-	router.POST("/registro-externo", servidor.registrarExterno)
-	router.POST("/internal/registro-gym", servidor.registrarRegistroGym)
-	router.GET("/mis-puntos", servidor.requiereCliente(), servidor.misPuntos)
-	return router
+func nuevoAlmacen(c *mongo.Client, db string) *almacenMongo {
+	return &almacenMongo{c, c.Database(db).Collection("registros_externos"), c.Database(db).Collection("movimientos_puntos")}
 }
-
-// requiereCliente solo acepta identidad propagada por el gateway después de
-// validar el Bearer token contra auth. Este servicio no publica un puerto al host.
-func (s *Servidor) requiereCliente() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		id := strings.TrimSpace(c.GetHeader("X-Auth-User-ID"))
-		email := strings.ToLower(strings.TrimSpace(c.GetHeader("X-Auth-User-Email")))
-		roles := strings.Split(c.GetHeader("X-Auth-User-Roles"), ",")
-		if id == "" || email == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "IDENTIDAD_REQUERIDA", "message": "Iniciá sesión para consultar tus puntos."}})
-			return
-		}
-		for _, rol := range roles {
-			if strings.TrimSpace(rol) == "cliente" {
-				c.Set("authUserID", id)
-				c.Set("authUserEmail", email)
-				c.Next()
-				return
+func (a *almacenMongo) preparar(ctx context.Context) error {
+	// El índice email era una regla de regalo único, no una regla del saldo.
+	// Se retira sin borrar documentos ni saldos preexistentes.
+	indices, err := a.registros.Indexes().List(ctx)
+	if err != nil {
+		return err
+	}
+	var encontrados []bson.M
+	if err = indices.All(ctx, &encontrados); err != nil {
+		return err
+	}
+	for _, indice := range encontrados {
+		if indice["name"] == "uq_registro_externo_email" {
+			if err := a.registros.Indexes().DropOne(ctx, "uq_registro_externo_email"); err != nil {
+				return err
 			}
 		}
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "PERMISOS_INSUFICIENTES", "message": "Esta operación es exclusiva para clientes."}})
 	}
+	if _, err := a.registros.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "usuarioId", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true).SetName("uq_registro_gym_usuario")}); err != nil {
+		return err
+	}
+	_, err = a.movimientos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "usuarioId", Value: 1}, {Key: "creadoEn", Value: 1}}})
+	return err
 }
-
-// registrarRegistroGym acredita una única vez el regalo al ID creado por Auth.
-func (s *Servidor) registrarRegistroGym(c *gin.Context) {
-	if s == nil || s.registros == nil || s.claveInterna == "" {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code":"BENEFICIOS_NO_DISPONIBLE","message":"La integración interna no está configurada."}}); return
-	}
-	clave := c.GetHeader("X-Melt-Internal-Key")
-	if subtle.ConstantTimeCompare([]byte(clave), []byte(s.claveInterna)) != 1 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code":"INTERNAL_UNAUTHORIZED","message":"Servicio no autorizado."}}); return
-	}
-	var req RegistroGymRequest
-	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.UsuarioID)=="" || strings.TrimSpace(req.Nombre)=="" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code":"DATOS_INVALIDOS","message":"usuarioId, nombre y email válido son obligatorios."}}); return
-	}
-	req.UsuarioID = strings.TrimSpace(req.UsuarioID); req.Nombre = strings.TrimSpace(req.Nombre); req.Email = strings.ToLower(strings.TrimSpace(req.Email))
-	ctx,cancel := context.WithTimeout(c.Request.Context(),5*time.Second); defer cancel()
-	var existente bson.M
-	err := s.registros.FindOne(ctx,bson.D{{Key:"usuarioId",Value:req.UsuarioID}}).Decode(&existente)
-	if err == nil { c.JSON(http.StatusOK,existente); return }
-	if !errors.Is(err,mongo.ErrNoDocuments) { c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo consultar el beneficio"}); return }
-	doc := bson.M{"id":req.UsuarioID,"usuarioId":req.UsuarioID,"nombre":req.Nombre,"email":req.Email,"origen":"gimnasio","puntosRegalo":s.puntosRegistroGym,"saldoPuntos":s.puntosRegistroGym,"regaloAcreditado":true,"creadoEn":time.Now().UTC()}
-	if _,err := s.registros.InsertOne(ctx,doc); err != nil {
-		if mongo.IsDuplicateKeyError(err) { var repetido bson.M; if e:=s.registros.FindOne(ctx,bson.D{{Key:"usuarioId",Value:req.UsuarioID}}).Decode(&repetido); e==nil { c.JSON(http.StatusOK,repetido); return }; c.JSON(http.StatusConflict,gin.H{"error":gin.H{"code":"EMAIL_YA_BENEFICIADO","message":"Ese email ya recibió un beneficio de registro."}}); return }
-		c.JSON(http.StatusServiceUnavailable,gin.H{"error":"no se pudo acreditar el beneficio"}); return
-	}
-	c.JSON(http.StatusCreated,doc)
-}
-
-// misPuntos consulta el saldo ya registrado para el email de la identidad verificada.
-// Los registros del gimnasio todavía no tienen vínculo persistente por ID de usuario.
-func (s *Servidor) misPuntos(c *gin.Context) {
-	if s == nil || s.registros == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "BENEFICIOS_NO_DISPONIBLE", "message": "El servicio de beneficios no está disponible."}})
-		return
-	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-	defer cancel()
-	var registro RegistroExterno
-	err := s.registros.FindOne(ctx, bson.D{{Key: "usuarioId", Value: c.GetString("authUserID")}}).Decode(&registro)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		c.JSON(http.StatusOK, gin.H{"usuarioId": c.GetString("authUserID"), "saldoPuntos": 0, "movimientos": []RegistroExterno{}})
-		return
-	}
-	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "BENEFICIOS_NO_DISPONIBLE", "message": "No se pudo consultar el saldo."}})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"usuarioId": c.GetString("authUserID"), "saldoPuntos": registro.SaldoPuntos, "movimientos": []RegistroExterno{registro}})
-}
-
-func (s *Servidor) registrarExterno(c *gin.Context) {
-	if s == nil || s.registros == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "BENEFICIOS_NO_DISPONIBLE", "message": "El servicio de beneficios no está disponible."}})
-		return
-	}
-	if s.codigoGimnasio == "" || s.claveAPI == "" || len(s.puntosPorMembresia) == 0 {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "REGISTRO_EXTERNO_NO_CONFIGURADO", "message": "El registro externo todavía no está configurado."}})
-		return
-	}
-
-	claveEnviada := c.GetHeader("X-Partner-Key")
-	if claveEnviada == "" || subtle.ConstantTimeCompare([]byte(claveEnviada), []byte(s.claveAPI)) != 1 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "PARTNER_NO_AUTORIZADO", "message": "El consumidor no está autorizado para registrar altas externas."}})
-		return
-	}
-
-	var req RegistroExternoRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_PARAMETER", "message": "Completá nombre, email, solicitudId, codigoReferido, plan y membresia con valores válidos."}})
-		return
-	}
-	req.SolicitudID = strings.TrimSpace(req.SolicitudID)
-	req.Nombre = strings.TrimSpace(req.Nombre)
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
-	req.Codigo = strings.TrimSpace(req.Codigo)
-	req.Plan = normalizarClave(req.Plan)
-	req.Membresia = normalizarClave(req.Membresia)
-
-	if req.SolicitudID == "" || req.Nombre == "" || req.Email == "" || req.Plan == "" || req.Membresia == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_PARAMETER", "message": "Los campos obligatorios no pueden estar vacíos."}})
-		return
-	}
-	if req.Codigo != s.codigoGimnasio {
-		c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "CODIGO_REFERIDO_INVALIDO", "message": "El código de referido no es válido."}})
-		return
-	}
-
-	clave := req.Plan + "|" + req.Membresia
-	puntos, ok := s.puntosPorMembresia[clave]
-	if !ok {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": gin.H{"code": "PLAN_MEMBRESIA_NO_DISPONIBLE", "message": "La combinación de plan y membresía no tiene un regalo configurado."}})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-	defer cancel()
-
-	var existente RegistroExterno
-	err := s.registros.FindOne(ctx, bson.D{{Key: "solicitudId", Value: req.SolicitudID}}).Decode(&existente)
-	if err == nil {
-		if !strings.EqualFold(existente.Email, req.Email) ||
-			existente.Nombre != req.Nombre ||
-			existente.Plan != req.Plan ||
-			existente.Membresia != req.Membresia {
-			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "SOLICITUD_YA_PROCESADA", "message": "La solicitud ya fue procesada con otros datos."}})
+func crearRouter(s *Servidor) *gin.Engine {
+	r := gin.New()
+	r.Use(gin.Logger(), gin.Recovery())
+	r.GET("/health", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+		if s == nil || s.cliente == nil || s.cliente.Ping(ctx, nil) != nil {
+			c.JSON(503, gin.H{"estado": "degradado"})
 			return
 		}
-		c.JSON(http.StatusOK, existente)
+		c.JSON(200, gin.H{"servicio": "beneficios", "estado": "ok"})
+	})
+	r.POST("/acreditar-puntos", s.acreditarPuntos)
+	r.GET("/mis-puntos", s.requiereCliente(), s.misPuntos)
+	return r
+}
+func errorJSON(c *gin.Context, status int, code, message string) {
+	c.JSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
+}
+func (s *Servidor) acreditarPuntos(c *gin.Context) {
+	if s == nil || s.claveAPI == "" {
+		errorJSON(c, 503, "BENEFICIOS_NO_DISPONIBLE", "La acreditación no está configurada.")
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(c.GetHeader("X-Partner-Key")), []byte(s.claveAPI)) != 1 {
+		errorJSON(c, 401, "PARTNER_NO_AUTORIZADO", "Consumidor no autorizado.")
+		return
+	}
+	mediaType, _, err := mime.ParseMediaType(c.GetHeader("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		errorJSON(c, 415, "CONTENT_TYPE_INVALIDO", "Usá Content-Type: application/json.")
+		return
+	}
+	req, err := decodificarAcreditacion(http.MaxBytesReader(c.Writer, c.Request.Body, 4096))
+	if err != nil || req.SolicitudID != strings.TrimSpace(req.SolicitudID) || req.UsuarioID != strings.TrimSpace(req.UsuarioID) || utf8.RuneCountInString(req.SolicitudID) == 0 || utf8.RuneCountInString(req.SolicitudID) > 128 || utf8.RuneCountInString(req.UsuarioID) == 0 || utf8.RuneCountInString(req.UsuarioID) > 128 || req.Puntos <= 0 || req.Puntos > maxPuntos {
+		errorJSON(c, 400, "DATOS_INVALIDOS", "solicitudId y usuarioId deben tener entre 1 y 128 caracteres Unicode sin espacios extremos; puntos debe ser un entero positivo hasta 9007199254740991.")
+		return
+	}
+	if s.almacen == nil || s.verificarUsuario == nil {
+		errorJSON(c, 503, "BENEFICIOS_NO_DISPONIBLE", "Servicio no disponible.")
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
+	defer cancel()
+	// Resolver antes de consultar Auth permite recuperar una confirmación aun
+	// si Auth está caído, y garantiza conflicto por ID global con cualquier payload.
+	previo, err := s.almacen.buscarSolicitud(ctx, req.SolicitudID)
+	if err == nil {
+		movimiento, _, e := resolverRepetida(previo, req)
+		if e != nil {
+			errorJSON(c, 409, "SOLICITUD_EN_CONFLICTO", "solicitudId ya se utilizó con otros datos.")
+			return
+		}
+		c.JSON(http.StatusOK, movimiento)
 		return
 	}
 	if !errors.Is(err, mongo.ErrNoDocuments) {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "BENEFICIOS_NO_DISPONIBLE", "message": "No se pudo consultar el registro."}})
+		errorJSON(c, 503, "BENEFICIOS_NO_DISPONIBLE", "No se pudo consultar la solicitud; reintentá con el mismo solicitudId.")
 		return
 	}
-
-	registro := RegistroExterno{
-		ID:               req.SolicitudID,
-		SolicitudID:      req.SolicitudID,
-		Nombre:           req.Nombre,
-		Email:            req.Email,
-		Origen:           "gimnasio",
-		Plan:             req.Plan,
-		Membresia:        req.Membresia,
-		PuntosRegalo:     puntos,
-		SaldoPuntos:      puntos,
-		RegaloAcreditado: true,
-		CreadoEn:         time.Now().UTC(),
+	if err := s.verificarUsuario(ctx, req.UsuarioID); err != nil {
+		if errors.Is(err, errUsuario) {
+			errorJSON(c, 404, "USUARIO_NO_EXISTE", "Usuario inexistente o inactivo.")
+		} else {
+			errorJSON(c, 503, "AUTH_NO_DISPONIBLE", "No se pudo verificar el usuario.")
+		}
+		return
 	}
-	if _, err := s.registros.InsertOne(ctx, registro); err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			log.Printf("ERROR DUPLICADO AL ACREDITAR GIMNASIO: %v", err)
-			// A unique email or request ID prevents a second gift from being credited.
-			var porSolicitud RegistroExterno
-			if findErr := s.registros.FindOne(ctx, bson.D{{Key: "solicitudId", Value: req.SolicitudID}}).Decode(&porSolicitud); findErr == nil {
-				if !strings.EqualFold(porSolicitud.Email, req.Email) {
-					c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "SOLICITUD_YA_PROCESADA", "message": "La solicitud ya fue procesada con otros datos."}})
-					return
-				}
-				c.JSON(http.StatusOK, porSolicitud)
-				return
+	movimiento, repetida, err := s.almacen.acreditar(ctx, req)
+	switch {
+	case errors.Is(err, errConflicto):
+		errorJSON(c, 409, "SOLICITUD_EN_CONFLICTO", "solicitudId ya se utilizó con otros datos.")
+	case errors.Is(err, errLimite):
+		errorJSON(c, 422, "SALDO_FUERA_DE_RANGO", "La operación supera el saldo máximo admitido.")
+	case err != nil:
+		errorJSON(c, 503, "BENEFICIOS_NO_DISPONIBLE", "No se pudo confirmar la operación; reintentá con el mismo solicitudId.")
+	default:
+		status := http.StatusCreated
+		if repetida {
+			status = http.StatusOK
+		}
+		c.JSON(status, movimiento)
+	}
+}
+func (s *Servidor) misPuntos(c *gin.Context) {
+	if s == nil || s.almacen == nil {
+		errorJSON(c, 503, "BENEFICIOS_NO_DISPONIBLE", "No se pudo consultar el saldo.")
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
+	defer cancel()
+	saldo, movimientos, err := s.almacen.consultar(ctx, c.GetString("authUserID"))
+	if err != nil {
+		errorJSON(c, 503, "BENEFICIOS_NO_DISPONIBLE", "No se pudo consultar el saldo.")
+		return
+	}
+	c.JSON(200, gin.H{"usuarioId": c.GetString("authUserID"), "saldoPuntos": saldo, "movimientos": movimientos})
+}
+func verificadorAuth(base, clave string) func(context.Context, string) error {
+	client := &http.Client{Timeout: 3 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	return func(ctx context.Context, id string) error {
+		if base == "" || clave == "" {
+			return errors.New("Auth no configurado")
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/internal/usuarios/"+url.PathEscape(id), nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("X-Melt-Internal-Key", clave)
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode == 404 {
+			return errUsuario
+		}
+		if resp.StatusCode != 204 {
+			return errors.New("Auth no disponible")
+		}
+		return nil
+	}
+}
+func resolverRepetida(m Movimiento, req AcreditarRequest) (Movimiento, bool, error) {
+	if m.UsuarioID != req.UsuarioID || m.Puntos != req.Puntos {
+		return Movimiento{}, false, errConflicto
+	}
+	return m, true, nil
+}
+func (a *almacenMongo) acreditar(ctx context.Context, req AcreditarRequest) (Movimiento, bool, error) {
+	// El _id de movimientos es la clave global de idempotencia. Ante una carrera
+	// de inserción se reconsulta luego del abort; jamás se incrementa fuera del commit.
+	for intento := 0; intento < 4; intento++ {
+		var previo Movimiento
+		err := a.movimientos.FindOne(ctx, bson.M{"_id": req.SolicitudID}).Decode(&previo)
+		if err == nil {
+			return resolverRepetida(previo, req)
+		}
+		if !errors.Is(err, mongo.ErrNoDocuments) {
+			return Movimiento{}, false, err
+		}
+		session, err := a.cliente.StartSession()
+		if err != nil {
+			return Movimiento{}, false, err
+		}
+		var resultado Movimiento
+		_, err = session.WithTransaction(ctx, func(tx context.Context) (any, error) {
+			resultado = Movimiento{SolicitudID: req.SolicitudID, UsuarioID: req.UsuarioID, Puntos: req.Puntos, Tipo: "acreditacion_externa", CreadoEn: time.Now().UTC().Truncate(time.Millisecond)}
+			// Reservar primero la solicitud; el registro y el incremento se revierten juntos.
+			if _, e := a.movimientos.InsertOne(tx, resultado); e != nil {
+				return nil, e
 			}
-			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "REGISTRO_YA_EXISTE", "message": "Ya existe un registro con ese email."}})
-			return
+			_, e := a.registros.UpdateOne(tx, bson.M{"usuarioId": req.UsuarioID}, bson.M{"$setOnInsert": bson.M{"id": req.UsuarioID, "saldoPuntos": int64(0), "creadoEn": resultado.CreadoEn}}, options.UpdateOne().SetUpsert(true))
+			if e != nil {
+				return nil, e
+			}
+			var cuenta Cuenta
+			e = a.registros.FindOneAndUpdate(tx, bson.M{"usuarioId": req.UsuarioID, "saldoPuntos": bson.M{"$lte": maxPuntos - req.Puntos}}, bson.M{"$inc": bson.M{"saldoPuntos": req.Puntos}}, options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&cuenta)
+			if errors.Is(e, mongo.ErrNoDocuments) {
+				return nil, errLimite
+			}
+			if e != nil {
+				return nil, e
+			}
+			resultado.SaldoPuntos = cuenta.SaldoPuntos
+			_, e = a.movimientos.UpdateOne(tx, bson.M{"_id": req.SolicitudID}, bson.M{"$set": bson.M{"saldoPuntos": cuenta.SaldoPuntos}})
+			return nil, e
+		}, options.Transaction().SetReadConcern(readconcern.Snapshot()).SetWriteConcern(writeconcern.Majority()))
+		session.EndSession(ctx)
+		if err == nil {
+			return resultado, false, nil
 		}
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "BENEFICIOS_NO_DISPONIBLE", "message": "No se pudo guardar el registro."}})
-		return
+		if !mongo.IsDuplicateKeyError(err) {
+			return Movimiento{}, false, err
+		}
 	}
-	c.JSON(http.StatusCreated, registro)
+	return Movimiento{}, false, errors.New("contención; reintentar solicitud")
+}
+func (a *almacenMongo) consultar(ctx context.Context, id string) (int64, []Movimiento, error) {
+	session, err := a.cliente.StartSession()
+	if err != nil {
+		return 0, nil, err
+	}
+	defer session.EndSession(ctx)
+	var cuenta Cuenta
+	movimientos := []Movimiento{}
+	_, err = session.WithTransaction(ctx, func(tx context.Context) (any, error) {
+		cuenta = Cuenta{}
+		movimientos = []Movimiento{}
+		e := a.registros.FindOne(tx, bson.M{"usuarioId": id}).Decode(&cuenta)
+		if e != nil && !errors.Is(e, mongo.ErrNoDocuments) {
+			return nil, e
+		}
+		cursor, e := a.movimientos.Find(tx, bson.M{"usuarioId": id}, options.Find().SetSort(bson.D{{Key: "creadoEn", Value: 1}, {Key: "_id", Value: 1}}))
+		if e != nil {
+			return nil, e
+		}
+		if e = cursor.All(tx, &movimientos); e != nil {
+			return nil, e
+		}
+		if cuenta.PuntosRegalo > 0 {
+			movimientos = append([]Movimiento{{SolicitudID: "historico:" + id, UsuarioID: id, Puntos: cuenta.PuntosRegalo, Tipo: "acreditacion_historica", CreadoEn: cuenta.CreadoEn}}, movimientos...)
+		}
+		return nil, nil
+	}, options.Transaction().SetReadConcern(readconcern.Snapshot()).SetWriteConcern(writeconcern.Majority()))
+	return cuenta.SaldoPuntos, movimientos, err
 }
 
-func cargarPuntos(raw string) (map[string]int, error) {
-	config := map[string]int{}
-	if strings.TrimSpace(raw) == "" {
-		return config, nil
-	}
-	var original map[string]int
-	if err := json.Unmarshal([]byte(raw), &original); err != nil {
-		return nil, err
-	}
-	for clave, valor := range original {
-		normalizada := normalizarClave(clave)
-		if normalizada == "" || valor < 0 {
-			return nil, errors.New("configuración de puntos inválida")
-		}
-		if _, existe := config[normalizada]; existe {
-			return nil, errors.New("hay claves de plan/membresía repetidas")
-		}
-		config[normalizada] = valor
-	}
-	return config, nil
-}
-
-func normalizarClave(valor string) string {
-	return strings.ToLower(strings.TrimSpace(valor))
+func (a *almacenMongo) buscarSolicitud(ctx context.Context, id string) (Movimiento, error) {
+	var m Movimiento
+	err := a.movimientos.FindOne(ctx, bson.M{"_id": id}).Decode(&m)
+	return m, err
 }
