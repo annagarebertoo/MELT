@@ -27,6 +27,7 @@ const maxPuntos int64 = 9007199254740991
 var errConflicto = errors.New("solicitud reutilizada con otros datos")
 var errLimite = errors.New("saldo fuera del rango admitido")
 var errUsuario = errors.New("usuario inexistente o inactivo")
+var errSaldoInsuficiente = errors.New("saldo insuficiente")
 
 type AcreditarRequest struct {
 	SolicitudID string `json:"solicitudId"`
@@ -59,6 +60,8 @@ type almacenPuntos interface {
 type Servidor struct {
 	cliente          *mongo.Client
 	almacen          almacenPuntos
+	programa         programaStore
+	rabbitURL        string
 	claveAPI         string
 	verificarUsuario func(context.Context, string) error
 	verificarSesion  func(context.Context, string) (identidadCliente, error)
@@ -69,8 +72,9 @@ type Servidor struct {
 	verificarEmail   func(context.Context, string, string) error
 }
 type almacenMongo struct {
-	cliente                *mongo.Client
-	registros, movimientos *mongo.Collection
+	cliente                                           *mongo.Client
+	registros, movimientos                            *mongo.Collection
+	recompensas, reglasTratamientos, canjes, fallidos *mongo.Collection
 }
 
 func main() {
@@ -98,7 +102,11 @@ func main() {
 	}
 	authURL := strings.TrimRight(strings.TrimSpace(os.Getenv("AUTH_URL")), "/")
 	claveInterna := strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY"))
-	s := &Servidor{cliente: cliente, almacen: a, claveAPI: strings.TrimSpace(os.Getenv("BENEFICIOS_PARTNER_KEY")), verificarUsuario: verificadorAuth(authURL, claveInterna), verificarSesion: verificadorSesionAuth(authURL), resolverEmail: resolverEmailAuth(authURL, claveInterna), verificarEmail: verificadorEmailAuth(authURL, claveInterna), claveInterna: claveInterna, invitacionSecret: []byte(os.Getenv("BENEFICIOS_INVITATION_SECRET")), publicURL: strings.TrimRight(strings.TrimSpace(os.Getenv("MELT_PUBLIC_URL")), "/")}
+	rabbitURL := strings.TrimSpace(os.Getenv("RABBITMQ_URL"))
+	s := &Servidor{cliente: cliente, almacen: a, programa: a, rabbitURL: rabbitURL, claveAPI: strings.TrimSpace(os.Getenv("BENEFICIOS_PARTNER_KEY")), verificarUsuario: verificadorAuth(authURL, claveInterna), verificarSesion: verificadorSesionAuth(authURL), resolverEmail: resolverEmailAuth(authURL, claveInterna), verificarEmail: verificadorEmailAuth(authURL, claveInterna), claveInterna: claveInterna, invitacionSecret: []byte(os.Getenv("BENEFICIOS_INVITATION_SECRET")), publicURL: strings.TrimRight(strings.TrimSpace(os.Getenv("MELT_PUBLIC_URL")), "/")}
+	if rabbitURL != "" {
+		go (&consumidorPrograma{url: rabbitURL, almacen: a}).run(context.Background())
+	}
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
 		port = "8083"
@@ -108,7 +116,8 @@ func main() {
 	}
 }
 func nuevoAlmacen(c *mongo.Client, db string) *almacenMongo {
-	return &almacenMongo{c, c.Database(db).Collection("registros_externos"), c.Database(db).Collection("movimientos_puntos")}
+	database := c.Database(db)
+	return &almacenMongo{cliente: c, registros: database.Collection("registros_externos"), movimientos: database.Collection("movimientos_puntos"), recompensas: database.Collection("recompensas"), reglasTratamientos: database.Collection("reglas_puntos_tratamientos"), canjes: database.Collection("canjes"), fallidos: database.Collection("mensajes_fallidos")}
 }
 func (a *almacenMongo) preparar(ctx context.Context) error {
 	// El índice email era una regla de regalo único, no una regla del saldo.
@@ -135,7 +144,19 @@ func (a *almacenMongo) preparar(ctx context.Context) error {
 		return err
 	}
 	_, err = a.movimientos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "usuarioId", Value: 1}, {Key: "creadoEn", Value: 1}}})
-	return err
+	if err != nil {
+		return err
+	}
+	if _, err = a.canjes.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "solicitudId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_canje_solicitud")}); err != nil {
+		return err
+	}
+	if _, err = a.canjes.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "usuarioId", Value: 1}, {Key: "estado", Value: 1}, {Key: "creadoEn", Value: -1}}}); err != nil {
+		return err
+	}
+	if _, err = a.fallidos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "estado", Value: 1}, {Key: "creadoEn", Value: -1}}}); err != nil {
+		return err
+	}
+	return nil
 }
 func crearRouter(s *Servidor) *gin.Engine {
 	r := gin.New()
@@ -156,6 +177,7 @@ func crearRouter(s *Servidor) *gin.Engine {
 	r.POST("/internal/invitaciones/verificar", s.verificarInvitacionInterna)
 	r.POST("/internal/invitaciones/confirmar", s.confirmarInvitacionInterna)
 	r.GET("/mis-puntos", s.requiereCliente(), s.misPuntos)
+	s.agregarRutasPrograma(r)
 	return r
 }
 func errorJSON(c *gin.Context, status int, code, message string) {

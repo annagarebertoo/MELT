@@ -107,6 +107,44 @@ func TestMongoPersistenciaConcurrenciaYRollback(t *testing.T) {
 	if err != nil || saldo != 270 {
 		t.Fatal("saldo alterado tras rollback", saldo, err)
 	}
+	if err := a.guardarRecompensa(ctx, Recompensa{ID: "desc-10", Nombre: "10%", Tipo: "descuento_porcentaje", CostoPuntos: 10, Porcentaje: 10, Activa: true}); err != nil {
+		t.Fatal("guardar recompensa", err)
+	}
+	canje, repetido, err := a.canjear(ctx, "u", "desc-10", "canje-uno")
+	if err != nil || repetido || canje.Estado != "disponible" {
+		t.Fatalf("canje inicial: %+v repetido=%v err=%v", canje, repetido, err)
+	}
+	canjeRepetido, repetido, err := a.canjear(ctx, "u", "desc-10", "canje-uno")
+	if err != nil || !repetido || canjeRepetido.ID != canje.ID {
+		t.Fatalf("canje repetido: %+v repetido=%v err=%v", canjeRepetido, repetido, err)
+	}
+	if _, _, err := a.consultar(ctx, "u"); err != nil {
+		t.Fatal("consultar saldo tras canje", err)
+	}
+	if err := a.guardarRegla(ctx, ReglaTratamiento{TratamientoID: "facial", Puntos: 5}); err != nil {
+		t.Fatal("guardar regla de tratamiento", err)
+	}
+	if err := a.procesarEventoTratamiento(ctx, "evento-facial-1", "u", "facial"); err != nil {
+		t.Fatal("procesar tratamiento realizado", err)
+	}
+	if err := a.procesarEventoTratamiento(ctx, "evento-facial-1", "u", "facial"); err != nil {
+		t.Fatal("repetir evento de tratamiento", err)
+	}
+	if count, err := a.movimientos.CountDocuments(ctx, bson.M{"_id": "evento:tratamiento-realizado:evento-facial-1"}); err != nil || count != 1 {
+		t.Fatalf("acreditación de tratamiento duplicada: count=%d err=%v", count, err)
+	}
+	if _, err := a.reservarCanje(ctx, canje.ID, "u", "turno-test", "facial", 1000); err != nil {
+		t.Fatal("reservar canje", err)
+	}
+	if _, err := a.actualizarCanje(ctx, canje.ID, "u", "turno-test", "aplicar"); err != nil {
+		t.Fatal("aplicar canje", err)
+	}
+	if _, err := a.actualizarCanje(ctx, canje.ID, "u", "turno-test", "restituir"); err != nil {
+		t.Fatal("restituir canje", err)
+	}
+	if count, err := a.movimientos.CountDocuments(ctx, bson.M{"_id": "restitucion:beneficio:turno-test", "tipo": "restitucion_beneficio"}); err != nil || count != 1 {
+		t.Fatalf("movimiento de restitución: count=%d err=%v", count, err)
+	}
 	// Otro usuario sin email: no debe heredar la vieja restricción de regalo.
 	if _, _, err = a.acreditar(ctx, AcreditarRequest{"otro-usuario", "otro", 10}); err != nil {
 		t.Fatal(err)
