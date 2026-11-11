@@ -1,7 +1,7 @@
 # Integración de Gimnasio con MELT
 
-URL base HTTPS: `https://melt-gateway-prueba.onrender.com/api/v1`.
-Los nombres de los servicios conservan el sufijo prueba; este es el entorno de entrega del proyecto académico. No usar las direcciones antiguas del equipo.
+URL base registrada en este documento: `https://melt-gateway-prueba.onrender.com/api/v1`.
+**URL histórica/no verificada en esta actualización:** no asumir que está activa ni que apunta a la última versión. El consumidor debe obtener del equipo la URL verificada del Gateway y probar `/health` antes de integrar. El contrato OpenAPI conserva la misma dirección como referencia de entorno cuando se escribió.
 
 ## Responsabilidades y autenticación
 Gimnasio determina la cantidad. MELT no consulta planes ni membresías. El backend consumidor llama `POST /beneficios/acreditaciones` (alias `/beneficios/acreditar-puntos`) con `Content-Type: application/json` y `X-Partner-Key: <clave compartida por privado>`. No incluir la clave en frontend, enlaces ni repositorios.

@@ -1,12 +1,12 @@
-# Postmortem — plantilla de resiliencia
+# Postmortem — prueba de resiliencia y aprendizajes
 
-> **Estado al 23/10/2026:** ensayo real de una réplica ejecutado y documentado al final. Las instrucciones y la tabla originales se conservan como preparación para escenarios adicionales; no todos fueron ejecutados. Cualquier nueva interrupción requiere autorización.
+> **Estado:** se ejecutó un ensayo controlado el 23/10/2026, cuyo resultado fue parcial y no aprobó el criterio estricto de cero errores. El resto de escenarios listados son procedimientos pendientes, no resultados. La evidencia original está en [fallo-replica-2026-10-23.json](evidence/fallo-replica-2026-10-23.json). La documentación corresponde al commit histórico `cc230fa`, no al HEAD actual.
 
-## Incidente a evaluar
+## Escenario evaluado
 
 **Escenario:** una instancia del servicio de Catálogo deja de responder mientras el gateway sigue recibiendo solicitudes.
 
-**Impacto esperado a verificar:** el gateway debe seguir alcanzando la instancia saludable; si ninguna instancia responde, el cliente recibe un error HTTP controlado y no una conexión colgada indefinidamente.
+**Resultado observado:** con una réplica de Catálogo detenida, 11 de 12 GET respondieron 200 y una solicitud obtuvo 504. La recuperación de la réplica fue confirmada después de reiniciarla. No se probó caída total ni failover sin errores.
 
 ## Preparación
 
@@ -43,7 +43,11 @@ Después, detener todas las instancias del catálogo, repetir las consultas y co
 
 ## Aprendizajes y acciones
 
-Completar esta sección **después** de ejecutar la simulación. Registrar qué se observó, qué no se comportó como se esperaba, la causa comprobada y las acciones correctivas con responsables. No inferir resultados a partir de la configuración solamente.
+- Un upstream con dos instancias no demuestra por sí mismo failover transparente: el ensayo dio un 504 con la otra réplica disponible.
+- Se comprobó el intento hacia la instancia detenida, pero no la causa exacta de que NGINX no intentara/alcanzara la instancia sana. No atribuirlo sin una nueva prueba instrumentada.
+- La repetición posterior respondió 200 en las dos instancias; la recuperación se observó luego de esperar, no se midió su tiempo exacto.
+- Pendiente: definir política de retry/exclusión de destino, revisar proxy y repetir un fallo controlado con aprobación y evidencia. No se cambiaron configuraciones como resultado de este ensayo.
+- Pendientes separados: caída total, MongoDB, proveedor externo, timeout de lectura, carga, duplicación y recuperación transaccional.
 
 ## Limitaciones conocidas del entorno actual
 

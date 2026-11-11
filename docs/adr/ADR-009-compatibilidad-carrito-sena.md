@@ -1,5 +1,7 @@
 # ADR-009 — Reglas de compatibilidad, carrito temporal y seña
 
+> **Estado de vigencia:** las reglas de compatibilidad, retención, seña y cancelación continúan como referencia de dominio. Las menciones históricas a Mercado Pago ya no describen la implementación de checkout actual: Pagos usa un simulador interno, documentado en [ADR-015](ADR-015-checkout-unico-simulador-pagos.md). No se procesan cobros reales.
+
 **Estado:** Aceptado para el diseño actualizado; proveedor/modalidad de pago y procedimiento operativo de devolución pendientes.  
 **Fecha:** 2026-10-14  
 **Decisores:** Equipo MELT

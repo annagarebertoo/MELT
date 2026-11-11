@@ -1,5 +1,7 @@
 # ADR-005 — Comunicación entre servicios (versión inicial)
 
+**Estado vigente:** decisión aplicada en forma mixta: HTTP síncrono para validaciones/operaciones que necesitan resultado inmediato; RabbitMQ topic + outbox para los eventos de turnos consumidos por Beneficios. El ADR conserva abajo la propuesta inicial y revisiones fechadas. Para estado y límites actuales ver [arquitectura](../ARCHITECTURE.md), [Reservas](../servicios/RESERVAS.md) y [Beneficios](../servicios/BENEFICIOS.md).
+
 **Estado:** Propuesto (versión inicial)  
 **Fecha:** 2026-10-08  
 **Entrega:** 1 — 9 de octubre de 2026  

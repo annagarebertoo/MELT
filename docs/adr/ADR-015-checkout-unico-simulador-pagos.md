@@ -1,5 +1,7 @@
 # ADR-015 — Checkout único con simulador de pagos
 
+**Estado:** aplicado en el código de la referencia `develop` `ea1ead7e85f533ba54aff85bd95958bb749897a0`. Servicio Pagos interno, sin pasarela real ni cobros. El contrato actual es [reservas-checkout-v1](../contracts/reservas-checkout-v1.openapi.yaml) y [pagos-simulador-v1](../contracts/pagos-simulador-v1.openapi.yaml); ver además los manuales de [Reservas](../servicios/RESERVAS.md) y [Pagos](../servicios/PAGOS.md). El texto debajo documenta la decisión original; para nombres exactos de rutas y estados prevalece el código actual.
+
 **Estado:** Aceptado e implementado localmente
 
 **Fecha:** 2026-11-11

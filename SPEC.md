@@ -3,13 +3,15 @@
 **Versión:** 0.2 — Primera versión para revisión del equipo.  
 **Entrega:** 1 — Diseño y contrato con mock, 9 de octubre de 2026.  
 **Materia:** Arquitectura de Software — 2026.  
-**Estado:** Especificación funcional del equipo. Las reglas definen el comportamiento esperado; el estado verificado de implementación está en la sección 13.
+**Estado:** Especificación funcional del equipo. Las reglas definen el comportamiento esperado; la inspección documental del código de entrega está resumida en la sección 13 y en la [matriz de cumplimiento](docs/MATRIZ-CUMPLIMIENTO.md).
+
+> **Nota de vigencia:** este documento se originó el 9/10/2026 y conserva requisitos y decisiones de producto de aquella revisión. Contiene referencias históricas a Mercado Pago, una integración proveedora pendiente y pantallas aún no implementadas en esa fecha. El commit `develop` `ea1ead7e85f533ba54aff85bd95958bb749897a0` usa un simulador interno, incluye UI administrativa, puntos/canjes y un adaptador GhostKitchen; la correspondencia entre GhostKitchen y la asignación oficial D9 sigue sin confirmar. Para código actual consultar [README](README.md), [manuales de servicio](docs/servicios/README.md) y [matriz de cumplimiento](docs/MATRIZ-CUMPLIMIENTO.md). No usar la sección 13 antigua como estado de la versión entregada.
 
 ## 1. Introducción
 
 MELT es un sistema web de gestión para un centro de estética con una única sucursal. El dominio comprende tratamientos, profesionales, disponibilidad, reservas de turnos y un programa de beneficios basado en puntos. Busca centralizar la información y coordinar la agenda para evitar reservas incompatibles y mantener una relación trazable entre los tratamientos realizados y los beneficios de cada cliente.
 
-La operación de negocio central es la **reserva de un turno con validación de disponibilidad**. Su confirmación exige verificar que el profesional pueda realizar el tratamiento, que el intervalo esté disponible y que no se superponga con otra reserva o bloqueo vigente. El horario se bloquea temporalmente mientras el cliente paga una seña del 30 % mediante el adaptador de Mercado Pago; solo un pago aprobado permite confirmar el turno. El saldo restante se paga presencialmente. La realización efectiva del tratamiento habilita la acreditación de puntos, que pertenece a un flujo distinto.
+La operación de negocio central es la **reserva de un turno con validación de disponibilidad**. Su confirmación exige verificar que el profesional pueda realizar el tratamiento, que el intervalo esté disponible y que no se superponga con otra reserva o bloqueo vigente. El horario se bloquea temporalmente mientras el cliente paga una seña del 30 % mediante el servicio Pagos; en la versión actual este servicio es un simulador interno, no Mercado Pago. El saldo restante se paga presencialmente. La realización efectiva del tratamiento habilita la acreditación de puntos, que pertenece a un flujo distinto.
 
 ### 1.1. Vocabulario
 
@@ -66,27 +68,29 @@ El alcance funcional comprende:
 
 Las funcionalidades se ofrecerán mediante una interfaz web según las responsabilidades de cada actor.
 
-MELT publica una API propia de consulta de tratamientos con filtros, información descriptiva y precios; su contrato OpenAPI v1 y mock están en `docs/contracts/`. La integración externa asignada —búsqueda de sedes cercanas, adaptada a centros o profesionales cercanos— depende de que el grupo de Cocina Fantasma publique su API y contrato. Esa integración consumida sigue pendiente y no se considera implementada (PD-12).
+MELT publica una API propia de consulta de tratamientos con filtros, información descriptiva y precios; su contrato OpenAPI v1 y mock están en `docs/contracts/`. El código actual incluye un proxy de Beneficios hacia GhostKitchen; la correspondencia entre ese proveedor y la asignación oficial D9 no pudo confirmarse en esta revisión, por lo que no se da D9 por cumplida. Ver [ADR-014](docs/adr/ADR-014-consumo-proveedor.md) y [manual](docs/GHOSTKITCHEN.md).
 
 ### 3.2. Funcionalidades fuera de alcance
 
-Quedan fuera de esta versión la gestión de múltiples sucursales, el pago en línea del saldo total del tratamiento, facturación, inventario de insumos, historias clínicas, gestión salarial y una aplicación móvil nativa. La seña sí está incluida en el alcance: equivale al 30 % del precio del tratamiento, con devolución total si se cancela con al menos 24 horas de anticipación y sin devolución ante cancelación tardía o inasistencia. La verificación de la seña y las devoluciones se integra con Mercado Pago mediante el adaptador `pagos`, configurado en modo de prueba para el entorno local.
+Quedan fuera de esta versión la gestión de múltiples sucursales, el pago del saldo total en línea, facturación, inventario de insumos, historias clínicas, gestión salarial y aplicación móvil nativa. La seña es del 30 % y la política registrada en Reservas contempla devolución simulada total con al menos 24 horas de anticipación; con menos de 24 horas o inasistencia no hay devolución. La versión de entrega usa el simulador interno de `pagos`; no utiliza credenciales ni operaciones de Mercado Pago. Ver [ADR-015](docs/adr/ADR-015-checkout-unico-simulador-pagos.md).
 
 Las decisiones técnicas de implementación se documentarán en `docs/ARCHITECTURE.md`.
 
 ### 3.3. Lineamientos de experiencia visual
 
-La interfaz implementada se sirve desde el gateway y está completamente en español. Usa una paleta crema, oliva y arcilla, una página principal de navegación vertical y componentes adaptables a pantallas pequeñas. Incluye búsqueda del catálogo, registro/login, perfil y saldo de puntos, consulta de disponibilidad, bloqueo temporal, confirmación con seña y cancelación de reservas. La gestión de agenda profesional, el historial de tratamientos realizados, el canje/aplicación de beneficios y otras funciones de administración no están cubiertos todavía por la interfaz.
+La interfaz web estática se sirve desde NGINX/Gateway. Incluye navegación pública, registro/login, catálogo y profesionales, consulta de disponibilidad, carrito/checkout, Mi cuenta y secciones por rol para clientes, profesionales y administración. El estado visual exacto se puede revisar en `infra/nginx/web/`; la descripción por rol está en [manual de usuario](docs/manuales/USUARIO.md). La integración con API real depende de datos válidos y servicios disponibles.
 
 ## 4. Actores
 
 | Actor | Responsabilidades |
 | :--- | :--- |
 | Cliente | Consultar tratamientos, profesionales y disponibilidad; solicitar y cancelar turnos; consultar próximos turnos, historial, puntos y beneficios y aplicar beneficios durante la reserva. |
-| Profesional | Consultar su agenda y los detalles de sus turnos y registrar la realización de los tratamientos que le corresponden. |
-| Administrador | Gestionar catálogo, profesionales, disponibilidad, turnos y reglas del programa de beneficios; configurar los puntos por tratamiento y gestionar categorías, beneficios y recompensas. |
+| Profesional | Consultar su agenda vinculada a perfil de Catálogo y sus turnos; registrar realización o inasistencia conforme al estado del turno. |
+| Recepción | Operaciones de Reservas permitidas por la matriz de permisos; no posee panel diferenciado. |
+| Administrador | Gestionar catálogo, perfiles/vinculaciones, disponibilidad, reglas de puntos, beneficios y recompensas según permisos. |
+| Superadministrador | Administración de cuentas y roles, autorizada específicamente por Auth. |
 
-El catálogo es público. Para reservar, el cliente debe iniciar sesión o registrarse. Auth define los roles y Reservas aplica permisos por operación, denegación por defecto y comprobaciones de propiedad del recurso. La administración del catálogo requiere autorización administrativa. La interfaz no incluye una consola de administración; esas altas y cambios se realizan por las rutas administrativas documentadas en `docs/contracts/README.md`.
+El catálogo es público. Para reservar, el cliente debe iniciar sesión o registrarse. Auth define los roles y Reservas aplica permisos por operación y comprobación de propiedad del recurso. La administración del catálogo requiere autorización administrativa. La versión actual incluye interfaz de administración; las rutas están descritas en [contratos](docs/contracts/README.md) y [manuales](docs/servicios/README.md).
 
 ## 5. Requisitos funcionales
 
@@ -193,11 +197,11 @@ Se propone distinguir **disponible**, **aplicado** y **restituido**. Una aplicac
 2. Inicia sesión o se registra para reservar.
 3. Elige un profesional, consulta el calendario, selecciona una fecha y un horario disponible.
 4. MELT verifica aptitud del profesional, disponibilidad vigente y ausencia de conflictos; crea un carrito y bloquea el intervalo durante un máximo de 10 minutos.
-5. MELT crea una preferencia de Checkout Pro por el 30 % del precio vigente. El cliente completa el pago en Mercado Pago.
-6. MELT confirma el turno solo después de verificar que el pago fue aprobado y que coinciden la referencia del carrito, el importe y la moneda. Si el pago no se completa o no puede verificarse, no se confirma el turno y el bloqueo vence o se libera.
-7. El cliente puede cancelar el turno conforme a RN-20.1; la devolución se tramita por el adaptador de pagos cuando corresponda.
+5. Reservas ejecuta checkout agrupado: recalcula todos los importes, la seña del 30 % y la vigencia de las retenciones; solicita al servicio Pagos un resultado simulado.
+6. Si el simulador aprueba, Reservas confirma el conjunto en una transacción. Si rechaza, no confirma turnos; ante error posterior solicita una reversa simulada. La operación usa clave idempotente.
+7. El cliente puede cancelar el turno conforme a RN-20.1; la devolución se registra mediante Pagos simulado cuando corresponde.
 
-**Resultado:** turno confirmado luego de la aprobación de la seña; el saldo restante se abona presencialmente. Esta versión no aplica beneficios o puntos durante la reserva y no acredita puntos por reservar o pagar.
+**Resultado actual:** turnos confirmados luego de la aprobación simulada de la seña; el saldo restante se abona presencialmente. Beneficios disponibles se pueden aplicar desde el flujo de carrito; puntos por tratamiento realizado se acreditan en un flujo asíncrono distinto. No hay cobros reales.
 
 **Alternativas:**
 
@@ -298,7 +302,7 @@ Se conservan los identificadores originales. Las decisiones resueltas se registr
 | **PD-12** | Resuelta la capacidad propia: API de consulta de tratamientos con filtros, contrato OpenAPI v1 y mock. Pendiente la capacidad consumida: el grupo de Cocina Fantasma aún debe entregar su API de búsqueda de sedes cercanas y su contrato; no se implementa ni se simula como integración real en este sistema. |
 | **PD-13** | Acordada la prevención de reservas, acreditaciones, canjes y restituciones duplicadas. Pendientes: aprobación de RN-12 y RN-15, estados de procesamiento, reconocimiento de una misma intención y responsables de recuperación. |
 
-Los precios y horarios cargados para demostración no son valores comerciales. La administración del catálogo y agendas se realiza por API protegida; esta versión no incluye consola administrativa. El estado de cada punto de la parte de identidad y reservas se registra en la sección 13.
+Los precios y horarios cargados para demostración no son valores comerciales. **Esta nota pertenece a la especificación original y está obsoleta para la versión actual:** la interfaz ahora incluye administración de catálogo y agenda según rol. El estado actual se documenta en la sección 13 y en la [matriz de cumplimiento](docs/MATRIZ-CUMPLIMIENTO.md).
 
 
 ## 12. Decisiones funcionales incorporadas — revisión de alcance
@@ -347,24 +351,20 @@ Esta sección consolida las correcciones acordadas por el equipo. Las reglas sig
 
 ## 13. Estado de implementación y verificación
 
-Este estado corresponde a la rama local `feature/interfaz-web-final`, con los cambios de la parte de identidad, reservas e interfaz, y a los datos demo cargados en su MongoDB local. No describe un despliegue en producción ni sustituye las reglas de las secciones anteriores. Las pruebas indicadas se ejecutaron en el entorno local el 8 de noviembre de 2026.
+**Referencia del estado de código:** `develop`, `ea1ead7e85f533ba54aff85bd95958bb749897a0`. La siguiente tabla es una revisión documental de rutas/código y no una nueva ejecución de pruebas. El registro histórico de pruebas y límites está en [MATRIZ-CUMPLIMIENTO.md](docs/MATRIZ-CUMPLIMIENTO.md) y `docs/evidence/`.
 
-| Punto de la parte de Anna | Estado verificado | Evidencia o condición |
-| :--- | :--- | :--- |
-| Permisos por operación | Implementado | Reservas valida identidad, roles por operación, denegación por defecto y titularidad/alcance del recurso. La matriz está en `docs/LOCAL-DEV.md`. |
-| Disponibilidad y selección de profesional/tratamiento | Implementado | Catálogo publica perfiles activos; Reservas comprueba asociación, agenda semanal, duración y horarios disponibles. Hay datos demo locales para probar la selección. |
-| Creación y cancelación de turnos | Implementado | La creación requiere carrito y pago verificado; la cancelación valida propietario/rol, libera el horario y aplica la regla de devolución. |
-| Carrito con bloqueo de 10 minutos | Implementado | Bloqueo persistido con vencimiento, índices únicos por profesional/minuto y liberación al confirmar, cancelar el carrito o expirar. |
-| Seña del 30 % | Implementado en modo test | Pagos crea una preferencia de Checkout Pro y Reservas verifica estado, referencia del carrito, importe y ARS antes de confirmar. No se probó un cobro real ni producción. |
-| Devoluciones según las 24 horas | Implementado en modo test | A 24 horas o más se solicita el 100 % de la seña; con menos de 24 horas no se devuelve. El reintento está documentado. |
-| Prevención de turnos superpuestos y concurrencia | Implementado y probado | Índices únicos de intervalos bloqueados y prueba de integración con solicitudes simultáneas contra MongoDB. |
-| Interfaz de registro, login, perfil y calendario | Implementado en la web local | La interfaz consume Gateway, Auth, Catálogo, Reservas y Pagos; se verificó la web y las rutas locales. |
-| Pruebas y documentación | Implementadas para este alcance | Pasaron tests de Auth, Catálogo, Reservas y Pagos; integración Mongo de Reservas; `go test -race` de Reservas; `go vet`; `node --check`; `docker compose config`; y `nginx -t`. Las guías están en `docs/RESERVAS-WEB.md` y `docs/LOCAL-DEV.md`. |
+| Área | Estado visible en el código de referencia | Evidencia / límite |
+|---|---|---|
+| Auth y roles | Cliente, profesional, recepción, administrador y superadministrador; listar/cambiar roles es operación de superadministrador. | `services/auth/cmd/api`; no se verificó un despliegue actual en esta tarea. |
+| Catálogo y profesionales | CRUD, bajas lógicas, asociación bidireccional y vinculación Auth-perfil; APIs públicas. | `services/catalogo-profesionales/cmd/api`; el ID Auth se omite del perfil público. |
+| Búsqueda y caché | OpenSearch para búsqueda; Memcached para listados, TTL 30 s e invalidación por generación. | Evidencia local y benchmark histórico en `CATALOGO-PROFESIONALES-ETAPA-1.md`; muestra no extrapolable. |
+| Agenda y turnos | Agenda semanal, disponibilidad, carrito/retenciones, turnos, cancelación, completado e inasistencia. | Control de propiedad en backend; ver [manual Reservas](docs/servicios/RESERVAS.md). |
+| Checkout/pago | Checkout agrupado y pago/devolución simulados; no existe cobro externo en esta versión. | `services/reservas/cmd/api/checkout.go`, `services/pagos/main.go`, ADR-015. |
+| Beneficios | Puntos, reglas, recompensas, canjes, integración de eventos, acreditación de partner y proxy GhostKitchen. | No confundir evento de tratamiento realizado con pago; proveedor D9 asignado oficialmente sin confirmar. |
+| Notificaciones por correo | No se encontró servicio/cliente de correo operativo en la configuración versionada. | Los requisitos de notificación de este documento permanecen pendientes; RabbitMQ de eventos de beneficios no acredita envío de correo. |
+| Persistencia | MongoDB replica set y bases por servicio. PostgreSQL está declarado en Compose, sin consumidor business localizado. | No afirmar que MELT usa PostgreSQL funcionalmente. |
+| Resiliencia y observabilidad | Logs/trazas y métricas parciales; ejercicio de réplica produjo 1 HTTP 504 de 12 solicitudes. | Failover transparente no comprobado; revisar [Postmortem](docs/POSTMORTEM.md). |
+| Despliegue | Configuración de Render histórica existe en documentación/configuración versionada. | La URL, commit y servicios públicos actuales no se verificaron en esta sesión. |
 
-### Condiciones y límites de la prueba local
-
-- MongoDB local contiene tres tratamientos demo, dos perfiles públicos demo y catorce agendas semanales demo. Los precios, nombres y profesionales son ficticios; los perfiles demo no son cuentas de Auth ni personal real. Se pueden revisar y volver a cargar según `docs/RESERVAS-WEB.md`.
-- Para recorrer disponibilidad y reserva, el usuario debe crear e iniciar sesión con una cuenta cliente desde la web. Para habilitar perfiles y agendas reales por API se necesita configurar una cuenta administrativa de Auth.
-- La creación y verificación de pagos requiere credenciales de prueba de Mercado Pago válidas. No se hizo ningún cobro real. Sin `MP_RETURN_URL` público, se debe ingresar el identificador de la operación en la interfaz para que MELT la verifique.
-- La API del grupo proveedor de Cocina Fantasma aún no fue entregada, por lo que esa integración externa sigue pendiente. Las funciones de puntos por tratamientos realizados, canjes, correo y consola administrativa también quedan fuera de esta parte.
+Los escenarios de pruebas y los comandos vigentes están en [manual de desarrollo](docs/manuales/DESARROLLO.md). Ningún resultado anterior se atribuye automáticamente al commit de referencia si la evidencia original identifica otro commit.
 

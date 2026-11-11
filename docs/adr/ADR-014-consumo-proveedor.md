@@ -1,10 +1,16 @@
 # ADR-014 — D9: Consumo del proveedor externo
 
-**Estado:** Pendiente de decisión; integración bloqueada por falta de información del proveedor.
+**Estado del registro original (23/10/2026):** pendiente de decisión en esa fecha. **Estado vigente del repositorio (11/11/2026):** hay un cliente y flujo proxy de GhostKitchen en Beneficios; el grupo/proveedor asignado por la cátedra, la URL de entrega y el contrato exigido por el enunciado no pudieron confirmarse aquí. Esta implementación no prueba por sí sola el cumplimiento de D9.
 
 **Fecha:** 2026-10-23. **Hito:** Entrega 2.
 
 **Rama de investigación:** `feature/sofia-d9-integracion-externa`.
+
+## Actualización de estado en el código de entrega
+
+Desde el registro de investigación original, `services/beneficios/cmd/api/ghostkitchen.go` incorporó un cliente HTTP server-side configurable con `GHOSTKITCHEN_API_KEY`/`GHOSTKITCHEN_BASE_URL`, rutas para sedes, cercanía, platos y proximidad, timeout de tres segundos y reintentos acotados para 429/503. Las pruebas de paquete usan `httptest`; ver [manual vigente](../GHOSTKITCHEN.md) y [manual del servicio](../servicios/BENEFICIOS.md).
+
+Esto acredita que existe un adaptador técnico para GhostKitchen en el árbol actual, pero no resuelve la identificación del proveedor asignado ni la correspondencia con el requisito oficial D9. No reemplazar la tabla de evidencia histórica siguiente: describe el estado comprobado el 23/10, cuando esa integración aún no se había encontrado. El cotejo de proveedor, contrato de cátedra, ambiente y flujo significativo sigue pendiente.
 
 **Base protegida D8:** `3601c0d2f713da15991bc0974aeb9694332a8f5b`.
 

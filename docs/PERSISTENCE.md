@@ -1,5 +1,7 @@
 # MELT — Validación de D3: Persistencia
 
+> **Registro histórico:** evidencia del 23/10/2026 para la rama y commit indicados debajo. Desde entonces Reservas, Pagos y Beneficios usan MongoDB para sus colecciones actuales, y Reservas usa transacciones/outbox. La tabla de este documento no es el inventario vigente; consultar [arquitectura](ARCHITECTURE.md) y [matriz](MATRIZ-CUMPLIMIENTO.md). Se conserva la evidencia original sin reescribir sus resultados.
+
 **Responsable:** Sofía. **Entrega:** 2 — 23 de octubre de 2026.
 
 **Rama:** `feature/sofia-d3-persistencia`. **Base D11:** `0273c0b824327ecc480fcf20930fa51ee5d0805e`.

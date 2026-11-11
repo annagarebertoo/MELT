@@ -1,5 +1,7 @@
 # MELT — Validación de D5: Comunicación
 
+> **Registro histórico:** esta inspección se realizó el 23/10/2026 sobre la base indicada abajo, cuando RabbitMQ y los eventos de negocio no estaban implementados. Desde entonces el código de `develop` incorpora outbox en Reservas y consumidor de RabbitMQ en Beneficios. Para estado actual consultar [arquitectura](ARCHITECTURE.md), [Reservas](servicios/RESERVAS.md) y [Beneficios](servicios/BENEFICIOS.md). Las tablas/resultados de este archivo sólo describen aquella ejecución.
+
 **Responsable:** Sofía. **Entrega:** 2 — 23 de octubre de 2026.
 
 **Rama:** `feature/sofia-d5-comunicacion`. **Base D3:** `1d5394b08863f1facaded819f8008ba2d130fd4c`, que incluye D11 (`0273c0b`).

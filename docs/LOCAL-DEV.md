@@ -1,5 +1,7 @@
 # Entorno local MELT
 
+> Guía heredada con ejemplos y datos demo. Para los requisitos/variables actuales y comandos seguros, usar primero [OPERACIONES.md](OPERACIONES.md). El README y los manuales por servicio describen el estado de código de `develop`; los valores de datos demo, puertos alternativos y credenciales mostrados más abajo no son universales ni deben copiarse a un entorno compartido.
+
 ## Requisitos
 
 - Docker Desktop con Docker Compose.
