@@ -98,6 +98,11 @@ func (g *ghostKitchenClient) request(ctx context.Context, method, path string, q
 			return response, nil
 		}
 		delay := retryAfter(resp.Header.Get("Retry-After"), attempt)
+		if deadline, ok := ctx.Deadline(); ok && delay >= time.Until(deadline) {
+			// Preserve the provider's 429/503 instead of turning a Retry-After
+			// longer than our request budget into a misleading gateway timeout.
+			return response, nil
+		}
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():

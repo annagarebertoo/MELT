@@ -180,6 +180,31 @@ func TestGhostKitchenRespetaRetryAfter(t *testing.T) {
 		t.Fatal("se reintentó antes del Retry-After")
 	}
 }
+
+func TestGhostKitchenNoEsperaFueraDelTiempoTotalDeSolicitud(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Retry-After", "5")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+	client := newGhostKitchenClient("key", server.Client().Transport, server.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	got, err := client.request(ctx, http.MethodGet, "sedes", nil, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.status != http.StatusTooManyRequests || calls.Load() != 1 {
+		t.Fatalf("respuesta=%+v llamadas=%d", got, calls.Load())
+	}
+	if time.Since(started) > time.Second {
+		t.Fatal("se esperó más allá del presupuesto de la solicitud")
+	}
+}
+
 func TestGhostKitchenTimeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { time.Sleep(100 * time.Millisecond); w.WriteHeader(200) }))
 	defer server.Close()
