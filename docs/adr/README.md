@@ -16,7 +16,7 @@ Los ADR preservan la evolución de MELT. Las secciones “propuesta inicial”, 
 | [011 — Observabilidad](ADR-011-observabilidad.md) | Instrumentación parcial de Gateway/Catálogo; no generalizar a todos los servicios. |
 | [012 — Balanceo](ADR-012-balanceo-carga.md) | Configuración multi-réplica/upstream; el ensayo dejó un 504 observado, no prueba tolerancia sin errores. |
 | [013 — Capacidad y costos](ADR-013-capacidad-costos.md) | Supuestos y estimaciones académicas; no son presupuesto ni consumo medido en cloud actual. |
-| [014 — Consumo proveedor](ADR-014-consumo-proveedor.md) | Actualización: existe proxy GhostKitchen, pero grupo/proveedor oficialmente asignado a D9 y contrato exigido no están confirmados. |
+| [014 — Consumo proveedor](ADR-014-consumo-proveedor.md) | Integración real de GhostKitchen con el Grupo 5 verificada; conserva como cuestión separada el cotejo formal del requisito D9. |
 | [015 — Checkout único/simulador](ADR-015-checkout-unico-simulador-pagos.md) | Aplicado en referencia actual. Pagos no integra Mercado Pago ni cobra dinero. |
 
 Las ediciones de estado actuales se agregan como nota/enmienda; las secciones originales conservan su fecha y contexto.

@@ -69,7 +69,7 @@ URLs de UI y endpoints locales se listan en [LOCAL-DEV.md](LOCAL-DEV.md). Promet
 | `BENEFICIOS_INVITATION_SECRET` | Beneficios | Opcional según flujo | secreto aleatorio estable | enlaces de invitación no se pueden emitir/validar correctamente. |
 | `MELT_PUBLIC_URL` | Beneficios | No | `http://localhost:8080` | default local para URL de invitación. |
 | `GHOSTKITCHEN_API_KEY` | Beneficios | Sí para proveedor real | entregar por canal privado | proxy devuelve error de integración no configurada. |
-| `GHOSTKITCHEN_BASE_URL` | Beneficios | No | default del cliente en código; mock local configurable | usa base upstream predeterminada. |
+| `GHOSTKITCHEN_BASE_URL` | Beneficios | No | `https://57-156-56-219.sslip.io/public/v1` | URL real del Grupo 5; conservarla en `.env`; el backend usa el mismo valor por defecto si está vacía. |
 | `PORT` | Cada backend | No en Compose | catálogo 8081, reservas 8082, beneficios 8083, auth 8084, pagos 8085 | valores definidos por servicio. |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Catálogo | No | `http://jaeger:4318/v1/traces` | no exporta trazas a Jaeger. |
 | `POSTGRES_PASSWORD` | PostgreSQL Compose | No | valor de desarrollo solo local | Compose tiene default inseguro para uso local. |

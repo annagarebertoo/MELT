@@ -33,7 +33,7 @@ La acreditación externa acepta solicitud con ID de usuario o email según contr
 
 ## GhostKitchen
 
-El cliente de salida usa `X-API-Key`, timeout de 3 s y hasta tres intentos en respuesta 429/503, respetando `Retry-After` numérico o backoff. Base URL por defecto está en el código; `GHOSTKITCHEN_BASE_URL` permite un mock/endpoint alternativo. Si falta la key o el proveedor falla, la consulta no tiene fallback de datos ficticios.
+El cliente de salida usa `X-API-Key`, timeout de 3 s y hasta tres intentos en respuesta 429/503, respetando `Retry-After` numérico o backoff. La URL oficial es `https://57-156-56-219.sslip.io/public/v1`; Compose la pasa mediante `GHOSTKITCHEN_BASE_URL` y el cliente también la usa por defecto si la variable está vacía. `GHOSTKITCHEN_API_KEY` es obligatoria para consultar. No hay fallback ni datos ficticios en ejecución.
 
 ## Configuración y pruebas
 
@@ -44,4 +44,4 @@ cd services/beneficios
 go test ./...
 ```
 
-Pruebas de integración usan `BENEFICIOS_TEST_MONGODB_URI`; pruebas del proxy GhostKitchen usan HTTP mock. El comando no inicia servicios/dependencias por sí solo.
+Pruebas de integración usan `BENEFICIOS_TEST_MONGODB_URI`; las pruebas automatizadas del proxy usan `httptest` aislados y no reemplazan el proveedor en ejecución. El comando no inicia servicios/dependencias por sí solo.

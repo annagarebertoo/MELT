@@ -5,7 +5,7 @@
 **Materia:** Arquitectura de Software — 2026.  
 **Estado:** Especificación funcional del equipo. Las reglas definen el comportamiento esperado; la inspección documental del código de entrega está resumida en la sección 13 y en la [matriz de cumplimiento](docs/MATRIZ-CUMPLIMIENTO.md).
 
-> **Nota de vigencia:** este documento se originó el 9/10/2026 y conserva requisitos y decisiones de producto de aquella revisión. Contiene referencias históricas a Mercado Pago, una integración proveedora pendiente y pantallas aún no implementadas en esa fecha. El commit `develop` `ea1ead7e85f533ba54aff85bd95958bb749897a0` usa un simulador interno, incluye UI administrativa, puntos/canjes y un adaptador GhostKitchen; la correspondencia entre GhostKitchen y la asignación oficial D9 sigue sin confirmar. Para código actual consultar [README](README.md), [manuales de servicio](docs/servicios/README.md) y [matriz de cumplimiento](docs/MATRIZ-CUMPLIMIENTO.md). No usar la sección 13 antigua como estado de la versión entregada.
+> **Nota de vigencia:** este documento se originó el 9/10/2026 y conserva requisitos y decisiones de producto de aquella revisión. El commit citado es una fotografía histórica. Desde el 19/11/2026 MELT consume el servicio real GhostKitchen del Grupo 5; el proxy y su configuración vigente están en [Integración GhostKitchen](docs/GHOSTKITCHEN.md). La correspondencia formal entre ese proveedor y la asignación D9 de la cátedra debe cotejarse por separado. Para el estado actual consultar [README](README.md), [manuales de servicio](docs/servicios/README.md) y [matriz de cumplimiento](docs/MATRIZ-CUMPLIMIENTO.md). No usar la sección 13 antigua como estado de la versión entregada.
 
 ## 1. Introducción
 
@@ -68,7 +68,7 @@ El alcance funcional comprende:
 
 Las funcionalidades se ofrecerán mediante una interfaz web según las responsabilidades de cada actor.
 
-MELT publica una API propia de consulta de tratamientos con filtros, información descriptiva y precios; su contrato OpenAPI v1 y mock están en `docs/contracts/`. El código actual incluye un proxy de Beneficios hacia GhostKitchen; la correspondencia entre ese proveedor y la asignación oficial D9 no pudo confirmarse en esta revisión, por lo que no se da D9 por cumplida. Ver [ADR-014](docs/adr/ADR-014-consumo-proveedor.md) y [manual](docs/GHOSTKITCHEN.md).
+MELT publica una API propia de consulta de tratamientos con filtros, información descriptiva y precios; su contrato OpenAPI v1 y mock están en `docs/contracts/`. El código actual consume la API real de GhostKitchen del Grupo 5 mediante el proxy server-side de Beneficios. La validación formal de su correspondencia con D9 se mantiene separada. Ver [ADR-014](docs/adr/ADR-014-consumo-proveedor.md) y [manual](docs/GHOSTKITCHEN.md).
 
 ### 3.2. Funcionalidades fuera de alcance
 

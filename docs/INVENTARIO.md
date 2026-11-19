@@ -40,7 +40,7 @@ Inventario del árbol de `develop` de referencia y del conjunto de documentació
 | `docs/ACREDITACION-PUNTOS.md` | Configuración y operación del API de puntos externo e invitaciones. |
 | `docs/IMPLEMENTACION-ACREDITACION-PUNTOS.md` | Historial de implementación y validación de esa integración. |
 | `docs/INTEGRACION-GIMNASIO.md` | Guía del consumidor Grupo 1; URL publicada en el documento requiere verificación actual. |
-| `docs/GHOSTKITCHEN.md` | Proxy de proveedor, endpoints, configuración y pruebas mock. |
+| `docs/GHOSTKITCHEN.md` | Integración real, mapeo de endpoints, configuración, interfaz y pruebas automatizadas. |
 | `docs/PRUEBAS-RENDER-ACREDITACION.md` | Evidencia histórica de Render con rama/commit/URLs fechados. |
 | `docs/ENTREGA-2.md` | Informe histórico de Entrega 2; sus estados no describen el código actual. |
 | `docs/COMMUNICATION.md` | Ensayo histórico D5 del 23/10; se añadió aviso que lo distingue del flujo actual de RabbitMQ. |
@@ -65,7 +65,7 @@ Inventario del árbol de `develop` de referencia y del conjunto de documentació
 | `docs/adr/ADR-011-observabilidad.md` | Observabilidad. |
 | `docs/adr/ADR-012-balanceo-carga.md` | Balanceo. |
 | `docs/adr/ADR-013-capacidad-costos.md` | Capacidad/costos estimados, no presupuesto cloud vigente. |
-| `docs/adr/ADR-014-consumo-proveedor.md` | Investigación histórica y actualización GhostKitchen; asignación oficial D9 no confirmada. |
+| `docs/adr/ADR-014-consumo-proveedor.md` | Decisión vigente de integración GhostKitchen y registro histórico de D9. |
 | `docs/adr/ADR-015-checkout-unico-simulador-pagos.md` | Checkout agrupado y simulador actual. |
 
 ## Contratos OpenAPI y mock

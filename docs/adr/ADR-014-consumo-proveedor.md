@@ -1,6 +1,6 @@
 # ADR-014 — D9: Consumo del proveedor externo
 
-**Estado del registro original (23/10/2026):** pendiente de decisión en esa fecha. **Estado vigente del repositorio (11/11/2026):** hay un cliente y flujo proxy de GhostKitchen en Beneficios; el grupo/proveedor asignado por la cátedra, la URL de entrega y el contrato exigido por el enunciado no pudieron confirmarse aquí. Esta implementación no prueba por sí sola el cumplimiento de D9.
+**Registro original (23/10/2026):** la identidad del proveedor y su contrato estaban pendientes en esa revisión. **Estado actualizado (19/11/2026):** MELT consume el servicio real GhostKitchen del Grupo 5 mediante el proxy server-side de Beneficios. La URL v1 y el contrato OpenAPI fueron proporcionados para la integración. Una consulta autenticada real a `GET /v1/sedes` respondió HTTP 200 con cuatro sedes. La clave permanece en el `.env` local y no se versiona. La correspondencia formal entre este proveedor y la asignación D9 de la cátedra sigue siendo una verificación académica separada.
 
 **Fecha:** 2026-10-23. **Hito:** Entrega 2.
 
@@ -8,9 +8,9 @@
 
 ## Actualización de estado en el código de entrega
 
-Desde el registro de investigación original, `services/beneficios/cmd/api/ghostkitchen.go` incorporó un cliente HTTP server-side configurable con `GHOSTKITCHEN_API_KEY`/`GHOSTKITCHEN_BASE_URL`, rutas para sedes, cercanía, platos y proximidad, timeout de tres segundos y reintentos acotados para 429/503. Las pruebas de paquete usan `httptest`; ver [manual vigente](../GHOSTKITCHEN.md) y [manual del servicio](../servicios/BENEFICIOS.md).
+`services/beneficios/cmd/api/ghostkitchen.go` implementa el cliente HTTP server-side con `GHOSTKITCHEN_API_KEY` y `GHOSTKITCHEN_BASE_URL`, rutas para sedes, cercanía, platos y proximidad, timeout de tres segundos y reintentos acotados para 429/503. La URL por defecto es `https://57-156-56-219.sslip.io/public/v1`; Compose pasa la URL oficial y la clave al servicio Beneficios. El frontend solo llama al proxy MELT. Las pruebas `httptest` son dobles aislados y no están en el camino de ejecución. Ver [manual vigente](../GHOSTKITCHEN.md) y [manual del servicio](../servicios/BENEFICIOS.md).
 
-Esto acredita que existe un adaptador técnico para GhostKitchen en el árbol actual, pero no resuelve la identificación del proveedor asignado ni la correspondencia con el requisito oficial D9. No reemplazar la tabla de evidencia histórica siguiente: describe el estado comprobado el 23/10, cuando esa integración aún no se había encontrado. El cotejo de proveedor, contrato de cátedra, ambiente y flujo significativo sigue pendiente.
+La conexión y la respuesta del servicio real fueron verificadas el 19/11/2026. La tabla siguiente conserva únicamente el contexto de la investigación inicial del 23/10; no describe el estado actual del código. La asignación oficial de D9 debe cotejarse con el enunciado o el equipo docente y no se infiere solo de que la integración funcione.
 
 **Base protegida D8:** `3601c0d2f713da15991bc0974aeb9694332a8f5b`.
 
@@ -20,9 +20,11 @@ El enunciado definitivo `Enunciado TP Final (3).pdf` identifica D9 como consumo 
 
 Las relaciones entre proveedor y consumidor son asignadas por los docentes. La llamada debe salir del microservicio responsable del flujo que consume la capacidad, sin iniciarse desde el frontend ni canalizarse mediante el gateway propio. Una consulta aislada sin consecuencias para el negocio no acredita la integración.
 
-Este registro documenta la investigación y el bloqueo; no presenta una decisión cerrada ni una integración implementada. El archivo existente [ADR-009](ADR-009-compatibilidad-carrito-sena.md) documenta reglas de compatibilidad, carrito y seña. Su número de archivo no implica que cubra D9 del enunciado. Se conserva intacto y se utiliza el siguiente número libre, ADR-014, para registrar D9 por separado.
+Este apartado conserva el contexto de la investigación original, ya superada por la integración descrita arriba. El archivo existente [ADR-009](ADR-009-compatibilidad-carrito-sena.md) documenta reglas de compatibilidad, carrito y seña. Su número de archivo no implica que cubra D9 del enunciado.
 
-## Evidencia encontrada
+## Evidencia de la revisión original (23/10/2026; histórica)
+
+Los resultados siguientes describen el repositorio y la información disponibles el 23/10/2026, antes de recibir la URL, el contrato y la clave del Grupo 5.
 
 | Elemento revisado | Resultado |
 | :--- | :--- |
@@ -40,7 +42,7 @@ Se revisaron `develop`, `main`, `docs/arquitectura-inicial`, `docs/readme-inicia
 
 Las menciones a correo y pago son necesidades del dominio, no evidencia de que el proveedor asignado ofrezca alguna de esas capacidades. No se elige una de ellas por inferencia.
 
-## Estado de la decisión
+## Estado histórico de la decisión (23/10/2026)
 
 | Aspecto | Estado |
 | :--- | :--- |
@@ -55,7 +57,7 @@ Las menciones a correo y pago son necesidades del dominio, no evidencia de que e
 
 Se mantiene el límite arquitectónico de consumir desde el microservicio responsable. No se introducen endpoints, simulaciones, dependencias ni variables ficticias. Tampoco se fijan timeouts o reintentos de negocio sin conocer las operaciones y sus garantías de idempotencia.
 
-## Información que debemos solicitar
+## Información solicitada en la revisión original
 
 1. **A los docentes o al equipo MELT:** confirmar qué grupo y sistema nos corresponde consumir y quién es el contacto técnico. La identidad del grupo no puede deducirse del dominio de MELT.
 2. **Al grupo proveedor:** enlace al contrato formal publicado y versionado, con versión o revisión identificable; operaciones disponibles, parámetros, esquemas de entrada/salida, ejemplos válidos y errores. Si ofrece eventos, incluir contrato y mecanismo de entrega correspondientes.
@@ -64,13 +66,13 @@ Se mantiene el límite arquitectónico de consumir desde el microservicio respon
 5. **Al grupo proveedor:** límites de uso, comportamiento ante errores o lentitud y garantías de idempotencia cuando haya efectos de escritura, incluidos resultados inciertos y reintentos admitidos.
 6. **Al grupo proveedor y al equipo MELT:** datos o casos de prueba autorizados y forma segura de verificar resultados sin crear efectos no deseados; acordar qué operación soportará un flujo importante y qué sucede si el proveedor falla.
 
-## Próximo paso y criterios para desbloquear
+## Próximo paso original (superado por la integración actual)
 
 Una vez confirmados proveedor, contrato verificable y URL, revisar las operaciones y proponer la integración mínima: flujo y efecto de negocio, microservicio responsable, adaptación de datos, configuración, tratamiento de errores y resultados inciertos, timeouts, reintentos compatibles con idempotencia y test de contrato capaz de detectar incompatibilidades.
 
 Ese plan debe recibir autorización antes de hacer llamadas externas, modificar código de negocio, introducir credenciales o agregar dependencias. La investigación actual no autoriza automáticamente esa implementación.
 
-## Resultado para la Entrega 2
+## Resultado para la Entrega 2 (estado al 23/10/2026)
 
 Se pueden entregar ahora la auditoría, la delimitación arquitectónica y la lista concreta de información faltante. **D9 no queda completa:** falta la información necesaria para justificar y cerrar la decisión sobre el consumo del proveedor. Documentar el bloqueo no sustituye la decisión exigida para el 23/10.
 

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -14,6 +13,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func TestGhostKitchenUsaURLRealPorDefecto(t *testing.T) {
+	client := newGhostKitchenClient("clave-de-prueba", nil, "")
+	if client.baseURL != "https://57-156-56-219.sslip.io/public/v1" {
+		t.Fatalf("base URL=%q", client.baseURL)
+	}
+}
 
 func TestGhostKitchenClientEnvioAutenticadoYFiltros(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +77,14 @@ func TestGhostKitchenPropagaOperacionesDesdeEndpointCliente(t *testing.T) {
 			if r.Method != http.MethodPost {
 				t.Errorf("método=%s", r.Method)
 			}
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Errorf("no se pudo leer el cuerpo: %v", err)
+			}
+			want := `{"ubicacionCliente":{"lat":-31.4262,"lng":-64.1883},"ubicacionSede":{"lat":-31.4262,"lng":-64.1883},"radioKm":5}`
+			if string(body) != want {
+				t.Errorf("cuerpo de proximidad=%s", body)
+			}
 		default:
 			t.Errorf("ruta externa=%s", r.URL.Path)
 		}
@@ -87,7 +101,7 @@ func TestGhostKitchenPropagaOperacionesDesdeEndpointCliente(t *testing.T) {
 		{http.MethodGet, "/ghostkitchen/sedes/cercana?lat=-31.4&lng=-64.2", ""},
 		{http.MethodGet, "/ghostkitchen/sedes/sede-1/platos?q=burger&restauranteId=r1&ignorado=x", ""},
 		{http.MethodGet, "/ghostkitchen/platos/p1", ""},
-		{http.MethodPost, "/ghostkitchen/proximidad", `{"radioKm":5}`},
+		{http.MethodPost, "/ghostkitchen/proximidad", `{"ubicacionCliente":{"lat":-31.4262,"lng":-64.1883},"ubicacionSede":{"lat":-31.4262,"lng":-64.1883},"radioKm":5}`},
 	}
 	for _, tc := range cases {
 		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
@@ -217,18 +231,8 @@ func TestGhostKitchenTimeout(t *testing.T) {
 
 func TestGhostKitchenSinClaveNoLlamaAlProveedor(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	oldKey, hadKey := os.LookupEnv("GHOSTKITCHEN_API_KEY")
-	oldBase, hadBase := os.LookupEnv("GHOSTKITCHEN_BASE_URL")
 	t.Setenv("GHOSTKITCHEN_API_KEY", "")
 	t.Setenv("GHOSTKITCHEN_BASE_URL", "")
-	defer func() {
-		if hadKey {
-			_ = os.Setenv("GHOSTKITCHEN_API_KEY", oldKey)
-		}
-		if hadBase {
-			_ = os.Setenv("GHOSTKITCHEN_BASE_URL", oldBase)
-		}
-	}()
 	req := httptest.NewRequest(http.MethodGet, "/ghostkitchen/sedes", nil)
 	req.Header.Set("Authorization", "Bearer cliente-test")
 	w := httptest.NewRecorder()

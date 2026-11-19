@@ -38,7 +38,7 @@ Para el inventario archivo por archivo, incluidas las referencias PDF y la evide
 - `FLUJO-BENEFICIOS.md`: puntos, canjes, eventos y mensajes fallidos.
 - `CATALOGO-PROFESIONALES-ETAPA-1.md`: CRUD, búsqueda, caché y pruebas históricas del módulo.
 - `ACREDITACION-PUNTOS.md`, `IMPLEMENTACION-ACREDITACION-PUNTOS.md`, `INTEGRACION-GIMNASIO.md`: operación y consumo de la API externa; no contienen la clave compartida.
-- `GHOSTKITCHEN.md`: proxy y configuración del proveedor; las respuestas reales dependen de credencial/servicio externo.
+- `GHOSTKITCHEN.md`: integración real, configuración segura, endpoints y verificación del proveedor.
 - `PRUEBAS-RENDER-ACREDITACION.md`: evidencia fechada de un endpoint público; no implica que todo el despliegue siga igual.
 
 ### ADR y contratos

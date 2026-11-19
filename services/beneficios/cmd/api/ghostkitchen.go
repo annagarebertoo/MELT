@@ -27,11 +27,6 @@ type ghostKitchenClient struct {
 }
 
 type ghostKitchenProblem struct {
-	Type          string `json:"type,omitempty"`
-	Title         string `json:"title,omitempty"`
-	Status        int    `json:"status,omitempty"`
-	Code          string `json:"code,omitempty"`
-	Detail        string `json:"detail,omitempty"`
 	CorrelationID string `json:"correlationId,omitempty"`
 }
 
