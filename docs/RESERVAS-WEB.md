@@ -131,7 +131,7 @@ Los elementos pueden corresponder a diferentes categorías, profesionales, fecha
 
 ## Mercado Pago en modo de prueba
 
-Pagos usa sólo el Access Token copiado con el entorno **Prueba** seleccionado y `MP_ENV=test`. La URL de retorno y el Webhook usan el Gateway HTTPS compartido. El backend valida la firma del Webhook y vuelve a consultar el pago a Mercado Pago antes de tocar Reservas; sólo acepta operaciones con `live_mode=false`. Nunca se confirma un turno por el parámetro `status` del navegador.
+Pagos usa sólo el Access Token copiado con el entorno **Prueba** seleccionado y `MP_ENV=test`. La URL de retorno y el Webhook usan el Gateway HTTPS compartido. El backend valida la firma del Webhook y vuelve a consultar el pago a Mercado Pago antes de tocar Reservas; valida identificador, referencia, importe y moneda contra el checkout pendiente. No se confía en `live_mode` del aviso para rechazar órdenes `ORDTST` ni pagos devueltos por las credenciales de prueba, porque Mercado Pago puede enviar ese indicador como `true` en algunas operaciones sandbox. Nunca se confirma un turno por el parámetro `status` del navegador.
 
 La seña se cobra mediante Checkout Pro. La devolución de seña solicitada por la política de cancelación también se envía a Mercado Pago. Una compra aprobada cuya retención haya vencido o ya no pueda confirmarse requiere revisión operativa y eventual devolución desde Mercado Pago.
 

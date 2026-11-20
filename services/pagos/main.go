@@ -268,10 +268,10 @@ func (s *server) mercadoPagoWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "No se pudo consultar el pago notificado")
 		return
 	}
-	if item.LiveMode {
-		writeError(w, http.StatusConflict, "Este servicio sólo procesa pagos de prueba")
-		return
-	}
+	// Pagos runs with MP_ENV=test and uses the configured test access token.
+	// The resource is fetched from Mercado Pago and matched against the exact
+	// checkout, amount, and currency below; live_mode in the webhook payload is
+	// inconsistent for some sandbox Checkout Pro test-user transactions.
 	var stored payment
 	if err := s.payments.FindOne(ctx, bson.M{"checkoutId": item.ExternalReference}).Decode(&stored); err != nil || stored.Amount <= 0 || stored.Currency != item.CurrencyID || math.Abs(stored.Amount-item.TransactionAmount) >= 0.009 {
 		writeError(w, http.StatusConflict, "El pago notificado no coincide con un checkout MELT")
@@ -349,7 +349,7 @@ func (s *server) verifyMercadoPago(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	providerID := mpPaymentID(item)
-	valid := providerID != "" && !item.LiveMode && item.ExternalReference == req.Reference && item.CurrencyID == req.Currency && math.Abs(item.TransactionAmount-req.Amount) < 0.009
+	valid := providerID != "" && item.ExternalReference == req.Reference && item.CurrencyID == req.Currency && math.Abs(item.TransactionAmount-req.Amount) < 0.009
 	if !valid {
 		writeError(w, http.StatusConflict, "El pago no coincide con el checkout")
 		return

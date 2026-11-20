@@ -35,5 +35,5 @@ La migración vigente define `carritos_bloqueos` y `checkouts` como tablas Postg
 
 - La compra de varios horarios es una sola operación visible, con importe total autoritativo e idempotente.
 - Pagos requiere acceso a MongoDB y su propio nombre de base (`PAGOS_MONGODB_DATABASE`); no depende de credenciales externas.
-- En modo `test`, se usan usuarios y medios de pago de prueba de Mercado Pago; el servicio sólo redirige al enlace sandbox y rechaza respuestas de pago `live_mode=true`.
+- En modo `test`, se usan usuarios y medios de pago de prueba de Mercado Pago; el servicio sólo redirige al enlace sandbox y vuelve a consultar el recurso con las credenciales de prueba, validando referencia, importe y moneda. `live_mode` no se usa como criterio único porque algunas operaciones sandbox de Checkout Pro lo reportan como `true`.
 - La integración anterior descrita en [ADR-009](ADR-009-compatibilidad-carrito-sena.md) se conserva como historia de reglas y retenciones. Este ADR reemplaza únicamente la modalidad de pago por turno y define el checkout agrupado.
