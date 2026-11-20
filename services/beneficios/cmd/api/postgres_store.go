@@ -21,7 +21,7 @@ type almacenPostgres struct{ db *sql.DB }
 
 func (a *almacenPostgres) preparar(ctx context.Context) error {
 	var missing string
-	err := a.db.QueryRowContext(ctx, `select string_agg(required.name, ', ' order by required.name)
+	err := a.db.QueryRowContext(ctx, `select coalesce(string_agg(required.name, ', ' order by required.name), '')
 		from (values ('registros_externos'), ('movimientos_puntos'), ('recompensas'),
 			('reglas_puntos_tratamientos'), ('canjes'), ('mensajes_fallidos')) as required(name)
 		where to_regclass('public.' || required.name) is null`).Scan(&missing)

@@ -138,7 +138,7 @@ func decodeSQLRows[T any](rows *sql.Rows) ([]T, error) {
 
 func (p *postgresStore) preparar(ctx context.Context) error {
 	var missing string
-	err := p.db.QueryRowContext(ctx, `select string_agg(t.name, ', ' order by t.name)
+	err := p.db.QueryRowContext(ctx, `select coalesce(string_agg(t.name, ', ' order by t.name), '')
 		from (values ('agendas_semanales'), ('turnos'), ('bloqueos_turnos'),
 		('carritos_bloqueos'), ('checkouts'), ('control_agendas'), ('outbox_eventos')) t(name)
 		where to_regclass('public.' || t.name) is null`).Scan(&missing)
