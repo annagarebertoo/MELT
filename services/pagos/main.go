@@ -128,6 +128,7 @@ func (s *server) handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "provider": provider, "mode": "test"})
 	})
+	mux.Handle("POST /payments/simulate", s.internal(http.HandlerFunc(s.simulate)))
 	mux.Handle("POST /payments/preferences", s.internal(http.HandlerFunc(s.createPreference)))
 	mux.Handle("POST /payments/verify", s.internal(http.HandlerFunc(s.verifyMercadoPago)))
 	mux.HandleFunc("POST /webhooks/mercadopago", s.mercadoPagoWebhook)
