@@ -1287,6 +1287,8 @@ function applyPageRoute() {
     const keep = visible.some((selector) => element.matches(selector));
     element.classList.toggle("route-hidden", !keep);
   });
+  const cart = $("#carrito");
+  if (cart) cart.classList.toggle("hidden", page !== "carrito");
   document.querySelectorAll("[data-page]").forEach((link) => {
     const active = link.dataset.page === page;
     link.classList.toggle("is-current", active);
