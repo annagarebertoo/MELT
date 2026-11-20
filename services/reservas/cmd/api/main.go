@@ -340,6 +340,26 @@ func bloquesAgendaDe(agenda agendaSemanal) []bloqueAgenda {
 	return []bloqueAgenda{}
 }
 
+// Las agendas nuevas usan bloques como fuente de verdad. HoraInicio/HoraFin
+// son campos heredados y pueden estar vacíos en agendas válidas guardadas con
+// el formato de bloques; sólo se consultan como compatibilidad si no hay bloques.
+func bloquesAgendaValidados(agenda agendaSemanal) ([]bloqueAgenda, bool) {
+	if agenda.DiaSemana < 0 || agenda.DiaSemana > 6 {
+		return nil, false
+	}
+	if !agenda.Activo {
+		return []bloqueAgenda{}, true
+	}
+	if agenda.Bloques != nil {
+		bloques, ok := validarBloquesAgenda(agenda.Bloques)
+		return bloques, ok && len(bloques) > 0
+	}
+	if !agendaValida(agenda.DiaSemana, agenda.HoraInicio, agenda.HoraFin) {
+		return nil, false
+	}
+	return []bloqueAgenda{{Inicio: agenda.HoraInicio, Fin: agenda.HoraFin}}, true
+}
+
 func intervaloEnBloques(inicio, fin time.Time, bloques []bloqueAgenda, loc *time.Location) bool {
 	localInicio, localFin := inicio.In(loc), fin.In(loc)
 	if localInicio.Year() != localFin.Year() || localInicio.YearDay() != localFin.YearDay() {
@@ -699,17 +719,13 @@ func (s *servidorReservas) disponibilidad(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo consultar la agenda"})
 		return
 	}
-	if !agendaValida(agenda.DiaSemana, agenda.HoraInicio, agenda.HoraFin) {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "La agenda del profesional contiene un rango horario inválido."}})
-		return
-	}
 	if !agenda.Activo {
 		c.JSON(http.StatusOK, gin.H{"profesionalId": prof, "fecha": c.Query("fecha"), "horarios": []string{}})
 		return
 	}
-	bloques, agendaOK := validarBloquesAgenda(bloquesAgendaDe(agenda))
+	bloques, agendaOK := bloquesAgendaValidados(agenda)
 	if !agendaOK {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "La agenda del profesional contiene bloques inválidos."}})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "La agenda del profesional contiene bloques o rangos horarios inválidos."}})
 		return
 	}
 	var slots []string
@@ -937,14 +953,12 @@ func (s *servidorReservas) crearTurno(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "FUERA_DE_AGENDA", "message": "El profesional no atiende ese día."}})
 		return
 	}
-	if !agendaValida(agenda.DiaSemana, agenda.HoraInicio, agenda.HoraFin) {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "La agenda del profesional contiene un rango horario inválido."}})
+	bloques, agendaOK := bloquesAgendaValidados(agenda)
+	if !agendaOK {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "La agenda del profesional contiene bloques o rangos horarios inválidos."}})
 		return
 	}
-	from, _ := parseHora(agenda.HoraInicio)
-	to, _ := parseHora(agenda.HoraFin)
-	minute := localStart.Hour()*60 + localStart.Minute()
-	if minute < from || minute+duracionMinutos > to {
+	if !intervaloEnBloques(start, end, bloques, zonaHorariaReservas()) {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "FUERA_DE_AGENDA", "message": "El horario queda fuera de la agenda del profesional."}})
 		return
 	}
