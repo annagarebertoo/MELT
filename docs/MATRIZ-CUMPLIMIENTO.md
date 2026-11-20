@@ -5,7 +5,7 @@
 | Requisito/capacidad identificada | Evidencia en código/configuración | Documento/evidencia | Estado documental |
 |---|---|---|---|
 | API Gateway y frontend integrado | `infra/nginx/default.conf`, `infra/nginx/web/`, `compose.yaml` | [Arquitectura](ARCHITECTURE.md), [OPERACIONES](OPERACIONES.md) | Implementado localmente; remoto no verificado aquí. |
-| Servicios con ownership y persistencia MongoDB | `services/*`, bases separadas y colecciones en `main.go` | [Arquitectura](ARCHITECTURE.md), [Persistencia](PERSISTENCE.md) | Implementado; PostgreSQL está declarado pero no usado por servicios de negocio. |
+| Persistencia por servicio | Auth, Catálogo/Profesionales y Pagos usan MongoDB; Reservas y Beneficios usan PostgreSQL privado en proyectos Supabase separados (`*_DATABASE_URL`) | [Arquitectura](ARCHITECTURE.md), [ADR-003](adr/ADR-003-persistencia.md), [Supabase](../infra/supabase/README.md) | Arquitectura y conexión verificadas localmente en la rama actual; el registro histórico de `PERSISTENCE.md` corresponde a otra versión. |
 | Roles y controles de Auth | `services/auth/cmd/api/main.go`; middlewares de Reservas, Catálogo, Beneficios | Manual [Auth](servicios/AUTH.md), [Reservas](servicios/RESERVAS.md) | Rutas y controles presentes; no se repitieron pruebas en esta tarea. |
 | CRUD de catálogo, perfiles y asociaciones | `services/catalogo-profesionales/cmd/api/`; transacciones administrativas | [Catálogo](servicios/CATALOGO-PROFESIONALES.md), contrato admin | Implementado según código revisado. |
 | Búsqueda OpenSearch y caché Memcached | `search_cache.go`, configuración Compose, pruebas con build tags | [Etapa Catálogo](CATALOGO-PROFESIONALES-ETAPA-1.md), ADR-006/007 | Implementado; resultados de benchmarks son muestras locales históricas. |

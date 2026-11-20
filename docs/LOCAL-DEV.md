@@ -106,7 +106,7 @@ node --check infra/nginx/web/app.js
 docker compose config --quiet
 ```
 
-Las pruebas de Reservas incluyen `TestReservasMongoIntegrationFlujoCompleto`, que usa MongoDB real para disponibilidad, solicitudes simultáneas, bloqueo temporal, seña, confirmación idempotente, devolución y liberación; Catálogo y Pagos se simulan en esa prueba. Para ejecutarla, con MongoDB local levantado:
+Las pruebas históricas de Reservas incluyen `TestReservasMongoIntegrationFlujoCompleto`, que usa un adaptador de compatibilidad Mongo para disponibilidad, solicitudes simultáneas, bloqueo temporal, seña, confirmación idempotente, devolución y liberación; Catálogo y Pagos se simulan en esa prueba. No comprueba el almacenamiento vigente en PostgreSQL. Para ejecutarla, con MongoDB local levantado:
 
 ```powershell
 $env:RESERVAS_TEST_MONGODB_URI = 'mongodb://localhost:27017'
@@ -233,7 +233,7 @@ $env:RESERVAS_TEST_MONGODB_URI = 'mongodb://localhost:27017'
 go test -p=1 -count=1 -run TestReservasMongoIntegrationFlujoCompleto ./...
 ```
 
-La prueba crea y elimina una base de datos de nombre único; no toca `reservas_db`.
+La prueba crea y elimina una base Mongo de nombre único; no toca Supabase y no representa el almacenamiento de Reservas en la aplicación.
 
 
 ### Flujo por email y registro seguro

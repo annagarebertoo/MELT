@@ -5,18 +5,14 @@ Resultados reales del despliegue: [pruebas en Render](PRUEBAS-RENDER-ACREDITACIO
 
 ## Configuración
 
+**Persistencia vigente:** Beneficios usa PostgreSQL privado en Supabase (`BENEFICIOS_DATABASE_URL`); ya no usa MongoDB. Las instrucciones Mongo de versiones previas no aplican a la ejecución actual. Aplicá `infra/supabase/beneficios.sql` y configurá la URL según [la guía Supabase](../infra/supabase/README.md).
+
 Generar secretos distintos para `AUTH_JWT_SECRET`, `MELT_INTERNAL_KEY` y
 `BENEFICIOS_PARTNER_KEY` fuera del repositorio. La clave interna se comparte solo
 entre Auth y Beneficios; la de partner solo con el servidor consumidor.
-Beneficios necesita `AUTH_URL=http://auth:8084` en Compose (en Render, la URL de
-Auth), `MONGODB_URI`, `MELT_INTERNAL_KEY` y `BENEFICIOS_PARTNER_KEY`.
+Beneficios necesita `AUTH_URL=http://auth:8084` en Compose (en otros entornos, la URL de
+Auth), `BENEFICIOS_DATABASE_URL`, `MELT_INTERNAL_KEY` y `BENEFICIOS_PARTNER_KEY`.
 Si falta la clave de partner, el POST falla cerrado con 503.
-
-MongoDB debe soportar transacciones: replica set o Atlas. Compose inicia `rs0`
-sobre el volumen existente, sin eliminar datos. El healthcheck espera un primario.
-No ejecutar `docker compose down -v` sobre un entorno con datos que deban conservarse.
-Para conexiones desde el host a este replica set local usar `directConnection=true`;
-los servicios Docker resuelven `mongodb:27017` dentro de su red.
 
 ```powershell
 $env:AUTH_JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
@@ -57,34 +53,16 @@ incluso si se accede directamente sin pasar por NGINX. Token ausente/inválido o
 cuenta inactiva: 401; rol sin cliente: 403; Auth no disponible: 503.
 Devuelve saldo e historial consistente para el `usuarioId` verificado por Auth.
 
-## Persistencia y migración
+## Persistencia y datos
 
-Se conserva `beneficios_db.registros_externos`, sus documentos y saldos. Al iniciar,
-se retira únicamente `uq_registro_externo_email`, que implementaba el regalo único.
-El índice único disperso por usuario se conserva y se añade `movimientos_puntos`
-con `_id=solicitudId` y un índice de historial por usuario/fecha. No se borran
-colecciones ni se recalculan saldos históricos.
+Las tablas vigentes de Beneficios se crean con `infra/supabase/beneficios.sql`.
+El backend usa transacciones PostgreSQL para actualizar saldos, movimientos,
+recompensas, reglas, canjes, invitaciones y mensajes fallidos. No se importaron
+documentos de `beneficios_db` de MongoDB: el proyecto Supabase se inicializó con
+esquema y datos sintéticos de demostración. Una futura migración de datos requerirá
+un proceso explícito que transforme identidades, saldos e historial.
 
-El movimiento nuevo y el incremento del saldo se confirman en una transacción
-snapshot/majority. La clave única global evita duplicación entre usuarios;
-conflictos concurrentes se reintentan y los fallos parciales revierten la operación.
-La consulta de saldo e historial usa también una transacción snapshot.
-Los documentos antiguos con `usuarioId` continúan disponibles; su regalo previo
-aparece como movimiento histórico. Los documentos anteriores que solo tengan
-email se conservan pero no se asocian automáticamente: requieren una migración
-revisada de identidad, igual que antes de este cambio.
-
-No mezclar versiones antiguas y nuevas de Auth/Beneficios: detener escritores
-antiguos, respaldar datos e índices, desplegar ambos servicios y Gateway juntos.
-El rollback requiere revisar el índice de email antes de restaurarlo, ya que las
-cuentas nuevas pueden no tener email en Beneficios. La consulta interna por ID de Auth devuelve 204/404; todas las rutas internas exigen clave interna y están bloqueadas en el gateway. En Render,
-preferir servicios privados/red interna y configurar AUTH_URL de Beneficios con
-la URL confiable de Auth (HTTPS si se usa una dirección pública). Aunque Beneficios
-quede publicado, `/mis-puntos` exige un Bearer validado con Auth y
-`/acreditar-puntos` exige la clave de partner. NGINX conserva su control de sesión,
-reenvía Authorization y elimina los headers de identidad hacia Beneficios.
-Los cambios de configuración se preparan en el repositorio; esta corrección no
-modifica la configuración de servicios existentes en Render ni despliega cambios.
+La consulta interna por ID de Auth devuelve 204/404; todas las rutas internas exigen clave interna y están bloqueadas en el gateway. En otros entornos, preferir servicios privados/red interna y configurar AUTH_URL de Beneficios con la URL confiable de Auth (HTTPS si se usa una dirección pública). Aunque Beneficios quede publicado, `/mis-puntos` exige un Bearer validado con Auth y `/acreditar-puntos` exige la clave de partner. NGINX conserva su control de sesión, reenvía Authorization y elimina los headers de identidad hacia Beneficios.
 
 Se retiraron las rutas `/registro-externo` y `/internal/registro-gym` y la lógica de
 referidos del registro/login. Su contrato anterior se conserva como histórico.
@@ -199,6 +177,6 @@ conflictos, saldo/historial y rutas internas. Las pruebas Go agregan concurrenci
 reinicios, recuperación de entrega, vencimiento, cambio de destinatario y rollback.
 No usar el smoke sobre datos de producción: crea cuentas y movimientos reales.
 
-## Pruebas Render en el clúster existente
+## Pruebas en el entorno actual
 
-En servicios separados de prueba, configurar `AUTH_MONGODB_DATABASE=usuarios_prueba_db` en Auth y `BENEFICIOS_MONGODB_DATABASE=beneficios_prueba_db` en Beneficios. Ambos pueden usar el MongoDB existente, siempre que el usuario de conexión tenga permisos sobre estas bases. No cambiar los servicios existentes. Los valores predeterminados siguen siendo `usuarios_db` y `beneficios_db`. No basta cambiar el nombre dentro de MONGODB_URI. Las pruebas comparten recursos del clúster, pero no las colecciones del equipo.
+Beneficios necesita el proyecto Supabase MELT-Beneficios, su esquema aplicado y `BENEFICIOS_DATABASE_URL`. Las pruebas históricas con `BENEFICIOS_TEST_MONGODB_URI` ejercitan el adaptador de compatibilidad Mongo y no validan la conexión PostgreSQL vigente. Para comprobar el servicio iniciado, consultá `/health`; devuelve estado degradado si PostgreSQL no responde.

@@ -74,6 +74,8 @@ type Servidor struct {
 	publicURL        string
 	verificarEmail   func(context.Context, string, string) error
 }
+// almacenMongo se conserva para compatibilidad con pruebas históricas.
+// main inicializa y usa exclusivamente almacenPostgres.
 type almacenMongo struct {
 	cliente                                           *mongo.Client
 	registros, movimientos                            *mongo.Collection

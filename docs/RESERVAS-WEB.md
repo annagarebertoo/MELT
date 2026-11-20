@@ -2,9 +2,9 @@
 
 Esta guía documenta el recorrido local de identidad y reservas, los datos demo disponibles y cómo preparar datos reales. Los tratamientos, nombres, precios y agendas demo no representan precios ni personal real de MELT.
 
-## Datos demo ya cargados en el entorno local
+## Datos demo de Catálogo y agendas
 
-La base MongoDB local asociada a `docker compose` tiene estos registros:
+Los tratamientos y perfiles profesionales de demostración se guardan en MongoDB (`catalogo_db`). Las agendas de esos perfiles pertenecen a PostgreSQL de Reservas; no se guardan en MongoDB.
 
 | Tratamiento ficticio | Precio de prueba | Duración | Profesionales demo |
 | :--- | ---: | ---: | :--- |
@@ -12,13 +12,15 @@ La base MongoDB local asociada a `docker compose` tiene estos registros:
 | Masaje relajante · Demo | ARS 24.000 | 60 min | Sofía Demo y Valentina Demo |
 | Manicura clásica · Demo | ARS 12.000 | 45 min | Valentina Demo |
 
-Ambas agendas demo están habilitadas todos los días de 09:00 a 18:00. Sus IDs son `demo-prof-sofia` y `demo-prof-valentina`; los tratamientos tienen IDs con prefijo `demo-`. Son perfiles públicos de Catálogo asociados a agendas de Reservas, **no son cuentas de Auth ni personas reales**. Sirven para explorar las fichas, elegir profesional y consultar disponibilidad con una cuenta cliente.
+Sus IDs son `demo-prof-sofia` y `demo-prof-valentina`; los tratamientos tienen IDs con prefijo `demo-`. Son perfiles públicos de Catálogo, **no son cuentas de Auth ni personas reales**. Sirven para explorar las fichas y elegir profesional.
 
-Los datos fueron cargados en el volumen local de MongoDB; cada integrante debe cargarlos en su propio entorno. El script versionado solo escribe los IDs `demo-*` en las colecciones de demostración y se puede volver a ejecutar sin duplicarlos:
+Para cargar tratamientos y perfiles ficticios en MongoDB local, el script solo escribe IDs `demo-*` y se puede volver a ejecutar sin duplicarlos:
 
 ```powershell
 Get-Content scripts/seed-demo-reservas.js -Raw | docker compose exec -T mongodb mongosh --quiet
 ```
+
+Para crear agendas ficticias de 09:00 a 18:00 todos los días, ejecutá `infra/supabase/reservas_demo.sql` en el editor SQL del proyecto Supabase **MELT-Reservas**. El script solo modifica las agendas demo con IDs `demo-prof-*`.
 
 `docker compose down` conserva el volumen; `docker compose down -v` lo elimina junto con los demás datos locales. Para crear una reserva, registrá/iniciá sesión como cliente desde la interfaz. Para altas administrativas por API se necesita una cuenta administrativa de Auth configurada.
 

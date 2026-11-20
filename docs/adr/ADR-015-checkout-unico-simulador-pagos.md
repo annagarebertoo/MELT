@@ -13,11 +13,11 @@ La implementación anterior almacenaba cada retención por separado y creaba una
 
 ## Decisión
 
-1. Reservas sigue siendo dueño de agendas, turnos, retenciones, carrito lógico y checkout. Los elementos del único carrito activo de una cuenta cliente son sus retenciones `pendiente_pago` vigentes en `reservas_db.carritos_bloqueos`.
+1. Reservas sigue siendo dueño de agendas, turnos, retenciones, carrito lógico y checkout. Los elementos del único carrito activo de una cuenta cliente son sus retenciones `pendiente_pago` vigentes en la tabla `carritos_bloqueos` de PostgreSQL Supabase MELT-Reservas.
 2. Reservas crea un registro `checkouts` con la identidad autenticada, los IDs de retención, una instantánea de importes, totales, estado y clave de idempotencia. El identificador de checkout es la referencia única de la operación de pago.
 3. Los precios y duraciones se vuelven a consultar en Catálogo; los canjes se vuelven a reservar en Beneficios. El navegador no determina importes ni resultado.
 4. Pagos continúa como microservicio independiente. Guarda una transacción simulada en su base propia `pagos_db`, con unicidad por checkout e idempotencia. Su resultado queda configurado en backend mediante `PAYMENT_SIMULATOR_RESULT` (`approved` por defecto, `rejected` para pruebas). Las rutas de operación exigen `X-Melt-Internal-Key`.
-5. Ante aprobación, Reservas vuelve a validar todas las retenciones y los registros de bloqueo y confirma todos los turnos, actualiza los bloqueos y cierra el checkout dentro de una transacción MongoDB. Un error no deja turnos parcialmente confirmados; Reservas solicita la reversión de la simulación.
+5. Ante aprobación, Reservas vuelve a validar todas las retenciones y los registros de bloqueo y confirma todos los turnos, actualiza los bloqueos y cierra el checkout dentro de una transacción PostgreSQL. Un error no deja turnos parcialmente confirmados; Reservas solicita la reversión de la simulación.
 6. Rechazo no confirma turnos y conserva retenciones vigentes para reintentar. La expiración sigue siendo individual por elemento y de 10 minutos. Quitar un elemento libera únicamente sus minutos y su canje asociado.
 7. La seña es 30 % del total actualizado después de descuentos. El saldo restante se muestra en el resumen y continúa fuera del cobro simulado. El pago por sí solo no genera eventos ni puntos.
 8. La interfaz ofrece una sola acción «Confirmar compra». Los endpoints históricos por bloqueo se conservan para compatibilidad de clientes antiguos; la interfaz nueva no los utiliza.
@@ -29,7 +29,7 @@ El registro en Pagos y la transacción de Reservas pertenecen a servicios distin
 
 ## Datos existentes y compatibilidad
 
-No se elimina ni migra destructivamente `carritos_bloqueos`. Los documentos existentes siguen siendo visibles si están vigentes. La colección nueva `checkouts` conserva operaciones agrupadas sin TTL para soportar reintentos; Pagos crea `pagos_db.pagos_simulados` y `devoluciones_simuladas`. Los índices nuevos son aditivos. Los datos históricos de pagos externos no se transforman.
+La migración vigente define `carritos_bloqueos` y `checkouts` como tablas PostgreSQL en MELT-Reservas. No se importaron datos de la antigua base Mongo de Reservas; no hay migración automática de esos documentos. Pagos sigue registrando simulaciones en MongoDB `pagos_db`; los datos históricos de pagos externos no se transforman.
 
 ## Consecuencias
 

@@ -71,6 +71,8 @@ type turno struct {
 }
 
 type servidorReservas struct {
+	// Los campos Mongo se conservan para adaptadores de compatibilidad usados
+	// por pruebas históricas; main inicia Reservas con postgresStore.
 	mongo         *mongo.Client
 	pg            *postgresStore
 	agendas       *mongo.Collection

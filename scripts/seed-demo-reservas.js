@@ -1,7 +1,7 @@
-// Datos ficticios para probar el catálogo y la agenda en MongoDB local.
-// Solo modifica documentos con IDs demo-* en catalogo_db y reservas_db.
+// Datos ficticios para probar Catálogo en MongoDB local.
+// Las agendas de demostración pertenecen a PostgreSQL; usar
+// infra/supabase/reservas_demo.sql en el proyecto MELT-Reservas.
 const catalog = db.getSiblingDB("catalogo_db");
-const reservations = db.getSiblingDB("reservas_db");
 
 const professionals = [
   {
@@ -78,41 +78,9 @@ for (const treatment of treatments) {
   );
 }
 
-const weekdays = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
-
-for (const professional of professionals) {
-  for (let day = 0; day < weekdays.length; day += 1) {
-    reservations.agendas_semanales.updateOne(
-      { profesionalId: professional.id, diaSemana: day },
-      {
-        $set: {
-          _id: `${professional.id}-${weekdays[day]}`,
-          profesionalId: professional.id,
-          diaSemana: day,
-          horaInicio: "09:00",
-          horaFin: "18:00",
-          activo: true,
-        },
-      },
-      { upsert: true },
-    );
-  }
-}
-
 print(
   JSON.stringify({
     tratamientos: catalog.tratamientos.countDocuments({ id: /^demo-/ }),
     profesionales: catalog.profesionales.countDocuments({ id: /^demo-prof-/ }),
-    agendas: reservations.agendas_semanales.countDocuments({
-      profesionalId: /^demo-prof-/,
-    }),
   }),
 );

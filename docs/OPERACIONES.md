@@ -46,13 +46,13 @@ URLs de UI y endpoints locales se listan en [LOCAL-DEV.md](LOCAL-DEV.md). Promet
 |---|---|---:|---|---|
 | `AUTH_JWT_SECRET` | Auth | Sí en Compose | generar localmente, no persistir | Compose no valida; Auth no arranca sin una clave válida. |
 | `MELT_INTERNAL_KEY` | Auth, Catálogo, Reservas, Pagos, Beneficios | Sí | aleatoria por instalación, compartida sólo entre servicios del mismo entorno | `docker compose config` falla; llamadas internas no autorizan. |
-| `MONGODB_URI` | Todos los backends | Sí operativamente | `mongodb://mongodb:27017` en Compose | fallback del proceso a localhost, no adecuado dentro de contenedor. |
+| `MONGODB_URI` | Auth, Catálogo/Profesionales y Pagos | Sí operativamente | `mongodb://mongodb:27017` en Compose | fallback del proceso a localhost, no adecuado dentro de contenedor. Reservas y Beneficios no la usan para persistencia. |
 | `AUTH_MONGODB_DATABASE` | Auth | No | `usuarios_db` | default Auth. |
 | `CATALOGO_MONGODB_DATABASE` | Catálogo | No | `catalogo_db` | default Catálogo. |
 | `PROFESIONALES_MONGODB_DATABASE` | Catálogo | No | vacío | usa la base de Catálogo. Cambiar con datos exige migración. |
-| `RESERVAS` database | Reservas | No | fija en código: `reservas_db` | no tiene variable de nombre en este commit. |
+| `RESERVAS_DATABASE_URL` | Reservas | Sí | URL privada del proyecto Supabase MELT-Reservas | Compose no inicia Reservas sin ella. |
 | `PAGOS_MONGODB_DATABASE` | Pagos | No | `pagos_db` | default `pagos_db`. |
-| `BENEFICIOS_MONGODB_DATABASE` | Beneficios | No | `beneficios_db` | default del servicio. |
+| `BENEFICIOS_DATABASE_URL` | Beneficios | Sí | URL privada del proyecto Supabase MELT-Beneficios | Compose no inicia Beneficios sin ella. |
 | `AUTH_TOKEN_TTL_MINUTES` | Auth | No | `15` | 15 minutos. |
 | `AUTH_ADMIN_EMAIL`, `AUTH_ADMIN_PASSWORD` | Auth | No | no mostrar valores | sin ambos, no se crea superadministrador inicial. Juntos deben validar email y contraseña de 12–72 bytes; credenciales sólo de arranque local/controlado. |
 | `AUTH_URL` | Catálogo, Reservas, Beneficios | No | `http://auth:8084` | cada consumidor usa ese default Compose. |
@@ -92,7 +92,7 @@ docker compose config --quiet
 git diff --check
 ```
 
-Los ejemplos con `;` son para PowerShell. En Bash, usar `cd services/auth && go test ./...` (y análogamente para cada módulo). Los tests con integración Mongo requieren `AUTH_TEST_MONGODB_URI`, `CATALOGO_TEST_URI`/`MONGODB_TEST_URI`, `RESERVAS_TEST_MONGODB_URI`, `BENEFICIOS_TEST_MONGODB_URI` o `PAGOS_TEST_MONGODB_URI` según el módulo y usan datos mutables: apunta cada uno a instancia/base desechable que pueda aislarse. OpenSearch/Memcached se cubren con build tags de Catálogo: `go test -race -tags 'catalogointegration catalogosearchintegration' ./...`; requiere `CATALOGO_TEST_URI`, `CATALOGO_TEST_OPENSEARCH_URL` y `CATALOGO_TEST_MEMCACHED_ADDRESS`. Consultar los tags/variables en los archivos de test antes de ejecutar. Esta guía enumera comandos; no afirma que se hayan ejecutado durante esta actualización documental.
+Los ejemplos con `;` son para PowerShell. En Bash, usar `cd services/auth && go test ./...` (y análogamente para cada módulo). Los tests históricos con integración Mongo en Reservas/Beneficios ejercitan adaptadores de compatibilidad; no verifican sus conexiones PostgreSQL actuales. Donde sigan siendo necesarios para Auth, Catálogo o Pagos, los tests Mongo requieren `AUTH_TEST_MONGODB_URI`, `CATALOGO_TEST_URI`/`MONGODB_TEST_URI` o `PAGOS_TEST_URI` y usan datos mutables: apunta cada uno a instancia/base desechable que pueda aislarse. OpenSearch/Memcached se cubren con build tags de Catálogo: `go test -race -tags 'catalogointegration catalogosearchintegration' ./...`; requiere `CATALOGO_TEST_URI`, `CATALOGO_TEST_OPENSEARCH_URL` y `CATALOGO_TEST_MEMCACHED_ADDRESS`. Consultar los tags/variables en los archivos de test antes de ejecutar. Esta guía enumera comandos; no afirma que se hayan ejecutado durante esta actualización documental.
 
 La evidencia fechada en `docs/evidence/` y resultados detallados en documentos de D3/D5/D8/D11 son históricos y deben citar commit/fecha. La prueba de resiliencia documentada observó 11 HTTP 200 y un 504 con una réplica de Catálogo detenida; el criterio de cero errores no se aprobó.
 
