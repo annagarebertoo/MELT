@@ -21,9 +21,9 @@ services:
     build:
       context: ./services/catalogo-profesionales
     environment:
-      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_URI: ${MONGODB_URI:?Defini MONGODB_URI con la URI compartida de MongoDB Atlas}
       CATALOGO_MONGODB_DATABASE: ${CATALOGO_MONGODB_DATABASE:-catalogo_db}
-      PROFESIONALES_MONGODB_DATABASE: ${PROFESIONALES_MONGODB_DATABASE:-}
+      PROFESIONALES_MONGODB_DATABASE: ${PROFESIONALES_MONGODB_DATABASE:-profesionales_db}
       PORT: "8081"
       AUTH_URL: ${AUTH_URL:-http://auth:8084}
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
@@ -32,8 +32,6 @@ services:
       MEMCACHED_NAMESPACE: ${MEMCACHED_NAMESPACE:-melt:catalogo}
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
     depends_on:
-      mongodb:
-        condition: service_healthy
       opensearch:
         condition: service_started
       memcached:
@@ -77,13 +75,10 @@ services:
       context: ./services/pagos
     environment:
       PORT: "8085"
-      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_URI: ${MONGODB_URI:?Defini MONGODB_URI con la URI compartida de MongoDB Atlas}
       PAGOS_MONGODB_DATABASE: ${PAGOS_MONGODB_DATABASE:-pagos_db}
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
       PAYMENT_SIMULATOR_RESULT: ${PAYMENT_SIMULATOR_RESULT:-approved}
-    depends_on:
-      mongodb:
-        condition: service_healthy
     restart: unless-stopped
 
   auth:
@@ -91,7 +86,7 @@ services:
       context: ./services/auth
     environment:
       PORT: "8084"
-      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_URI: ${MONGODB_URI:?Defini MONGODB_URI con la URI compartida de MongoDB Atlas}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Defini AUTH_JWT_SECRET en tu entorno}
       BENEFICIOS_URL: http://beneficios:8083
       CATALOGO_URL: http://catalogo-profesionales:8081
@@ -100,8 +95,6 @@ services:
       AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-}
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
     depends_on:
-      mongodb:
-        condition: service_healthy
       catalogo-profesionales:
         condition: service_started
     restart: unless-stopped
@@ -123,37 +116,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-    restart: unless-stopped
-
-  mongodb:
-    image: mongo:7
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
-    ports:
-      - "27017:27017"
-    volumes:
-      - melt_mongodb_data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "try { if (!rs.status().ok || !db.hello().isWritablePrimary) quit(1) } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongodb:27017'}]}); quit(1) }"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: melt
-      POSTGRES_USER: melt
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-melt_dev_only}
-    ports:
-      - "5432:5432"
-    volumes:
-      - melt_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U melt -d melt"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     restart: unless-stopped
 
   rabbitmq:
@@ -217,8 +179,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  melt_mongodb_data:
-  melt_postgres_data:
   melt_rabbitmq_data:
   melt_opensearch_data:
   melt_grafana_data:

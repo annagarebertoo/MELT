@@ -16,9 +16,9 @@ El alcance implementado y sus límites, con referencias al código y evidencia, 
 
 ## Arquitectura y tecnologías
 
-El navegador accede a NGINX, que sirve el frontend HTML/CSS/JavaScript y actúa como Gateway. El Gateway deriva solicitudes a Auth, Catálogo y Profesionales, Reservas o Beneficios. Reservas llama a Catálogo, Auth, Pagos y Beneficios para completar los flujos; publica eventos a RabbitMQ y Beneficios los consume. Catálogo, Auth y Pagos conservan sus bases MongoDB. Reservas y Beneficios son dueños de bases PostgreSQL privadas e independientes en Supabase. Catálogo además usa OpenSearch para búsqueda y Memcached para lecturas cacheables.
+El navegador accede a NGINX, que sirve el frontend HTML/CSS/JavaScript y actúa como Gateway. El Gateway deriva solicitudes a Auth, Catálogo y Profesionales, Reservas o Beneficios. Reservas llama a Catálogo, Auth, Pagos y Beneficios para completar los flujos; publica eventos a RabbitMQ y Beneficios los consume. Auth, Catálogo, Profesionales y Pagos comparten un clúster MongoDB Atlas con bases lógicas separadas. Reservas y Beneficios son dueños de bases PostgreSQL privadas e independientes en Supabase. No se levanta una base de negocio local en Compose.
 
-Tecnologías declaradas: Go/Gin, MongoDB, PostgreSQL (Supabase), NGINX, Docker Compose, RabbitMQ, OpenSearch, Memcached, Prometheus, Grafana y Jaeger. Más información: [arquitectura y diagramas](docs/ARCHITECTURE.md) y [configuración de Supabase](infra/supabase/README.md).
+Tecnologías declaradas: Go/Gin, MongoDB Atlas, PostgreSQL (Supabase), NGINX, Docker Compose, RabbitMQ, OpenSearch, Memcached, Prometheus, Grafana y Jaeger. Más información: [arquitectura y diagramas](docs/ARCHITECTURE.md), [configuración de Atlas](infra/mongodb/README.md) y [configuración de Supabase](infra/supabase/README.md).
 
 ## Requisitos previos
 
@@ -28,7 +28,7 @@ Tecnologías declaradas: Go/Gin, MongoDB, PostgreSQL (Supabase), NGINX, Docker C
 
 ## Inicio local
 
-Desde la raíz, prepará `.env` a partir de `.env.example`, aplicá los dos SQL de `infra/supabase/` en sus proyectos y configurá `BENEFICIOS_DATABASE_URL` y `RESERVAS_DATABASE_URL` con sus URLs privadas respectivas. Luego creá los secretos locales fuera del repositorio. En PowerShell:
+Desde la raíz, prepará `.env` a partir de `.env.example`, configurá `MONGODB_URI` con la URI del clúster Atlas, aplicá los dos SQL de `infra/supabase/` y configurá `BENEFICIOS_DATABASE_URL` y `RESERVAS_DATABASE_URL` con sus URLs privadas respectivas. Reservas y Beneficios requieren sus PostgreSQL de Supabase; no usan MongoDB. Luego creá los secretos locales fuera del repositorio. En PowerShell:
 
 ```powershell
 $env:AUTH_JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
@@ -38,7 +38,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Abrir <http://localhost:8080>. Salud del Gateway: <http://localhost:8080/health>. El primer arranque puede tardar mientras se descargan imágenes e inicia MongoDB replica set. No uses `docker compose down -v` salvo que quieras borrar deliberadamente los datos locales.
+Abrir <http://localhost:8080>. Salud del Gateway: <http://localhost:8080/health>. No uses `docker compose down -v` salvo que quieras borrar deliberadamente los datos de infraestructura local.
 
 Las variables opcionales, pruebas, comandos de diagnóstico, rutas locales y apagado están en [operaciones y ejecución](docs/OPERACIONES.md). Un `.env.example` sirve como referencia, no como lugar para guardar claves reales.
 

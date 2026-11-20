@@ -23,7 +23,7 @@ Pagos no consume ni publica eventos RabbitMQ. Errores típicos: 400 solicitud in
 
 ## Configuración, salud y pruebas
 
-Variables: `PORT` (8085), `MONGODB_URI`, `PAGOS_MONGODB_DATABASE`, `MELT_INTERNAL_KEY`, `PAYMENT_SIMULATOR_RESULT`.
+Variables: `PORT` (8085), `MONGODB_URI` (Atlas compartido, obligatorio), `PAGOS_MONGODB_DATABASE`, `MELT_INTERNAL_KEY`, `PAYMENT_SIMULATOR_RESULT`. Sin URI configurada, Pagos no inicia ni intenta conectarse a MongoDB local.
 
 ```sh
 cd services/pagos

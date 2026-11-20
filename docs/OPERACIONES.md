@@ -22,15 +22,13 @@ docker compose ps
 Invoke-RestMethod http://localhost:8080/health
 ```
 
-Para logs: `docker compose logs --tail 100 gateway auth catalogo-profesionales reservas pagos beneficios`. Reinicio acotado: `docker compose restart <servicio>`; rebuild acotado: `docker compose up --build -d <servicio>`. No reiniciar MongoDB ni usar `down -v` para un problema de código. Apagado sin borrar volúmenes: `docker compose down`.
+Para logs: `docker compose logs --tail 100 gateway auth catalogo-profesionales reservas pagos beneficios`. Reinicio acotado: `docker compose restart <servicio>`; rebuild acotado: `docker compose up --build -d <servicio>`. No uses `down -v` para un problema de código. Apagado sin borrar volúmenes: `docker compose down`.
 
 ## Puertos del Compose
 
 | Servicio | Puerto host | Uso |
 |---|---:|---|
 | Gateway | 8080 | Aplicación y API |
-| MongoDB | 27017 | Base de desarrollo; replica set `rs0` |
-| PostgreSQL | 5432 | Servicio declarado; no consumido por los servicios de negocio en este commit |
 | RabbitMQ | 5672 / 15672 | AMQP / Management UI |
 | OpenSearch | 9200 | Búsqueda local, seguridad deshabilitada para desarrollo |
 | Memcached | 11211 | Cache de catálogo |
@@ -46,12 +44,13 @@ URLs de UI y endpoints locales se listan en [LOCAL-DEV.md](LOCAL-DEV.md). Promet
 |---|---|---:|---|---|
 | `AUTH_JWT_SECRET` | Auth | Sí en Compose | generar localmente, no persistir | Compose no valida; Auth no arranca sin una clave válida. |
 | `MELT_INTERNAL_KEY` | Auth, Catálogo, Reservas, Pagos, Beneficios | Sí | aleatoria por instalación, compartida sólo entre servicios del mismo entorno | `docker compose config` falla; llamadas internas no autorizan. |
-| `MONGODB_URI` | Auth, Catálogo/Profesionales y Pagos | Sí operativamente | `mongodb://mongodb:27017` en Compose | fallback del proceso a localhost, no adecuado dentro de contenedor. Reservas y Beneficios no la usan para persistencia. |
+| `MONGODB_URI` | Auth, Catálogo, Profesionales y Pagos | Sí | URI privada del clúster MELT en MongoDB Atlas | Compose no inicia los servicios Mongo sin ella. |
 | `AUTH_MONGODB_DATABASE` | Auth | No | `usuarios_db` | default Auth. |
 | `CATALOGO_MONGODB_DATABASE` | Catálogo | No | `catalogo_db` | default Catálogo. |
-| `PROFESIONALES_MONGODB_DATABASE` | Catálogo | No | vacío | usa la base de Catálogo. Cambiar con datos exige migración. |
+| `PROFESIONALES_MONGODB_DATABASE` | Catálogo | No | `profesionales_db` | base lógica separada en el mismo clúster Atlas. |
 | `RESERVAS_DATABASE_URL` | Reservas | Sí | URL privada del proyecto Supabase MELT-Reservas | Compose no inicia Reservas sin ella. |
 | `PAGOS_MONGODB_DATABASE` | Pagos | No | `pagos_db` | default `pagos_db`. |
+| `AUTH_MONGODB_DATABASE` | Auth | No | `usuarios_db` | default `usuarios_db`. |
 | `BENEFICIOS_DATABASE_URL` | Beneficios | Sí | URL privada del proyecto Supabase MELT-Beneficios | Compose no inicia Beneficios sin ella. |
 | `AUTH_TOKEN_TTL_MINUTES` | Auth | No | `15` | 15 minutos. |
 | `AUTH_ADMIN_EMAIL`, `AUTH_ADMIN_PASSWORD` | Auth | No | no mostrar valores | sin ambos, no se crea superadministrador inicial. Juntos deben validar email y contraseña de 12–72 bytes; credenciales sólo de arranque local/controlado. |
@@ -72,10 +71,9 @@ URLs de UI y endpoints locales se listan en [LOCAL-DEV.md](LOCAL-DEV.md). Promet
 | `GHOSTKITCHEN_BASE_URL` | Beneficios | No | default del cliente en código; mock local configurable | usa base upstream predeterminada. |
 | `PORT` | Cada backend | No en Compose | catálogo 8081, reservas 8082, beneficios 8083, auth 8084, pagos 8085 | valores definidos por servicio. |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Catálogo | No | `http://jaeger:4318/v1/traces` | no exporta trazas a Jaeger. |
-| `POSTGRES_PASSWORD` | PostgreSQL Compose | No | valor de desarrollo solo local | Compose tiene default inseguro para uso local. |
 | `GRAFANA_PASSWORD` | Grafana Compose | No | valor de desarrollo solo local | default local `admin_dev_only`. |
 
-Compose inicializa MongoDB como replica set. Para entorno remoto se requieren valores gestionados fuera de Git y una topología Mongo compatible con transacciones; la tabla no implica que un despliegue externo esté configurado.
+Compose no levanta MongoDB ni PostgreSQL de negocio. Todos los servicios Mongo comparten Atlas y separan sus bases lógicas; Reservas y Beneficios usan únicamente sus proyectos PostgreSQL de Supabase. Se requieren valores gestionados fuera de Git y un clúster Mongo compatible con transacciones.
 
 ## Pruebas y verificaciones disponibles
 

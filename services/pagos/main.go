@@ -272,7 +272,7 @@ func main() {
 	}
 	uri := strings.TrimSpace(os.Getenv("MONGODB_URI"))
 	if uri == "" {
-		uri = "mongodb://localhost:27017"
+		log.Fatal("MONGODB_URI es obligatorio; configurar el clúster compartido de MongoDB Atlas")
 	}
 	dbName := strings.TrimSpace(os.Getenv("PAGOS_MONGODB_DATABASE"))
 	if dbName == "" {

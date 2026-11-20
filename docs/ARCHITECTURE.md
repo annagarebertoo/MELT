@@ -17,9 +17,9 @@ flowchart LR
   R -->|HTTP interno| B
   R -->|outbox / AMQP| Q[(RabbitMQ)]
   Q --> B
-  C --> M[(MongoDB)]
-  A --> M
-  P --> M
+  C -->|MONGODB_URI| M[(MongoDB Atlas compartido<br/>usuarios_db, catalogo_db, profesionales_db, pagos_db)]
+  A -->|MONGODB_URI| M
+  P -->|MONGODB_URI| M
   R --> RDB[(PostgreSQL privado<br/>Supabase MELT-Reservas)]
   B --> BDB[(PostgreSQL privado<br/>Supabase MELT-Beneficios)]
   C --> O[(OpenSearch)]
@@ -33,12 +33,12 @@ flowchart LR
 | Componente | Responsabilidad / datos principales | Persistencia y dependencias |
 |---|---|---|
 | Gateway (NGINX) | Frontend, routing, verificación de sesión para zonas privadas y propagación de identidad verificada a Reservas. | Sin base propia. En Compose deriva a servicios por DNS interno. |
-| Auth | Cuentas, credenciales, roles, JWT e invitaciones asociadas al alta. | MongoDB `usuarios_db` por defecto. |
-| Catálogo y Profesionales | Categorías, tratamientos, perfiles profesionales y vinculación `authUserId`. | MongoDB `catalogo_db` por defecto; OpenSearch y Memcached son proyecciones/infra auxiliares. |
+| Auth | Cuentas, credenciales, roles, JWT e invitaciones asociadas al alta. | MongoDB Atlas compartido, base lógica `usuarios_db`. |
+| Catálogo y Profesionales | Categorías, tratamientos, perfiles profesionales y vinculación `authUserId`. | MongoDB Atlas compartido, en bases lógicas separadas `catalogo_db` y `profesionales_db`; OpenSearch y Memcached son proyecciones/infra auxiliares. |
 | Reservas | Agendas semanales, turnos, bloqueos, carritos, checkout y outbox. | PostgreSQL privado del proyecto Supabase `MELT-Reservas`; comunica con Auth, Catálogo, Pagos, Beneficios y RabbitMQ. |
-| Pagos | Operaciones de pago, reversas y devoluciones **simuladas**. | MongoDB `pagos_db`; endpoints internos con clave compartida. |
+| Pagos | Operaciones de pago, reversas y devoluciones **simuladas**. | MongoDB Atlas compartido, base lógica `pagos_db`; endpoints internos con clave compartida. |
 | Beneficios | Puntos, movimientos, reglas, recompensas, canjes, invitaciones externas y fallidos. | PostgreSQL privado del proyecto Supabase `MELT-Beneficios`; consume eventos RabbitMQ y consulta Auth. |
-| Infraestructura | MongoDB, PostgreSQL Supabase, RabbitMQ, OpenSearch, Memcached, Prometheus, Grafana y Jaeger. | MongoDB aloja Auth, Catálogo y Pagos; cada uno de los otros dos servicios usa su propia base PostgreSQL privada. |
+| Infraestructura | MongoDB Atlas compartido, PostgreSQL Supabase, RabbitMQ, OpenSearch, Memcached, Prometheus, Grafana y Jaeger. | No hay servidores MongoDB ni PostgreSQL de negocio locales en Compose. Reservas y Beneficios usan exclusivamente sus bases PostgreSQL privadas; todos los servicios Mongo se conectan a Atlas. |
 
 Los servicios mantienen ownership separado y no consultan directamente tablas o colecciones ajenas. Reservas resuelve el perfil profesional a partir del ID autenticado consultando el endpoint interno de Catálogo; los IDs no se consideran equivalentes. La configuración de Supabase está en [infra/supabase](../infra/supabase/README.md); su aplicación y conectividad remotas se verifican por entorno.
 

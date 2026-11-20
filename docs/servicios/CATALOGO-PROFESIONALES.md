@@ -2,7 +2,7 @@
 
 ## Responsabilidad, datos y almacenamiento
 
-Dueño de categorías, tratamientos, perfiles profesionales y su asociación. MongoDB contiene la fuente canónica; por defecto `catalogo_db` y colecciones `categorias`, `tratamientos`, `profesionales` y control de sincronización. `PROFESIONALES_MONGODB_DATABASE` permite una base aparte si una migración/instalación lo requiere. Los perfiles guardan `authUserId` internamente, que se omite de las respuestas públicas.
+Dueño de categorías, tratamientos, perfiles profesionales y su asociación. MongoDB Atlas contiene la fuente canónica; `MONGODB_URI` conecta el clúster compartido de MELT. Las bases se separan en `catalogo_db` y `profesionales_db`; sus colecciones incluyen `categorias`, `tratamientos`, `profesionales` y control de sincronización. Los perfiles guardan `authUserId` internamente, que se omite de las respuestas públicas.
 
 OpenSearch sirve búsqueda textual y filtros del catálogo; el índice se reconstruye desde MongoDB mediante un indexador con lease y alias. Memcached almacena consultas de lista por 30 segundos; cambios administrativos actualizan la generación para invalidar entradas de todas las réplicas. El fallo de Memcached provoca miss/fallback: no es dueño de datos. Si OpenSearch está atrasado/no disponible, búsqueda textual no se debe presentar como actualizada; el handler puede responder 503. Lecturas sin búsqueda pueden usar MongoDB.
 
@@ -41,7 +41,7 @@ Catálogo no publica/consume eventos RabbitMQ de negocio en esta versión; sincr
 
 ## Configuración y pruebas
 
-Variables: `MONGODB_URI`, `CATALOGO_MONGODB_DATABASE`, opcional `PROFESIONALES_MONGODB_DATABASE`, `AUTH_URL`, `MELT_INTERNAL_KEY`, `OPENSEARCH_URL`, `MEMCACHED_ADDRESS`, `MEMCACHED_NAMESPACE`, `PORT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`.
+Variables: `MONGODB_URI`, `CATALOGO_MONGODB_DATABASE`, `PROFESIONALES_MONGODB_DATABASE`, `AUTH_URL`, `MELT_INTERNAL_KEY`, `OPENSEARCH_URL`, `MEMCACHED_ADDRESS`, `MEMCACHED_NAMESPACE`, `PORT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`.
 
 ```sh
 cd services/catalogo-profesionales

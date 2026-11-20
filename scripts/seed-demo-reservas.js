@@ -1,4 +1,4 @@
-// Datos ficticios para probar Catálogo en MongoDB local.
+// Datos ficticios para probar Catálogo en MongoDB Atlas.
 // Las agendas de demostración pertenecen a PostgreSQL; usar
 // infra/supabase/reservas_demo.sql en el proyecto MELT-Reservas.
 const catalog = db.getSiblingDB("catalogo_db");

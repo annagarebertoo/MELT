@@ -4,7 +4,7 @@ Esta guía documenta el recorrido local de identidad y reservas, los datos demo 
 
 ## Datos demo de Catálogo y agendas
 
-Los tratamientos y perfiles profesionales de demostración se guardan en MongoDB (`catalogo_db`). Las agendas de esos perfiles pertenecen a PostgreSQL de Reservas; no se guardan en MongoDB.
+Los tratamientos y perfiles profesionales de demostración se guardan en MongoDB Atlas (`catalogo_db` y `profesionales_db`). Las agendas de esos perfiles pertenecen a PostgreSQL de Reservas; no se guardan en MongoDB.
 
 | Tratamiento ficticio | Precio de prueba | Duración | Profesionales demo |
 | :--- | ---: | ---: | :--- |
@@ -14,10 +14,10 @@ Los tratamientos y perfiles profesionales de demostración se guardan en MongoDB
 
 Sus IDs son `demo-prof-sofia` y `demo-prof-valentina`; los tratamientos tienen IDs con prefijo `demo-`. Son perfiles públicos de Catálogo, **no son cuentas de Auth ni personas reales**. Sirven para explorar las fichas y elegir profesional.
 
-Para cargar tratamientos y perfiles ficticios en MongoDB local, el script solo escribe IDs `demo-*` y se puede volver a ejecutar sin duplicarlos:
+Para cargar tratamientos y perfiles ficticios en Atlas, el script solo escribe IDs `demo-*` y se puede volver a ejecutar sin duplicarlos. Requiere MongoDB Shell (`mongosh`) y que `MONGODB_URI` esté disponible como variable de entorno en esa terminal (el `.env` de Compose no se carga automáticamente en PowerShell):
 
 ```powershell
-Get-Content scripts/seed-demo-reservas.js -Raw | docker compose exec -T mongodb mongosh --quiet
+mongosh $env:MONGODB_URI --quiet --file scripts/seed-demo-reservas.js
 ```
 
 Para crear agendas ficticias de 09:00 a 18:00 todos los días, ejecutá `infra/supabase/reservas_demo.sql` en el editor SQL del proyecto Supabase **MELT-Reservas**. El script solo modifica las agendas demo con IDs `demo-prof-*`.

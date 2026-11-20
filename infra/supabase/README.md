@@ -1,6 +1,6 @@
 # Supabase para MELT
 
-MELT conserva MongoDB para Catálogo y Profesionales. Beneficios y Reservas usan proyectos PostgreSQL separados, tal como establece `docs/adr/ADR-003-persistencia.md`.
+MELT usa un único clúster MongoDB Atlas compartido por Auth, Catálogo, Profesionales y Pagos, con bases lógicas separadas. Beneficios y Reservas usan dos proyectos PostgreSQL separados de Supabase, tal como establece `docs/adr/ADR-003-persistencia.md`. Reservas y Beneficios no reciben `MONGODB_URI` ni acceden a MongoDB.
 
 ## Crear los esquemas
 

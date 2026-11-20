@@ -106,7 +106,7 @@ node --check infra/nginx/web/app.js
 docker compose config --quiet
 ```
 
-Las pruebas históricas de Reservas incluyen `TestReservasMongoIntegrationFlujoCompleto`, que usa un adaptador de compatibilidad Mongo para disponibilidad, solicitudes simultáneas, bloqueo temporal, seña, confirmación idempotente, devolución y liberación; Catálogo y Pagos se simulan en esa prueba. No comprueba el almacenamiento vigente en PostgreSQL. Para ejecutarla, con MongoDB local levantado:
+Las pruebas históricas de Reservas incluyen `TestReservasMongoIntegrationFlujoCompleto`, que usa un adaptador de compatibilidad Mongo para disponibilidad, solicitudes simultáneas, bloqueo temporal, seña, confirmación idempotente, devolución y liberación; Catálogo y Pagos se simulan en esa prueba. No comprueba el almacenamiento vigente en PostgreSQL ni forma parte del arranque normal. Si se decide ejecutarla, requiere una instancia desechable exclusiva para pruebas; no uses las bases compartidas del equipo.
 
 ```powershell
 $env:RESERVAS_TEST_MONGODB_URI = 'mongodb://localhost:27017'
@@ -120,7 +120,7 @@ La cobertura automatizada no reemplaza una comprobación de pago sandbox con las
 
 ## Alcance y limitaciones actuales
 
-El catálogo y los perfiles profesionales persisten en MongoDB (`catalogo_db.tratamientos` y `catalogo_db.profesionales`). Reservas y Beneficios requieren sus dos proyectos PostgreSQL Supabase, configurados con `RESERVAS_DATABASE_URL` y `BENEFICIOS_DATABASE_URL`; aplicá primero los scripts de `infra/supabase/`. La búsqueda actual es simple en MongoDB, con filtro, paginación y ordenamiento; OpenSearch no está integrado. La web local en `http://localhost:8080` permite explorar catálogo, registrarse, iniciar sesión, consultar perfil/puntos, revisar disponibilidad, crear el carrito, pagar la seña en modo test y cancelar reservas. También están pendientes la API externa de búsqueda de sedes cercanas del grupo de Cocina Fantasma, notificaciones por correo y pruebas de carga.
+Auth, Catálogo, Profesionales y Pagos persisten en el clúster MongoDB Atlas compartido (`usuarios_db`, `catalogo_db`, `profesionales_db` y `pagos_db`), configurado con `MONGODB_URI`. Reservas y Beneficios requieren sus proyectos PostgreSQL Supabase, configurados con `RESERVAS_DATABASE_URL` y `BENEFICIOS_DATABASE_URL`; aplicá primero los scripts de `infra/supabase/`. Compose no levanta bases de negocio locales. La búsqueda actual es simple en MongoDB, con filtro, paginación y ordenamiento; OpenSearch no está integrado. La web local en `http://localhost:8080` permite explorar catálogo, registrarse, iniciar sesión, consultar perfil/puntos, revisar disponibilidad, crear el carrito, pagar la seña en modo test y cancelar reservas. También están pendientes la API externa de búsqueda de sedes cercanas del grupo de Cocina Fantasma, notificaciones por correo y pruebas de carga.
 
 
 ## Acreditación externa de puntos
@@ -226,7 +226,7 @@ cd services/reservas
 go test -p=1 -count=1 ./...
 ```
 
-La prueba histórica `TestReservasMongoIntegrationFlujoCompleto` recorre esos flujos por el adaptador de compatibilidad Mongo; no verifica la ruta de producción PostgreSQL. Para ejecutarla, dejá MongoDB de Compose levantado y configurá la URI de prueba:
+La prueba histórica `TestReservasMongoIntegrationFlujoCompleto` recorre esos flujos por el adaptador de compatibilidad Mongo; no verifica la ruta de producción PostgreSQL. Solo para esa prueba opcional, configurá la URI de una instancia desechable aislada:
 
 ```powershell
 $env:RESERVAS_TEST_MONGODB_URI = 'mongodb://localhost:27017'
