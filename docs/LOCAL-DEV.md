@@ -120,7 +120,7 @@ La cobertura automatizada no reemplaza una comprobación de pago sandbox con las
 
 ## Alcance y limitaciones actuales
 
-El catálogo y los perfiles profesionales persisten en MongoDB (`catalogo_db.tratamientos` y `catalogo_db.profesionales`). Reservas persiste agendas, turnos, bloqueos y carritos en MongoDB (`reservas_db`). La búsqueda actual es simple en MongoDB, con filtro, paginación y ordenamiento; OpenSearch no está integrado. El POST de administración de catálogo es una ruta privada compatible; la API pública contractual v1 expone lectura. La web local en `http://localhost:8080` permite explorar catálogo, registrarse, iniciar sesión, consultar perfil/puntos, revisar disponibilidad, crear el carrito, pagar la seña en modo test y cancelar reservas. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados, pero sus integraciones de negocio siguen pendientes. También están pendientes la API externa de búsqueda de sedes cercanas del grupo de Cocina Fantasma, notificaciones por correo, canjes de puntos y pruebas de carga.
+El catálogo y los perfiles profesionales persisten en MongoDB (`catalogo_db.tratamientos` y `catalogo_db.profesionales`). Reservas y Beneficios requieren sus dos proyectos PostgreSQL Supabase, configurados con `RESERVAS_DATABASE_URL` y `BENEFICIOS_DATABASE_URL`; aplicá primero los scripts de `infra/supabase/`. La búsqueda actual es simple en MongoDB, con filtro, paginación y ordenamiento; OpenSearch no está integrado. La web local en `http://localhost:8080` permite explorar catálogo, registrarse, iniciar sesión, consultar perfil/puntos, revisar disponibilidad, crear el carrito, pagar la seña en modo test y cancelar reservas. También están pendientes la API externa de búsqueda de sedes cercanas del grupo de Cocina Fantasma, notificaciones por correo y pruebas de carga.
 
 
 ## Acreditación externa de puntos
@@ -203,7 +203,7 @@ Cada ruta privada encadena `requiereIdentidad()` y `requierePermiso("clave.de.op
 
 ## Reservas: agenda, disponibilidad y turnos
 
-El servicio Reservas persiste agendas semanales y turnos en MongoDB, en la base `reservas_db`. Compose configura `MONGODB_URI=mongodb://mongodb:27017` y espera que MongoDB esté saludable.
+El servicio Reservas persiste agendas semanales, turnos, bloqueos, carritos y checkout en PostgreSQL del proyecto Supabase MELT-Reservas. Compose requiere `RESERVAS_DATABASE_URL`; el esquema debe estar aplicado antes de iniciarlo.
 
 - `PUT /api/v1/reservas/agenda`: crea o actualiza el horario semanal. `diaSemana` usa 0=domingo y 6=sábado; `horaInicio` y `horaFin` usan `HH:MM`. Un profesional solo puede editar su propia agenda; recepción y administración pueden gestionar la agenda de un profesional indicado.
 - `GET /api/v1/reservas/disponibilidad?profesionalId=ID&tratamientoId=ID&fecha=YYYY-MM-DD`: devuelve inicios cada 15 minutos dentro de la agenda del profesional, tomando duración del Catálogo. Rechaza profesionales que no estén asociados al tratamiento, turnos confirmados y bloqueos activos del carrito. La zona horaria local se configura con `MELT_TIMEZONE`; por omisión es `America/Argentina/Buenos_Aires`.
@@ -226,7 +226,7 @@ cd services/reservas
 go test -p=1 -count=1 ./...
 ```
 
-La prueba `TestReservasMongoIntegrationFlujoCompleto` recorre disponibilidad, dos solicitudes simultáneas, bloqueo, seña, confirmación idempotente, devolución y liberación contra MongoDB real, con Catálogo y Pagos simulados. Para ejecutarla, dejá MongoDB de Compose levantado y configurá la URI de prueba:
+La prueba histórica `TestReservasMongoIntegrationFlujoCompleto` recorre esos flujos por el adaptador de compatibilidad Mongo; no verifica la ruta de producción PostgreSQL. Para ejecutarla, dejá MongoDB de Compose levantado y configurá la URI de prueba:
 
 ```powershell
 $env:RESERVAS_TEST_MONGODB_URI = 'mongodb://localhost:27017'

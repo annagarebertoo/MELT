@@ -96,3 +96,9 @@ La separación lógica no implica por sí sola alta disponibilidad ni aislamient
 - Las garantías para agenda y saldos, la coordinación entre servicios y la sincronización de copias derivadas mantienen su estado de diseño pendiente de validación. No se incorporan mecanismos nuevos ni se modifica la comparación histórica de alternativas.
 
 Los patrones de acceso, resultados ejecutados y limitaciones se detallan en [Validación de persistencia](../PERSISTENCE.md), con [evidencia de la ejecución](../evidence/d3-2026-10-23.json). Esta validación cubre D3 y el almacenamiento integrado exigido para la Entrega 2; no acredita la integración de los dos tipos de almacenamiento requerida para la etapa posterior.
+
+## Implementación de la separación PostgreSQL/Supabase — 2026-11-20
+
+La configuración del código se actualizó para usar PostgreSQL privado e independiente en Reservas y Beneficios. La conexión de cada servicio se entrega mediante `RESERVAS_DATABASE_URL` o `BENEFICIOS_DATABASE_URL`; Compose no publica esas credenciales y los servicios MongoDB de Auth, Catálogo y Pagos continúan separados. Los esquemas iniciales están en `infra/supabase/reservas.sql` e `infra/supabase/beneficios.sql`.
+
+La comprobación local de esta actualización incluye compilación y `go vet` para ambos servicios. No se ejecutaron pruebas ni se verificaron conexiones a los proyectos remotos del equipo. La aplicación de los scripts en **MELT-Reservas** y **MELT-Beneficios**, y el inicio de los backends con sus URLs privadas, son los pasos de verificación por entorno descritos en `infra/supabase/README.md`.

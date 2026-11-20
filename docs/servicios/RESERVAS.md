@@ -2,7 +2,7 @@
 
 ## Responsabilidad y persistencia
 
-Reservas es dueño de agenda, turnos, bloqueos por minuto, carritos, operaciones de checkout y outbox. Usa MongoDB `reservas_db` y replica set para transacciones. Consulta Catálogo para precio/duración/compatibilidad, Catálogo para resolver la cuenta Auth del profesional, Auth para verificar usuarios, Pagos para la simulación, Beneficios para aplicar canjes/restituciones y RabbitMQ para eventos posteriores.
+Reservas es dueño de agenda, turnos, bloqueos por minuto, carritos, operaciones de checkout y outbox. Usa PostgreSQL en el proyecto privado Supabase **MELT-Reservas**. Las transacciones serializables, la exclusión de intervalos, las claves únicas de los bloqueos y la idempotencia del checkout protegen los cambios concurrentes. Consulta Catálogo para precio/duración/compatibilidad, Catálogo para resolver la cuenta Auth del profesional, Auth para verificar usuarios, Pagos para la simulación, Beneficios para aplicar canjes/restituciones y RabbitMQ para eventos posteriores. Las referencias de Auth, Catálogo, Pagos y Beneficios son IDs/API; no hay joins entre servicios.
 
 ## Endpoints del Gateway y autorización
 
@@ -31,23 +31,23 @@ Prefijo `/api/v1/reservas`; Gateway valida Bearer en todo ese prefijo y pasa ide
 
 La agenda semanal contiene bloques del profesional. La disponibilidad calcula slots de longitud igual a `duracionMinutos` de Catálogo y revisa turnos confirmados y bloqueos vigentes. El horario admitido por la configuración del frontend/documentación local es 08:00–20:00; zona predeterminada `America/Argentina/Buenos_Aires`, configurable con `MELT_TIMEZONE`.
 
-Los bloqueos guardan minutos, con índices únicos por profesional/minuto y por cliente/categoría/minuto. Se validan nuevamente dentro de operaciones transaccionales; checkout revisa vigencia, precio, asociación, duración, locks y beneficios antes de crear los turnos. Evita doble reserva del profesional y superposición de misma categoría de un cliente. Bloqueos/carritos usan TTL MongoDB de vencimiento; la expiración TTL es eventual, mientras las consultas filtran `expiraEn`.
+Los bloqueos guardan minutos, con claves únicas por profesional/minuto y por cliente/categoría/minuto. Se validan nuevamente dentro de operaciones transaccionales; checkout revisa vigencia, precio, asociación, duración, locks y beneficios antes de crear los turnos. PostgreSQL aplica una restricción de exclusión para evitar turnos superpuestos. Los carritos vencidos se filtran por `expira_en`; no dependen de un TTL asíncrono.
 
 Estados observados en el código: `confirmado`, `cancelado`, `completado`, `no_asistio`; las operaciones de checkout tienen estados propios como `processing`, `confirmed`, `rejected`, `reverted` y `approval_needs_recovery`. No confundir pago con estado del turno.
 
 ## Idempotencia y eventos
 
-Checkout exige `idempotencyKey`; un índice único impide repetir combinación cliente+clave. Confirmación de turno realizado guarda actualización y `tratamiento.realizado` en outbox en transacción. Cancelación también registra `turno.cancelado`, que Beneficios usa para restituir canje si corresponde. El consumidor deduplica por `eventId`; mensajes se reintentan de forma limitada y pueden terminar en colección de fallidos.
+Checkout exige `idempotencyKey`; una clave única impide repetir combinación cliente+clave. Confirmación de turno realizado guarda actualización y `tratamiento.realizado` en outbox en transacción. Cancelación también registra `turno.cancelado`, que Beneficios usa para restituir canje si corresponde. El consumidor deduplica por `eventId`; mensajes se reintentan de forma limitada y pueden terminar en la tabla de mensajes fallidos.
 
 Los errores usuales distinguen 400 (parámetros/cuerpo inválidos), 401 (sin identidad verificada), 403 (rol o propiedad), 404 (turno/perfil inexistente), 409 (estado, agenda, retención o conflicto), 422 (tratamiento/profesional incompatible) y 503 (dependencia no disponible). Algunas rutas antiguas de compatibilidad tienen cuerpos diferentes; el flujo actual de checkout está especificado en OpenAPI.
 
 ## Configuración y pruebas
 
-`MONGODB_URI`, `CATALOGO_URL`, `AUTH_URL`, `PAGOS_URL`, `BENEFICIOS_URL`, `MELT_INTERNAL_KEY`, `RABBITMQ_URL`, `MELT_TIMEZONE`, `PORT`.
+`RESERVAS_DATABASE_URL`, `CATALOGO_URL`, `AUTH_URL`, `PAGOS_URL`, `BENEFICIOS_URL`, `MELT_INTERNAL_KEY`, `RABBITMQ_URL`, `MELT_TIMEZONE`, `PORT`.
 
 ```sh
 cd services/reservas
 go test ./...
 ```
 
-Las pruebas de integración requieren `RESERVAS_TEST_MONGODB_URI` y replica set aislado. No ejecutar pruebas de integración sobre base con datos de demostración compartidos.
+La configuración de Supabase y el esquema SQL están en [infra/supabase](../../infra/supabase/README.md). La prueba histórica con `RESERVAS_TEST_MONGODB_URI` usa el adaptador Mongo de compatibilidad y no valida la conexión PostgreSQL de producción.

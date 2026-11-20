@@ -144,7 +144,7 @@ func (s *Servidor) acreditarPorEmail(c *gin.Context, r entradaAcreditacion) {
 		return
 	}
 	if err = a.guardarPendiente(ctx, op); err != nil {
-		if mongo.IsDuplicateKeyError(err) {
+		if esDuplicado(err) {
 			op, err = a.obtenerOperacion(ctx, r.SolicitudID)
 			if err == nil {
 				s.responderOperacionEmail(c, ctx, a, op, r)

@@ -32,7 +32,7 @@ func (s *servidorReservas) completarTratamiento(c *gin.Context) {
 		c.JSON(status, gin.H{"error": gin.H{"code": "PERFIL_PROFESIONAL_NO_DISPONIBLE", "message": err.Error()}})
 		return
 	}
-	if s.mongo == nil || s.outbox == nil {
+	if (s.pg == nil && s.mongo == nil) || (s.pg == nil && s.outbox == nil) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "EVENTOS_NO_DISPONIBLES", "message": "No se pudo registrar la realización de forma segura."}})
 		return
 	}
@@ -62,6 +62,50 @@ func (s *servidorReservas) completarTratamiento(c *gin.Context) {
 func (s *servidorReservas) registrarRealizacion(ctx context.Context, turnoID, profesionalID string) (turno, bool, error) {
 	if turnoID == "" || profesionalID == "" {
 		return turno{}, false, errors.New("identidad incompleta")
+	}
+	if s.pg != nil {
+		var resultado turno
+		repetido := false
+		err := s.pg.transaction(ctx, func(tx context.Context) error {
+			item, err := s.pg.turnoForUpdate(tx, turnoID)
+			if sqlNotFound(err) {
+				return errTurnoNoEncontrado
+			}
+			if err != nil {
+				return err
+			}
+			if item.ProfesionalID != profesionalID {
+				return errProfesionalAjeno
+			}
+			if item.Estado == "completado" {
+				resultado, repetido = item, true
+				return nil
+			}
+			if item.Estado != "confirmado" {
+				return errTurnoNoConfirmado
+			}
+			now := time.Now().UTC().Truncate(time.Millisecond)
+			matched, err := s.pg.marcarTurno(tx, item.ID, profesionalID, "completado", now)
+			if err != nil {
+				return err
+			}
+			if matched != 1 {
+				return errTurnoNoConfirmado
+			}
+			if err := s.pg.borrarBloqueosTurno(tx, item.ID); err != nil {
+				return err
+			}
+			item.Estado, item.TratamientoRealizadoPor = "completado", profesionalID
+			item.TratamientoRealizadoEn = &now
+			eventID := "tratamiento-realizado:" + item.ID
+			payload := bson.M{"eventId": eventID, "turnoId": item.ID, "usuarioId": item.ClienteID, "profesionalId": item.ProfesionalID, "tratamientoId": item.TratamientoID, "realizadoEn": now, "beneficioCanjeId": item.BeneficioCanjeID, "beneficioReservaId": item.BeneficioReservaID}
+			if err := s.pg.insertarEvento(tx, eventoOutbox{ID: eventID, Tipo: "tratamiento.realizado", RoutingKey: "tratamiento.realizado", Payload: payload, CreadoEn: now}); err != nil {
+				return err
+			}
+			resultado = item
+			return nil
+		})
+		return resultado, repetido, err
 	}
 	session, err := s.mongo.StartSession()
 	if err != nil {
@@ -116,6 +160,24 @@ func (s *servidorReservas) registrarRealizacion(ctx context.Context, turnoID, pr
 }
 
 func (s *servidorReservas) cancelarConEvento(ctx context.Context, t turno, devolucion float64, estadoDevolucion string) error {
+	if s.pg != nil {
+		return s.pg.transaction(ctx, func(tx context.Context) error {
+			matched, err := s.pg.actualizarTurnoCancelado(tx, t.ID, devolucion, estadoDevolucion)
+			if err != nil {
+				return err
+			}
+			if matched != 1 {
+				return errTurnoNoConfirmado
+			}
+			if err := s.pg.borrarBloqueosTurno(tx, t.ID); err != nil {
+				return err
+			}
+			now := time.Now().UTC().Truncate(time.Millisecond)
+			eventID := "turno-cancelado:" + t.ID
+			payload := bson.M{"eventId": eventID, "turnoId": t.ID, "usuarioId": t.ClienteID, "profesionalId": t.ProfesionalID, "tratamientoId": t.TratamientoID, "canceladoEn": now, "beneficioCanjeId": t.BeneficioCanjeID, "beneficioReservaId": t.BeneficioReservaID}
+			return s.pg.insertarEvento(tx, eventoOutbox{ID: eventID, Tipo: "turno.cancelado", RoutingKey: "turno.cancelado", Payload: payload, CreadoEn: now})
+		})
+	}
 	if s.mongo == nil || s.outbox == nil {
 		return errors.New("outbox no configurado")
 	}

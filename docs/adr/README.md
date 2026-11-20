@@ -6,7 +6,7 @@ Los ADR preservan la evolución de MELT. Las secciones “propuesta inicial”, 
 |---|---|
 | [001 — Límites de servicios](ADR-001-limites-servicios.md) | Límites/ownership; revisar contra la tabla de ownership actual en arquitectura. El texto de validación 2026-10-23 es anterior a la expansión de Reservas/Beneficios. |
 | [002 — Arquitectura interna](ADR-002-arquitectura-interna.md) | Capas/estilos propuestos; descripción antigua de handlers aún no implementados es histórica. No usar como inventario actual. |
-| [003 — Persistencia](ADR-003-persistencia.md) | Propuesta documental/relacional de etapas anteriores; el código actual usa MongoDB por servicio y Compose también declara PostgreSQL que no consumen servicios de negocio. |
+| [003 — Persistencia](ADR-003-persistencia.md) | Decisión aplicada en la configuración actual: MongoDB para Catálogo/Auth/Pagos y bases PostgreSQL privadas independientes para Reservas y Beneficios. La aplicación del SQL y la conexión a los proyectos Supabase del equipo debe verificarse por entorno. |
 | [005 — Comunicación](ADR-005-comunicacion.md) | Estado actual mixto: HTTP síncrono y eventos RabbitMQ/outbox; el texto inicial es histórico. |
 | [006 — Búsqueda](ADR-006-busqueda.md) | OpenSearch integrado en Catálogo; validaciones fechadas y estado de índice en manual actual. |
 | [007 — Caché](ADR-007-cache.md) | Memcached integrado para consultas de listado Catálogo; medir con cautela, evidencia histórica no es garantía de producción. |

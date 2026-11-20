@@ -57,7 +57,7 @@ services:
       context: ./services/reservas
     environment:
       PORT: "8082"
-      MONGODB_URI: mongodb://mongodb:27017
+      RESERVAS_DATABASE_URL: ${RESERVAS_DATABASE_URL:?Defini RESERVAS_DATABASE_URL con la conexión privada de Supabase}
       MELT_TIMEZONE: ${MELT_TIMEZONE:-America/Argentina/Buenos_Aires}
       PAGOS_URL: ${PAGOS_URL:-http://pagos:8085}
       BENEFICIOS_URL: http://beneficios:8083
@@ -66,8 +66,6 @@ services:
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
-      mongodb:
-        condition: service_healthy
       pagos:
         condition: service_started
       rabbitmq:
@@ -117,14 +115,12 @@ services:
       BENEFICIOS_INVITATION_SECRET: ${BENEFICIOS_INVITATION_SECRET:-}
       MELT_PUBLIC_URL: ${MELT_PUBLIC_URL:-http://localhost:8080}
       BENEFICIOS_PARTNER_KEY: ${BENEFICIOS_PARTNER_KEY:-}
-      MONGODB_URI: mongodb://mongodb:27017
+      BENEFICIOS_DATABASE_URL: ${BENEFICIOS_DATABASE_URL:?Defini BENEFICIOS_DATABASE_URL con la conexión privada de Supabase}
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
       GHOSTKITCHEN_API_KEY: ${GHOSTKITCHEN_API_KEY:-}
       GHOSTKITCHEN_BASE_URL: ${GHOSTKITCHEN_BASE_URL:-}
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
-      mongodb:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     restart: unless-stopped

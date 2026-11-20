@@ -2,7 +2,7 @@
 
 ## Responsabilidad, datos y dependencias
 
-Dueño de saldo, movimientos, reglas de puntos por tratamiento, recompensas, canjes, invitaciones de acreditación externa y registro de mensajes fallidos. MongoDB `beneficios_db` por defecto. Consulta Auth para sesión/identidad y cuenta; RabbitMQ recibe eventos de Reservas. Reenvía requests de GhostKitchen desde backend; la credencial no se expone al cliente.
+Dueño de saldo, movimientos, reglas de puntos por tratamiento, recompensas, canjes, invitaciones de acreditación externa y registro de mensajes fallidos. Usa PostgreSQL privado en el proyecto Supabase **MELT-Beneficios**. Consulta Auth para sesión/identidad y cuenta; RabbitMQ recibe eventos de Reservas. Reenvía requests de GhostKitchen desde backend; la credencial no se expone al cliente.
 
 ## Rutas públicas
 
@@ -10,7 +10,7 @@ Prefijo Gateway `/api/v1/beneficios`; el Gateway requiere sesión para este pref
 
 | Método/ruta | Acceso | Función |
 |---|---|---|
-| `GET /health` | Público | Verifica MongoDB. |
+| `GET /health` | Público | Verifica PostgreSQL. |
 | `GET /mis-puntos` | cliente autenticado | Saldo e historial propios. |
 | `GET /recompensas` | Público | Catálogo de recompensas. |
 | `GET /mis-canjes`, `POST /canjes` | cliente | Consultar/canjear recompensas propias. |
@@ -37,11 +37,11 @@ El cliente de salida usa `X-API-Key`, timeout de 3 s y hasta tres intentos en re
 
 ## Configuración y pruebas
 
-`MONGODB_URI`, `BENEFICIOS_MONGODB_DATABASE`, `AUTH_URL`, `MELT_INTERNAL_KEY`, `RABBITMQ_URL`, `BENEFICIOS_PARTNER_KEY`, `BENEFICIOS_INVITATION_SECRET`, `MELT_PUBLIC_URL`, `GHOSTKITCHEN_API_KEY`, `GHOSTKITCHEN_BASE_URL`.
+`BENEFICIOS_DATABASE_URL`, `AUTH_URL`, `MELT_INTERNAL_KEY`, `RABBITMQ_URL`, `BENEFICIOS_PARTNER_KEY`, `BENEFICIOS_INVITATION_SECRET`, `MELT_PUBLIC_URL`, `GHOSTKITCHEN_API_KEY`, `GHOSTKITCHEN_BASE_URL`.
 
 ```sh
 cd services/beneficios
 go test ./...
 ```
 
-Pruebas de integración usan `BENEFICIOS_TEST_MONGODB_URI`; pruebas del proxy GhostKitchen usan HTTP mock. El comando no inicia servicios/dependencias por sí solo.
+La configuración de Supabase y el esquema SQL están en [infra/supabase](../../infra/supabase/README.md). Las pruebas históricas que usan `BENEFICIOS_TEST_MONGODB_URI` no verifican la conexión PostgreSQL de producción; el proxy GhostKitchen usa HTTP mock.

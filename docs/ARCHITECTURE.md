@@ -1,6 +1,6 @@
 # Arquitectura vigente de MELT
 
-**Base documental:** rama `develop`, commit de referencia `ea1ead7e85f533ba54aff85bd95958bb749897a0`. Este documento describe el código y la configuración versionados en esa referencia. No certifica el estado de un despliegue remoto.
+Este documento resume la arquitectura del código y la configuración local. No certifica que los esquemas hayan sido aplicados ni que las conexiones Supabase estén configuradas en un entorno remoto.
 
 ## Contexto y componentes
 
@@ -19,9 +19,9 @@ flowchart LR
   Q --> B
   C --> M[(MongoDB)]
   A --> M
-  R --> M
   P --> M
-  B --> M
+  R --> RDB[(PostgreSQL privado<br/>Supabase MELT-Reservas)]
+  B --> BDB[(PostgreSQL privado<br/>Supabase MELT-Beneficios)]
   C --> O[(OpenSearch)]
   C --> K[(Memcached)]
   J[Proveedor GhostKitchen] <-->|HTTP + X-API-Key| B
@@ -35,18 +35,18 @@ flowchart LR
 | Gateway (NGINX) | Frontend, routing, verificación de sesión para zonas privadas y propagación de identidad verificada a Reservas. | Sin base propia. En Compose deriva a servicios por DNS interno. |
 | Auth | Cuentas, credenciales, roles, JWT e invitaciones asociadas al alta. | MongoDB `usuarios_db` por defecto. |
 | Catálogo y Profesionales | Categorías, tratamientos, perfiles profesionales y vinculación `authUserId`. | MongoDB `catalogo_db` por defecto; OpenSearch y Memcached son proyecciones/infra auxiliares. |
-| Reservas | Agendas semanales, turnos, bloqueos, carritos, checkout y outbox. | MongoDB `reservas_db`; comunica con Auth, Catálogo, Pagos, Beneficios y RabbitMQ. |
+| Reservas | Agendas semanales, turnos, bloqueos, carritos, checkout y outbox. | PostgreSQL privado del proyecto Supabase `MELT-Reservas`; comunica con Auth, Catálogo, Pagos, Beneficios y RabbitMQ. |
 | Pagos | Operaciones de pago, reversas y devoluciones **simuladas**. | MongoDB `pagos_db`; endpoints internos con clave compartida. |
-| Beneficios | Puntos, movimientos, reglas, recompensas, canjes, invitaciones externas y fallidos. | MongoDB `beneficios_db`; consume eventos RabbitMQ y consulta Auth. |
-| Infraestructura | MongoDB replica set, RabbitMQ, OpenSearch, Memcached, Prometheus, Grafana y Jaeger. | Declarada en Compose. PostgreSQL también está declarado, pero no hay conexión desde los servicios de negocio del commit de referencia. |
+| Beneficios | Puntos, movimientos, reglas, recompensas, canjes, invitaciones externas y fallidos. | PostgreSQL privado del proyecto Supabase `MELT-Beneficios`; consume eventos RabbitMQ y consulta Auth. |
+| Infraestructura | MongoDB, PostgreSQL Supabase, RabbitMQ, OpenSearch, Memcached, Prometheus, Grafana y Jaeger. | MongoDB aloja Auth, Catálogo y Pagos; cada uno de los otros dos servicios usa su propia base PostgreSQL privada. |
 
-Los servicios usan bases separadas dentro del clúster MongoDB; compartir el servidor no implica compartir propiedad de colecciones. Reservas resuelve el perfil profesional a partir del ID autenticado consultando el endpoint interno de Catálogo; los IDs no se consideran equivalentes.
+Los servicios mantienen ownership separado y no consultan directamente tablas o colecciones ajenas. Reservas resuelve el perfil profesional a partir del ID autenticado consultando el endpoint interno de Catálogo; los IDs no se consideran equivalentes. La configuración de Supabase está en [infra/supabase](../infra/supabase/README.md); su aplicación y conectividad remotas se verifican por entorno.
 
 ## Comunicación
 
 Las lecturas, validaciones y operaciones de negocio que necesitan respuesta inmediata usan HTTP síncrono. Las rutas internas de Auth, Catálogo y Pagos no se publican como APIs de navegador. El Gateway oculta con 404 prefijos internos seleccionados y enruta Catálogo, Auth, Reservas y Beneficios según `infra/nginx/default.conf`.
 
-Para efectos posteriores, Reservas guarda cambios de turno y evento outbox en una transacción MongoDB. Un publicador entrega eventos persistentes al exchange topic `melt.dominio`; Beneficios consume `tratamiento.realizado` y `turno.cancelado`, aplica reintentos acotados y registra mensajes fallidos para reintento administrativo. No se debe describir una entrega exactamente-una-vez: el diseño permite reentrega y depende de deduplicación por `eventId`.
+Para efectos posteriores, Reservas guarda cambios de turno y evento outbox en una transacción PostgreSQL. Un publicador entrega eventos persistentes al exchange topic `melt.dominio`; Beneficios consume `tratamiento.realizado` y `turno.cancelado`, aplica reintentos acotados y registra mensajes fallidos para reintento administrativo. No se debe describir una entrega exactamente-una-vez: el diseño permite reentrega y depende de deduplicación por `eventId`.
 
 ## Flujos de negocio
 
@@ -70,10 +70,12 @@ El profesional vinculado marca el turno como completado. Reservas guarda el camb
 
 ## Persistencia, búsqueda y caché
 
-- MongoDB replica set soporta las transacciones multi-documento utilizadas por Reservas y otros flujos.
+- PostgreSQL protege agendas, turnos, bloqueos y checkout con transacciones; una restricción de exclusión impide turnos superpuestos por profesional y claves únicas protegen la idempotencia y los bloqueos por minuto.
+- Beneficios usa transacciones PostgreSQL para actualizar saldo, movimientos y canjes sin duplicar solicitudes.
+- Auth, Catálogo y Pagos conservan sus datos documentales en MongoDB.
 - Catálogo consulta documentos canónicos en MongoDB. OpenSearch proporciona búsqueda textual/filtros y puede reconstruir el índice desde la fuente canónica; no sustituye la persistencia.
 - Memcached se usa para lecturas cacheables de Catálogo con namespace configurable e invalidación por generación. Si falla, el servicio opera sin usar la caché cuando el camino de fallback funciona; la condición exacta está descrita en [manual del servicio](servicios/CATALOGO-PROFESIONALES.md).
-- PostgreSQL está en Compose, pero no se documenta como requisito funcional mientras no exista consumidor de negocio.
+- Los scripts de esquema son [beneficios.sql](../infra/supabase/beneficios.sql) y [reservas.sql](../infra/supabase/reservas.sql). El backend verifica las tablas al iniciar; la conectividad a los proyectos Supabase del equipo debe confirmarse con sus URLs privadas por entorno.
 
 ## Ejecución y evidencia
 

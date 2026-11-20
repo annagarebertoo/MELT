@@ -16,9 +16,9 @@ El alcance implementado y sus límites, con referencias al código y evidencia, 
 
 ## Arquitectura y tecnologías
 
-El navegador accede a NGINX, que sirve el frontend HTML/CSS/JavaScript y actúa como Gateway. El Gateway deriva solicitudes a Auth, Catálogo y Profesionales, Reservas o Beneficios. Reservas llama a Catálogo, Auth, Pagos y Beneficios para completar los flujos; Reservas publica eventos de dominio a RabbitMQ y Beneficios los consume. Cada backend es dueño de sus colecciones MongoDB. Catálogo además usa OpenSearch para búsqueda y Memcached para lecturas cacheables.
+El navegador accede a NGINX, que sirve el frontend HTML/CSS/JavaScript y actúa como Gateway. El Gateway deriva solicitudes a Auth, Catálogo y Profesionales, Reservas o Beneficios. Reservas llama a Catálogo, Auth, Pagos y Beneficios para completar los flujos; publica eventos a RabbitMQ y Beneficios los consume. Catálogo, Auth y Pagos conservan sus bases MongoDB. Reservas y Beneficios son dueños de bases PostgreSQL privadas e independientes en Supabase. Catálogo además usa OpenSearch para búsqueda y Memcached para lecturas cacheables.
 
-Tecnologías declaradas: Go/Gin, MongoDB, NGINX, Docker Compose, RabbitMQ, OpenSearch, Memcached, Prometheus, Grafana y Jaeger. PostgreSQL está declarado en Compose, pero los servicios de negocio de este commit no lo usan. Más información: [arquitectura y diagramas](docs/ARCHITECTURE.md).
+Tecnologías declaradas: Go/Gin, MongoDB, PostgreSQL (Supabase), NGINX, Docker Compose, RabbitMQ, OpenSearch, Memcached, Prometheus, Grafana y Jaeger. Más información: [arquitectura y diagramas](docs/ARCHITECTURE.md) y [configuración de Supabase](infra/supabase/README.md).
 
 ## Requisitos previos
 
@@ -28,7 +28,7 @@ Tecnologías declaradas: Go/Gin, MongoDB, NGINX, Docker Compose, RabbitMQ, OpenS
 
 ## Inicio local
 
-Desde la raíz, crear valores locales fuera del repositorio para los secretos requeridos. En PowerShell:
+Desde la raíz, prepará `.env` a partir de `.env.example`, aplicá los dos SQL de `infra/supabase/` en sus proyectos y configurá `BENEFICIOS_DATABASE_URL` y `RESERVAS_DATABASE_URL` con sus URLs privadas respectivas. Luego creá los secretos locales fuera del repositorio. En PowerShell:
 
 ```powershell
 $env:AUTH_JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
