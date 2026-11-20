@@ -1257,7 +1257,48 @@ async function handleProfessionalAccountLink(event) {
   }
 }
 
+
+function currentPage() {
+  const hash = window.location.hash || "#/inicio";
+  if (hash.startsWith("#profesionales/")) return "profesionales";
+  if (hash === "#carrito" || hash === "#/carrito") return "carrito";
+  const route = hash.match(/^#\\/([^?/]*)/);
+  if (route) return ["inicio", "tratamientos", "profesionales", "reservas", "cuenta", "carrito"].includes(route[1]) ? route[1] : "inicio";
+  if (new URLSearchParams(hash.slice(1)).has("invitacion")) return "cuenta";
+  if (hash.startsWith("#profesionales")) return "profesionales";
+  return "inicio";
+}
+
+function applyPageRoute() {
+  const page = currentPage();
+  document.body.dataset.page = page;
+  document.body.classList.remove("page-inicio", "page-tratamientos", "page-profesionales", "page-reservas", "page-cuenta", "page-carrito");
+  document.body.classList.add(`page-${page}`);
+  const main = $("#inicio");
+  const visible = {
+    inicio: [".hero"],
+    tratamientos: ["#seleccion", "#tratamientos"],
+    profesionales: ["#profesionales"],
+    reservas: ["#cuenta"],
+    cuenta: ["#cuenta"],
+    carrito: ["#carrito"]
+  }[page] || [".hero"];
+  Array.from(main.children).forEach((element) => {
+    const keep = visible.some((selector) => element.matches(selector));
+    element.classList.toggle("route-hidden", !keep);
+  });
+  document.querySelectorAll("[data-page]").forEach((link) => {
+    const active = link.dataset.page === page;
+    link.classList.toggle("is-current", active);
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+  if (page !== "profesionales") showProfessionalList(false);
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+
 function initialize() {
+  applyPageRoute();
   const updateHeaderOnScroll = () => $(".site-header").classList.toggle("site-header-scrolled", window.scrollY > 70);
   window.addEventListener("scroll", updateHeaderOnScroll, { passive: true });
   updateHeaderOnScroll();
@@ -1288,10 +1329,14 @@ function initialize() {
   $("#auth-form").addEventListener("submit", submitAuth);
   $("#discard-invitation").addEventListener("click", clearInvitation);
   window.addEventListener("hashchange", () => {
+    applyPageRoute();
     if (new URLSearchParams(window.location.hash.slice(1)).has("invitacion")) initializeInvitation().then(() => loadAccount());
-    if (window.location.hash.startsWith("#profesionales")) syncProfessionalHash();
+    if (window.location.hash.startsWith("#profesionales/")) syncProfessionalHash();
     else showProfessionalList(false);
   });
+  document.querySelectorAll("a[data-page]").forEach((link) => link.addEventListener("click", () => {
+    if (link.dataset.page === currentPage()) applyPageRoute();
+  }));
   window.addEventListener("popstate", syncProfessionalHash);
   $("#availability-form").addEventListener("submit", loadAvailability);
   $("#booking-treatment").addEventListener("change", () => { state.selectedSlot = null; $("#time-slots").innerHTML = ""; $("#selected-slot-action").classList.add("hidden"); updateProfessionals(); });
@@ -1320,7 +1365,7 @@ function initialize() {
   $("#rule-admin-form").addEventListener("submit", saveRuleAdmin);
   $("#profile-reservations").addEventListener("click", () => $("#my-bookings").scrollIntoView({ behavior: "smooth" }));
   document.querySelectorAll("[data-booking-auth]").forEach((button) => button.addEventListener("click", () => { setAuthMode(button.dataset.bookingAuth); $("#auth-email").focus({ preventScroll: true }); }));
-  document.querySelectorAll("[data-scroll]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.scroll).scrollIntoView({ behavior: "smooth" })));
+  document.querySelectorAll("[data-scroll]").forEach((button) => button.addEventListener("click", () => { window.location.hash = "#/cuenta"; }));
   document.querySelectorAll("[data-register]").forEach((button) => button.addEventListener("click", () => setAuthMode("register")));
   $("#detail-book").addEventListener("click", () => {
     const id = $("#detail-book").dataset.id;
