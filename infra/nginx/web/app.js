@@ -1277,7 +1277,7 @@ function applyPageRoute() {
   const main = $("#inicio");
   const visible = {
     inicio: [".hero"],
-    tratamientos: ["#seleccion", "#tratamientos"],
+    tratamientos: ["#tratamientos"],
     profesionales: ["#profesionales"],
     reservas: ["#cuenta"],
     cuenta: ["#cuenta"],
@@ -1296,7 +1296,7 @@ function applyPageRoute() {
     else link.removeAttribute("aria-current");
   });
   if (page !== "profesionales") showProfessionalList(false);
-  window.scrollTo({ top: 0, behavior: "instant" });
+  window.scrollTo({ top: 0, behavior: "auto" });
 }
 
 function initialize() {
