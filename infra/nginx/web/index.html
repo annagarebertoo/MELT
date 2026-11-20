@@ -97,9 +97,9 @@
       </section>
 
       <section class="section account-section" id="cuenta">
-        <div class="section-heading">
-          <div><p class="eyebrow">Todo empieza acá</p><h2>Tu cuenta</h2></div>
-          <p class="section-description">Ingresá o creá tu cuenta para reservar y gestionar tus turnos.</p>
+        <div class="section-heading account-heading">
+          <div><p class="eyebrow">Tu espacio personal</p><h2>Tu cuenta</h2></div>
+          <p class="section-description">Tus turnos, beneficios y experiencias MELT, en un solo lugar.</p>
         </div>
         <ol class="booking-steps" aria-label="Pasos de la reserva">
           <li class="active" data-booking-step="1"><span>01</span><b>Elegí tu tratamiento</b></li>
@@ -156,10 +156,9 @@
           <div class="benefit-card redeemed-card"><h3>Mis canjes</h3><div id="my-rewards" class="movement-list" aria-live="polite"></div></div>
         </section>
         <section id="ghostkitchen-panel" class="benefits-area ghostkitchen-area hidden" aria-labelledby="ghostkitchen-title">
-          <div class="section-heading"><div><p class="eyebrow">Una opción rica cerca tuyo</p><h2 id="ghostkitchen-title">Cocinas GhostKitchen cercanas</h2></div><button id="ghostkitchen-retry" class="button button-outline" type="button">Actualizar</button></div>
-          <p class="section-description">Consultá la cocina más cercana y explorá sus restaurantes y platos disponibles.</p>
+          <div class="ghostkitchen-masthead"><div class="ghostkitchen-brand-lockup"><span class="ghostkitchen-brand-mark">GK</span><div><p class="eyebrow">GK · GOOD KITCHEN</p><h2 id="ghostkitchen-title">Algo rico está más cerca.</h2></div></div><button id="ghostkitchen-retry" class="button button-outline" type="button">Actualizar cocinas</button><p class="ghostkitchen-lead">Descubrí cocinas, restaurantes y platos cerca tuyo. Elegí qué se te antoja; nosotros te mostramos dónde encontrarlo.</p><div class="ghostkitchen-tags"><span>Hecho para antojos</span><span>Opciones cerca tuyo</span><span>Un mundo de sabores</span></div></div>
           <div class="ghostkitchen-location-card">
-            <div><strong>Buscá por ubicación</strong><p>Podés compartir tu ubicación o ingresar las coordenadas manualmente.</p></div>
+            <div><p class="eyebrow">PRIMER PASO</p><strong>¿Dónde tenés ganas de comer?</strong><p>Compartí tu ubicación o ingresá las coordenadas para descubrir qué hay alrededor.</p></div>
             <button id="ghostkitchen-geolocate" class="button button-dark" type="button">Usar mi ubicación</button>
             <form id="ghostkitchen-location-form" class="ghostkitchen-coordinates">
               <label class="form-field">Latitud<input id="ghostkitchen-lat" type="number" min="-90" max="90" step="any" required placeholder="-31.4262"></label>
@@ -181,7 +180,7 @@
           </form>
           <div id="ghostkitchen-results" class="ghostkitchen-grid" aria-live="polite"></div>
           <div id="ghostkitchen-pagination" class="pagination hidden"><button id="ghostkitchen-prev" class="button button-outline" type="button">← Anterior</button><span id="ghostkitchen-page">Página 1</span><button id="ghostkitchen-next" class="button button-outline" type="button">Siguiente →</button></div>
-          <p class="ghostkitchen-note">La disponibilidad es orientativa y no garantiza una reserva ni una compra.</p>
+          <p class="ghostkitchen-note">GK conecta tu antojo con cocinas cercanas. La disponibilidad es orientativa y no garantiza una reserva ni una compra.</p>
         </section>        <section id="professional-panel" class="benefits-area hidden" aria-labelledby="professional-title">
           <div class="section-heading"><div><p class="eyebrow">Atención profesional</p><h2 id="professional-title">Mi agenda</h2></div><button id="refresh-professional-turns" class="button button-outline" type="button">Actualizar</button></div>
           <section class="benefit-card professional-agenda" aria-labelledby="professional-availability-title">
@@ -278,8 +277,8 @@
     </main>
 
     <section id="carrito" class="cart-section section-pad hidden" aria-labelledby="cart-title">
-      <div class="section-heading"><div><p class="eyebrow">Tus horarios retenidos</p><h2 id="cart-title">Mi carrito</h2></div><div class="cart-header-actions"><button id="refresh-cart" class="button button-outline" type="button">Actualizar</button><button id="cart-checkout" class="button button-dark" type="button" disabled>Confirmar compra</button></div></div>
-      <p class="section-description">Revisá todos tus tratamientos y pagá la seña en una única compra. Cada horario se retiene durante diez minutos.</p>
+      <div class="cart-page-intro"><div><p class="eyebrow">TU PRÓXIMO MOMENTO EMPIEZA ACÁ</p><h2 id="cart-title">Tu selección MELT<span class="cart-title-dot">.</span></h2><p>Un último vistazo antes de reservar tu tiempo. Revisá tus tratamientos y confirmá la seña cuando estés lista.</p></div><div class="cart-intro-mark" aria-hidden="true">M</div></div>
+      <div class="cart-toolbar"><div><span class="cart-count-label">TU CARRITO</span><span class="cart-secure-note">Horarios retenidos por 10 minutos</span></div><div class="cart-header-actions"><button id="refresh-cart" class="button button-outline" type="button">Actualizar</button><button id="cart-checkout" class="button button-dark" type="button" disabled>Continuar al pago <span aria-hidden="true">↗</span></button></div></div>
       <div id="cart-status" class="form-status" aria-live="polite"></div>
       <div id="cart-items" class="cart-items" aria-live="polite"><p class="muted">Iniciá sesión como cliente para consultar el carrito.</p></div>
       <div id="cart-summary" class="cart-summary" aria-live="polite"></div>
