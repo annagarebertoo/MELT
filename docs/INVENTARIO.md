@@ -65,7 +65,7 @@ Inventario del árbol de `develop` de referencia y del conjunto de documentació
 | `docs/adr/ADR-011-observabilidad.md` | Observabilidad. |
 | `docs/adr/ADR-012-balanceo-carga.md` | Balanceo. |
 | `docs/adr/ADR-013-capacidad-costos.md` | Capacidad/costos estimados, no presupuesto cloud vigente. |
-| `docs/adr/ADR-014-consumo-proveedor.md` | Decisión vigente de integración GhostKitchen y registro histórico de D9. |
+| `docs/adr/ADR-014-consumo-proveedor.md` | Decisión de integración real con GhostKitchen del Grupo 5 y registro de la investigación histórica. |
 | `docs/adr/ADR-015-checkout-unico-simulador-pagos.md` | Checkout agrupado y simulador actual. |
 
 ## Contratos OpenAPI y mock

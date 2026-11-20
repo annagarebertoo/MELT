@@ -1,6 +1,6 @@
 # ADR-014 — D9: Consumo del proveedor externo
 
-**Registro original (23/10/2026):** la identidad del proveedor y su contrato estaban pendientes en esa revisión. **Estado actualizado (19/11/2026):** MELT consume el servicio real GhostKitchen del Grupo 5 mediante el proxy server-side de Beneficios. La URL v1 y el contrato OpenAPI fueron proporcionados para la integración. Una consulta autenticada real a `GET /v1/sedes` respondió HTTP 200 con cuatro sedes. La clave permanece en el `.env` local y no se versiona. La correspondencia formal entre este proveedor y la asignación D9 de la cátedra sigue siendo una verificación académica separada.
+**Registro original (23/10/2026):** la identidad del proveedor y su contrato estaban pendientes en esa revisión. **Estado actualizado (19/11/2026):** MELT consume el servicio real GhostKitchen del Grupo 5 indicado por el equipo para esta integración, mediante el proxy server-side de Beneficios. La URL v1 y el contrato OpenAPI fueron proporcionados para la integración. Una consulta autenticada real a `GET /v1/sedes` respondió HTTP 200 con cuatro sedes. La clave permanece en el `.env` local y no se versiona.
 
 **Fecha:** 2026-10-23. **Hito:** Entrega 2.
 
@@ -10,7 +10,7 @@
 
 `services/beneficios/cmd/api/ghostkitchen.go` implementa el cliente HTTP server-side con `GHOSTKITCHEN_API_KEY` y `GHOSTKITCHEN_BASE_URL`, rutas para sedes, cercanía, platos y proximidad, timeout de tres segundos y reintentos acotados para 429/503. La URL por defecto es `https://57-156-56-219.sslip.io/public/v1`; Compose pasa la URL oficial y la clave al servicio Beneficios. El frontend solo llama al proxy MELT. Las pruebas `httptest` son dobles aislados y no están en el camino de ejecución. Ver [manual vigente](../GHOSTKITCHEN.md) y [manual del servicio](../servicios/BENEFICIOS.md).
 
-La conexión y la respuesta del servicio real fueron verificadas el 19/11/2026. La tabla siguiente conserva únicamente el contexto de la investigación inicial del 23/10; no describe el estado actual del código. La asignación oficial de D9 debe cotejarse con el enunciado o el equipo docente y no se infiere solo de que la integración funcione.
+La conexión y la respuesta del servicio real fueron verificadas el 19/11/2026. La tabla siguiente conserva únicamente el contexto de la investigación inicial del 23/10; no describe el estado actual del código ni del proveedor ya indicado por el equipo.
 
 **Base protegida D8:** `3601c0d2f713da15991bc0974aeb9694332a8f5b`.
 

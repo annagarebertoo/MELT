@@ -5,7 +5,7 @@
 **Materia:** Arquitectura de Software — 2026.  
 **Estado:** Especificación funcional del equipo. Las reglas definen el comportamiento esperado; la inspección documental del código de entrega está resumida en la sección 13 y en la [matriz de cumplimiento](docs/MATRIZ-CUMPLIMIENTO.md).
 
-> **Nota de vigencia:** este documento se originó el 9/10/2026 y conserva requisitos y decisiones de producto de aquella revisión. El commit citado es una fotografía histórica. Desde el 19/11/2026 MELT consume el servicio real GhostKitchen del Grupo 5; el proxy y su configuración vigente están en [Integración GhostKitchen](docs/GHOSTKITCHEN.md). La correspondencia formal entre ese proveedor y la asignación D9 de la cátedra debe cotejarse por separado. Para el estado actual consultar [README](README.md), [manuales de servicio](docs/servicios/README.md) y [matriz de cumplimiento](docs/MATRIZ-CUMPLIMIENTO.md). No usar la sección 13 antigua como estado de la versión entregada.
+> **Nota de vigencia:** este documento se originó el 9/10/2026 y conserva requisitos y decisiones de producto de aquella revisión. El commit citado es una fotografía histórica. Desde el 19/11/2026 MELT consume el servicio real GhostKitchen del Grupo 5 indicado para esta integración; el proxy y su configuración vigente están en [Integración GhostKitchen](docs/GHOSTKITCHEN.md). Para el estado actual consultar [README](README.md), [manuales de servicio](docs/servicios/README.md) y [matriz de cumplimiento](docs/MATRIZ-CUMPLIMIENTO.md). No usar la sección 13 antigua como estado de la versión entregada.
 
 ## 1. Introducción
 
@@ -68,7 +68,7 @@ El alcance funcional comprende:
 
 Las funcionalidades se ofrecerán mediante una interfaz web según las responsabilidades de cada actor.
 
-MELT publica una API propia de consulta de tratamientos con filtros, información descriptiva y precios; su contrato OpenAPI v1 y mock están en `docs/contracts/`. El código actual consume la API real de GhostKitchen del Grupo 5 mediante el proxy server-side de Beneficios. La validación formal de su correspondencia con D9 se mantiene separada. Ver [ADR-014](docs/adr/ADR-014-consumo-proveedor.md) y [manual](docs/GHOSTKITCHEN.md).
+MELT publica una API propia de consulta de tratamientos con filtros, información descriptiva y precios; su contrato OpenAPI v1 y mock están en `docs/contracts/`. El código actual consume la API real de GhostKitchen del Grupo 5 mediante el proxy server-side de Beneficios. Ver [ADR-014](docs/adr/ADR-014-consumo-proveedor.md) y [manual](docs/GHOSTKITCHEN.md).
 
 ### 3.2. Funcionalidades fuera de alcance
 
@@ -360,7 +360,7 @@ Esta sección consolida las correcciones acordadas por el equipo. Las reglas sig
 | Búsqueda y caché | OpenSearch para búsqueda; Memcached para listados, TTL 30 s e invalidación por generación. | Evidencia local y benchmark histórico en `CATALOGO-PROFESIONALES-ETAPA-1.md`; muestra no extrapolable. |
 | Agenda y turnos | Agenda semanal, disponibilidad, carrito/retenciones, turnos, cancelación, completado e inasistencia. | Control de propiedad en backend; ver [manual Reservas](docs/servicios/RESERVAS.md). |
 | Checkout/pago | Checkout agrupado y pago/devolución simulados; no existe cobro externo en esta versión. | `services/reservas/cmd/api/checkout.go`, `services/pagos/main.go`, ADR-015. |
-| Beneficios | Puntos, reglas, recompensas, canjes, integración de eventos, acreditación de partner y proxy GhostKitchen. | No confundir evento de tratamiento realizado con pago; proveedor D9 asignado oficialmente sin confirmar. |
+| Beneficios | Puntos, reglas, recompensas, canjes, integración de eventos, acreditación de partner y proxy GhostKitchen real del Grupo 5. | No confundir evento de tratamiento realizado con pago. |
 | Notificaciones por correo | No se encontró servicio/cliente de correo operativo en la configuración versionada. | Los requisitos de notificación de este documento permanecen pendientes; RabbitMQ de eventos de beneficios no acredita envío de correo. |
 | Persistencia | MongoDB replica set y bases por servicio. PostgreSQL está declarado en Compose, sin consumidor business localizado. | No afirmar que MELT usa PostgreSQL funcionalmente. |
 | Resiliencia y observabilidad | Logs/trazas y métricas parciales; ejercicio de réplica produjo 1 HTTP 504 de 12 solicitudes. | Failover transparente no comprobado; revisar [Postmortem](docs/POSTMORTEM.md). |
