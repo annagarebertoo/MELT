@@ -1077,11 +1077,11 @@ func (s *servidorReservas) listarTurnos(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"turnos": out})
 }
 
-func (s *servidorReservas) devolverSena(ctx context.Context, pagoID string, importe float64, idempotencyKey string) error {
+func (s *servidorReservas) devolverSena(ctx context.Context, pagoID string, importe float64, idempotencyKey, reason string) error {
 	if s.pagosURL == "" {
 		return errors.New("proveedor de pagos no configurado")
 	}
-	payload, _ := json.Marshal(gin.H{"pagoId": pagoID, "importe": importe, "moneda": "ARS", "motivo": "cancelacion_turno"})
+	payload, _ := json.Marshal(gin.H{"pagoId": pagoID, "importe": importe, "moneda": "ARS", "motivo": reason})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.pagosURL+"/payments/refunds", strings.NewReader(string(payload)))
 	if err != nil {
 		return err
@@ -1161,7 +1161,7 @@ func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 		return
 	}
 	if devolucion > 0 {
-		if err := s.devolverSena(ctx, t.PagoID, devolucion, "refund-turno-"+id); err != nil {
+		if err := s.devolverSena(ctx, t.PagoID, devolucion, "refund-turno-"+id, "cancelacion_turno"); err != nil {
 			c.JSON(http.StatusAccepted, gin.H{"turnoId": id, "estado": "cancelado", "devolucion": gin.H{"importe": devolucion, "moneda": "ARS", "estado": "pendiente", "mensaje": "La cancelación quedó registrada; la devolución requiere reintento operativo."}})
 			return
 		}
@@ -1592,7 +1592,7 @@ func (s *servidorReservas) reintentarDevolucion(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "DEVOLUCION_NO_PENDIENTE", "message": "El turno no tiene una devolución pendiente."}})
 		return
 	}
-	if err := s.devolverSena(ctx, t.PagoID, t.ImporteDevolucion, "refund-turno-"+id); err != nil {
+	if err := s.devolverSena(ctx, t.PagoID, t.ImporteDevolucion, "refund-turno-"+id, "cancelacion_turno"); err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "DEVOLUCION_PENDIENTE", "message": "El proveedor todavía no confirmó la devolución; se puede reintentar."}})
 		return
 	}

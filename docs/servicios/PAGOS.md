@@ -35,4 +35,4 @@ Pagos siempre redirige al `sandbox_init_point` y consulta el recurso con el Acce
 
 Reservas necesita `PAGOS_URL` apuntando al servicio Pagos en Render, y Pagos notifica por el Gateway a `/api/v1/internal/reservas/pago-confirmado`. Esas dos variables deben corresponder a servicios del mismo despliegue.
 
-En el entorno local, sin `MP_TEST_ACCESS_TOKEN`, Pagos informa `provider: deshabilitado` y no simula aprobaciones. Para probar Checkout Pro hay que usar un dominio HTTPS público y credenciales de prueba.
+En el entorno local, sin `MP_TEST_ACCESS_TOKEN`, Pagos informa `provider: deshabilitado` y no crea preferencias. Para probar Checkout Pro hay que usar un dominio HTTPS público y credenciales de prueba.

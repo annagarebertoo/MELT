@@ -977,6 +977,13 @@ async function confirmCartPurchase() {
       showToast("Pago aprobado. Todos los turnos quedaron confirmados.");
       setStatus("#cart-status", `Pago de prueba aprobado. Se registraron ${checkout.turnos?.length || state.cartItems.length} turnos.`);
       await Promise.all([loadCart(), loadBookings()]);
+    } else if (checkout.estado === "reverted") {
+      state.checkoutKey = null;
+      setStatus("#cart-status", "Mercado Pago aprobó el cobro, pero no se pudo confirmar el turno. La seña fue devuelta y podés elegir otro horario.", true);
+      await loadCart();
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    } else if (checkout.estado === "approval_needs_recovery") {
+      setStatus("#cart-status", "Mercado Pago aprobó el cobro, pero MELT no pudo confirmar la reserva ni completar la devolución. Contactá al equipo con el ID de checkout para resolverlo.", true);
     } else if (checkout.estado === "rejected") {
       state.checkoutKey = null;
       setStatus("#cart-status", "El pago fue rechazado. No se confirmó ningún turno; tus retenciones siguen vigentes para reintentar.", true);
@@ -1008,6 +1015,13 @@ async function processPaymentReturn() {
       showToast("Pago aprobado y reserva confirmada.");
       await Promise.all([loadCart(), loadBookings()]);
       window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    } else if (checkout.estado === "reverted") {
+      state.pendingMPReturn = null; state.checkoutKey = null;
+      setStatus("#cart-status", "Mercado Pago aprobó el cobro, pero no se pudo confirmar el turno. La seña fue devuelta y podés elegir otro horario.", true);
+      await loadCart();
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    } else if (checkout.estado === "approval_needs_recovery") {
+      setStatus("#cart-status", "Mercado Pago aprobó el cobro, pero MELT no pudo confirmar la reserva ni completar la devolución. Contactá al equipo con el ID de checkout para resolverlo.", true);
     } else if (checkout.pagoEstado === "rejected" || checkout.estado === "rejected") {
       state.pendingMPReturn = null; state.checkoutKey = null;
       setStatus("#cart-status", "El pago fue rechazado. No se confirmó la reserva; podés volver a intentar el pago.", true);

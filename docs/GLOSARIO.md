@@ -13,7 +13,7 @@
 | Retención / bloqueo | Reserva temporal de minutos de un profesional/categoría, expira a los diez minutos si no se confirma. |
 | Checkout | Operación de compra agrupada que recalcula montos y procesa en conjunto los elementos del carrito. |
 | Seña | Porción del total (30 %) cobrada mediante Checkout Pro; este proyecto usa credenciales de prueba. |
-| Simulador de pagos | Servicio Pagos que persiste resultados aprobados/rechazados configurables; no llama a una pasarela. |
+| Checkout Pro | Flujo de Mercado Pago que crea una preferencia, procesa el pago fuera de MELT y confirma el resultado en el servidor. |
 | Idempotencia | Repetir una solicitud con la misma clave/referencia no duplica pago, checkout o acreditación. |
 | Concurrencia | Solicitudes simultáneas que intentan reservar o cambiar el mismo recurso; Reservas combina índices únicos, transacciones y validación en backend. |
 | Transacción | Unidad MongoDB multi-documento que confirma o revierte escrituras relacionadas. |

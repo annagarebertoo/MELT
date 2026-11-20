@@ -74,6 +74,7 @@ type Servidor struct {
 	publicURL        string
 	verificarEmail   func(context.Context, string, string) error
 }
+
 // almacenMongo se conserva para compatibilidad con pruebas históricas.
 // main inicializa y usa exclusivamente almacenPostgres.
 type almacenMongo struct {
@@ -172,7 +173,7 @@ func crearRouter(s *Servidor) *gin.Engine {
 			c.JSON(503, gin.H{"estado": "degradado"})
 			return
 		}
-		c.JSON(200, gin.H{"servicio": "beneficios", "estado": "ok"})
+		c.JSON(200, gin.H{"servicio": "beneficios", "estado": "ok", "integraciones": gin.H{"ghostkitchen": estadoConfiguracionGhostKitchen()}})
 	})
 	r.POST("/acreditar-puntos", s.acreditarPuntos)
 	r.POST("/acreditaciones", s.acreditarPuntos)
@@ -185,6 +186,14 @@ func crearRouter(s *Servidor) *gin.Engine {
 	s.agregarRutasGhostKitchen(r)
 	return r
 }
+
+func estadoConfiguracionGhostKitchen() string {
+	if strings.TrimSpace(os.Getenv("GHOSTKITCHEN_API_KEY")) == "" {
+		return "sin_configurar"
+	}
+	return "configurada"
+}
+
 func errorJSON(c *gin.Context, status int, code, message string) {
 	c.JSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
 }

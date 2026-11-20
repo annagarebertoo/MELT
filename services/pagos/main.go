@@ -42,18 +42,11 @@ type server struct {
 	payments            *mongo.Collection
 	refunds             *mongo.Collection
 	internalKey         string
-	result              string
 	accessToken         string
 	publicURL           string
 	webhookSecret       string
 	reservasCallbackURL string
 	httpClient          *http.Client
-}
-
-type simulateRequest struct {
-	CheckoutID string  `json:"checkoutId"`
-	Amount     float64 `json:"importe"`
-	Currency   string  `json:"moneda"`
 }
 
 type verifyRequest struct {
@@ -128,7 +121,6 @@ func (s *server) handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "provider": provider, "mode": "test"})
 	})
-	mux.Handle("POST /payments/simulate", s.internal(http.HandlerFunc(s.simulate)))
 	mux.Handle("POST /payments/preferences", s.internal(http.HandlerFunc(s.createPreference)))
 	mux.Handle("POST /payments/verify", s.internal(http.HandlerFunc(s.verifyMercadoPago)))
 	mux.HandleFunc("POST /webhooks/mercadopago", s.mercadoPagoWebhook)
@@ -414,46 +406,6 @@ func (s *server) internal(next http.Handler) http.Handler {
 	})
 }
 
-func (s *server) simulate(w http.ResponseWriter, r *http.Request) {
-	var req simulateRequest
-	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
-	if decodeJSON(r, &req) != nil || key == "" || !validAmount(req.Amount) || req.Currency != "ARS" || !validID(req.CheckoutID) {
-		writeError(w, http.StatusBadRequest, "Solicitud de simulación inválida")
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
-	defer cancel()
-	var existing payment
-	err := s.payments.FindOne(ctx, bson.M{"checkoutId": req.CheckoutID}).Decode(&existing)
-	if err == nil {
-		if existing.CheckoutID != req.CheckoutID || existing.Amount != req.Amount || existing.Currency != req.Currency {
-			writeError(w, http.StatusConflict, "La clave de idempotencia ya se usó con otros datos")
-			return
-		}
-		writeJSON(w, http.StatusOK, existing)
-		return
-	}
-	if !errors.Is(err, mongo.ErrNoDocuments) {
-		writeError(w, http.StatusServiceUnavailable, "No se pudo consultar la operación")
-		return
-	}
-	doc := payment{ID: bson.NewObjectID().Hex(), CheckoutID: req.CheckoutID, IdempotencyKey: key, Amount: req.Amount, Currency: req.Currency, Status: s.result, CreatedAt: time.Now().UTC()}
-	_, err = s.payments.InsertOne(ctx, doc)
-	if mongo.IsDuplicateKeyError(err) {
-		if s.payments.FindOne(ctx, bson.M{"checkoutId": req.CheckoutID}).Decode(&existing) == nil && existing.CheckoutID == req.CheckoutID && existing.Amount == req.Amount && existing.Currency == req.Currency {
-			writeJSON(w, http.StatusOK, existing)
-			return
-		}
-		writeError(w, http.StatusConflict, "La operación ya fue procesada con otros datos")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "No se pudo registrar el pago simulado")
-		return
-	}
-	writeJSON(w, http.StatusCreated, doc)
-}
-
 func (s *server) getPayment(w http.ResponseWriter, r *http.Request) {
 	var item payment
 	err := s.payments.FindOne(r.Context(), bson.M{"_id": r.PathValue("id")}).Decode(&item)
@@ -486,26 +438,6 @@ func (s *server) verify(w http.ResponseWriter, r *http.Request) {
 	}
 	approved := item.Status == "approved" && item.CheckoutID == req.Reference && item.Currency == req.Currency && math.Abs(item.Amount-req.Amount) < 0.009
 	writeJSON(w, http.StatusOK, map[string]any{"aprobado": approved, "pagoId": item.ID, "importe": item.Amount, "moneda": item.Currency})
-}
-
-func (s *server) reverse(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	res, err := s.payments.UpdateOne(r.Context(), bson.M{"_id": id, "estado": "approved"}, bson.M{"$set": bson.M{"estado": "reversed"}})
-	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "No se pudo revertir la simulación")
-		return
-	}
-	var item payment
-	if err = s.payments.FindOne(r.Context(), bson.M{"_id": id}).Decode(&item); err != nil {
-		writeError(w, http.StatusNotFound, "Operación no encontrada")
-		return
-	}
-	if item.Status != "reversed" {
-		writeError(w, http.StatusConflict, "La operación no puede revertirse en su estado actual")
-		return
-	}
-	_ = res
-	writeJSON(w, http.StatusOK, item)
 }
 
 func (s *server) refund(w http.ResponseWriter, r *http.Request) {
@@ -585,7 +517,6 @@ func (s *server) refund(w http.ResponseWriter, r *http.Request) {
 func validAmount(amount float64) bool {
 	return amount > 0 && !math.IsNaN(amount) && !math.IsInf(amount, 0)
 }
-func validSimulatorResult(value string) bool { return value == "approved" || value == "rejected" }
 func validID(id string) bool {
 	if id == "" || len(id) > 128 {
 		return false

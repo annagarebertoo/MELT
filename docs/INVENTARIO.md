@@ -23,7 +23,7 @@ Inventario del árbol de `develop` de referencia y del conjunto de documentació
 | `docs/servicios/AUTH.md` | Auth, roles, endpoints, integraciones y pruebas. |
 | `docs/servicios/CATALOGO-PROFESIONALES.md` | Catálogo, CRUD, búsqueda, caché, asociaciones y configuración. |
 | `docs/servicios/RESERVAS.md` | Agenda, disponibilidad, reglas de reserva, carrito, checkout y eventos. |
-| `docs/servicios/PAGOS.md` | Simulador interno y operaciones server-to-server. |
+| `docs/servicios/PAGOS.md` | Mercado Pago Checkout Pro, webhooks y devoluciones server-to-server. |
 | `docs/servicios/BENEFICIOS.md` | Puntos, canjes, eventos, partner y GhostKitchen. |
 | `docs/MATRIZ-CUMPLIMIENTO.md` | Requisito, referencia de código, documento/evidencia, estado y limitación del PDF. |
 | `docs/TROUBLESHOOTING.md` | Síntoma, diagnóstico y resolución segura. |
@@ -66,7 +66,7 @@ Inventario del árbol de `develop` de referencia y del conjunto de documentació
 | `docs/adr/ADR-012-balanceo-carga.md` | Balanceo. |
 | `docs/adr/ADR-013-capacidad-costos.md` | Capacidad/costos estimados, no presupuesto cloud vigente. |
 | `docs/adr/ADR-014-consumo-proveedor.md` | Investigación histórica y actualización GhostKitchen; asignación oficial D9 no confirmada. |
-| `docs/adr/ADR-015-checkout-unico-simulador-pagos.md` | Checkout agrupado con Mercado Pago en pruebas. |
+| `docs/adr/ADR-015-checkout-unico-simulador-pagos.md` | Decisión histórica del checkout agrupado; la implementación vigente usa Mercado Pago Checkout Pro. |
 
 ## Contratos OpenAPI y mock
 
