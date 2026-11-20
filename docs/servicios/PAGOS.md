@@ -16,7 +16,7 @@ Todas las rutas internas requieren `X-Melt-Internal-Key`, salvo el webhook firma
 | `POST /payments/preferences` | Crea o recupera una preferencia idempotente y devuelve la URL de Checkout Pro. |
 | `POST /payments/verify` | Consulta el pago al proveedor y valida `pagoId`, `referencia`, importe y moneda. |
 | `POST /payments/refunds` | Solicita una devolución a Mercado Pago con clave idempotente. |
-| `POST /webhooks/mercadopago` | Valida firma HMAC, vuelve a consultar el pago y notifica a Reservas. |
+| `POST /webhooks/mercadopago` | Valida firma HMAC, vuelve a consultar el pago o la orden y notifica a Reservas. |
 
 La preferencia lleva el checkout como `external_reference`; al regresar, MELT verifica el pago en servidor. `back_urls` apuntan al Gateway HTTPS compartido. Nunca se confía en el `status` ni en el importe recibido desde la URL de retorno.
 
@@ -31,7 +31,7 @@ Configurar en el servicio **melt-pagos** de Render:
 - `MELT_INTERNAL_KEY`: el mismo secreto interno que usa Reservas.
 - `MONGODB_URI` y `PAGOS_MONGODB_DATABASE=pagos_db`.
 
-Pagos siempre redirige al `sandbox_init_point` y rechaza una operación cuyo `live_mode` sea `true`; nunca usa el enlace de producción. No enviar tokens ni secretos al navegador o al repositorio. La ruta de notificación configurada en Mercado Pago es `https://melt-gateway-prueba.onrender.com/api/v1/pagos/webhooks/mercadopago`, con el evento **Payments** en entorno de prueba.
+Pagos siempre redirige al `sandbox_init_point` y rechaza una operación cuyo `live_mode` sea `true`; nunca usa el enlace de producción. No enviar tokens ni secretos al navegador o al repositorio. La ruta de notificación configurada en Mercado Pago es `https://melt-gateway-prueba.onrender.com/api/v1/pagos/webhooks/mercadopago`, con el evento **Orders (Mercado Pago)** en entorno de prueba. El webhook y el retorno aceptan identificadores de orden (`order_id`) y pagos clásicos (`payment_id`) para mantener compatibilidad.
 
 Reservas necesita `PAGOS_URL` apuntando al servicio Pagos en Render, y Pagos notifica por el Gateway a `/api/v1/internal/reservas/pago-confirmado`. Esas dos variables deben corresponder a servicios del mismo despliegue.
 

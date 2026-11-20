@@ -14,6 +14,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,17 +24,18 @@ import (
 )
 
 type payment struct {
-	ID             string    `bson:"_id" json:"id"`
-	CheckoutID     string    `bson:"checkoutId" json:"checkoutId"`
-	IdempotencyKey string    `bson:"idempotencyKey" json:"-"`
-	Amount         float64   `bson:"importe" json:"importe"`
-	Currency       string    `bson:"moneda" json:"moneda"`
-	Status         string    `bson:"estado" json:"estado"`
-	CreatedAt      time.Time `bson:"creadoEn" json:"creadoEn"`
-	Refunded       float64   `bson:"devuelto" json:"devuelto"`
-	PreferenceID   string    `bson:"preferenceId,omitempty" json:"preferenceId,omitempty"`
-	InitPoint      string    `bson:"initPoint,omitempty" json:"initPoint,omitempty"`
-	ProviderID     string    `bson:"providerPaymentId,omitempty" json:"providerPaymentId,omitempty"`
+	ID              string    `bson:"_id" json:"id"`
+	CheckoutID      string    `bson:"checkoutId" json:"checkoutId"`
+	IdempotencyKey  string    `bson:"idempotencyKey" json:"-"`
+	Amount          float64   `bson:"importe" json:"importe"`
+	Currency        string    `bson:"moneda" json:"moneda"`
+	Status          string    `bson:"estado" json:"estado"`
+	CreatedAt       time.Time `bson:"creadoEn" json:"creadoEn"`
+	Refunded        float64   `bson:"devuelto" json:"devuelto"`
+	PreferenceID    string    `bson:"preferenceId,omitempty" json:"preferenceId,omitempty"`
+	InitPoint       string    `bson:"initPoint,omitempty" json:"initPoint,omitempty"`
+	ProviderID      string    `bson:"providerPaymentId,omitempty" json:"providerPaymentId,omitempty"`
+	ProviderOrderID string    `bson:"providerOrderId,omitempty" json:"providerOrderId,omitempty"`
 }
 
 type server struct {
@@ -85,12 +87,36 @@ type preferenceResult struct {
 }
 
 type mpPayment struct {
-	ID                int64   `json:"id"`
-	Status            string  `json:"status"`
-	ExternalReference string  `json:"external_reference"`
-	TransactionAmount float64 `json:"transaction_amount"`
-	CurrencyID        string  `json:"currency_id"`
-	LiveMode          bool    `json:"live_mode"`
+	ID                json.RawMessage `json:"id"`
+	Status            string          `json:"status"`
+	ExternalReference string          `json:"external_reference"`
+	TransactionAmount float64         `json:"transaction_amount"`
+	CurrencyID        string          `json:"currency_id"`
+	LiveMode          bool            `json:"live_mode"`
+}
+
+func mpPaymentID(item mpPayment) string {
+	var id string
+	if json.Unmarshal(item.ID, &id) == nil {
+		return id
+	}
+	return strings.Trim(string(item.ID), `"`)
+}
+
+type mpOrder struct {
+	ID                string `json:"id"`
+	Status            string `json:"status"`
+	StatusDetail      string `json:"status_detail"`
+	ExternalReference string `json:"external_reference"`
+	TotalAmount       string `json:"total_amount"`
+	TotalPaidAmount   string `json:"total_paid_amount"`
+	Currency          string `json:"currency"`
+	LiveMode          bool   `json:"live_mode"`
+	Transactions      struct {
+		Payments []struct {
+			ID string `json:"id"`
+		} `json:"payments"`
+	} `json:"transactions"`
 }
 
 func (s *server) handler() http.Handler {
@@ -223,7 +249,7 @@ func (s *server) mercadoPagoWebhook(w http.ResponseWriter, r *http.Request) {
 	if topic == "" {
 		topic = strings.ToLower(strings.TrimSpace(r.URL.Query().Get("topic")))
 	}
-	if topic != "payment" {
+	if topic != "payment" && topic != "order" && topic != "orders_v2" {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
 		return
 	}
@@ -233,6 +259,10 @@ func (s *server) mercadoPagoWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
+	if topic == "order" || topic == "orders_v2" {
+		s.procesarWebhookOrder(w, ctx, dataID)
+		return
+	}
 	var item mpPayment
 	if err := s.mpRequest(ctx, http.MethodGet, "/v1/payments/"+dataID, nil, &item); err != nil {
 		writeError(w, http.StatusBadGateway, "No se pudo consultar el pago notificado")
@@ -247,8 +277,40 @@ func (s *server) mercadoPagoWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "El pago notificado no coincide con un checkout MELT")
 		return
 	}
-	_, _ = s.payments.UpdateOne(ctx, bson.M{"_id": stored.ID}, bson.M{"$set": bson.M{"providerPaymentId": fmt.Sprint(item.ID), "estado": item.Status}})
-	payload, _ := json.Marshal(map[string]string{"checkoutId": item.ExternalReference, "pagoId": fmt.Sprint(item.ID)})
+	providerID := mpPaymentID(item)
+	_, _ = s.payments.UpdateOne(ctx, bson.M{"_id": stored.ID}, bson.M{"$set": bson.M{"providerPaymentId": providerID, "estado": item.Status}})
+	s.notificarReservas(w, ctx, item.ExternalReference, providerID)
+}
+
+func (s *server) procesarWebhookOrder(w http.ResponseWriter, ctx context.Context, orderID string) {
+	var order mpOrder
+	if err := s.mpRequest(ctx, http.MethodGet, "/v1/orders/"+orderID, nil, &order); err != nil {
+		writeError(w, http.StatusBadGateway, "No se pudo consultar la orden notificada")
+		return
+	}
+	if order.ID != orderID || order.LiveMode {
+		writeError(w, http.StatusConflict, "La orden no pertenece al entorno de prueba")
+		return
+	}
+	var stored payment
+	if err := s.payments.FindOne(ctx, bson.M{"checkoutId": order.ExternalReference}).Decode(&stored); err != nil || stored.Amount <= 0 || stored.Currency != order.Currency {
+		writeError(w, http.StatusConflict, "La orden no coincide con un checkout MELT")
+		return
+	}
+	amount, amountErr := strconv.ParseFloat(order.TotalAmount, 64)
+	paid, paidErr := strconv.ParseFloat(order.TotalPaidAmount, 64)
+	if amountErr != nil || paidErr != nil || math.Abs(stored.Amount-amount) >= 0.009 || math.Abs(stored.Amount-paid) >= 0.009 {
+		writeError(w, http.StatusConflict, "El importe acreditado no coincide con el checkout MELT")
+		return
+	}
+	state := mpOrderState(order)
+	transactionID := mpOrderPaymentID(order)
+	_, _ = s.payments.UpdateOne(ctx, bson.M{"_id": stored.ID}, bson.M{"$set": bson.M{"providerOrderId": order.ID, "providerPaymentId": transactionID, "estado": state}})
+	s.notificarReservas(w, ctx, order.ExternalReference, order.ID)
+}
+
+func (s *server) notificarReservas(w http.ResponseWriter, ctx context.Context, checkoutID, providerID string) {
+	payload, _ := json.Marshal(map[string]string{"checkoutId": checkoutID, "pagoId": providerID})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.reservasCallbackURL, bytes.NewReader(payload))
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "No se pudo notificar a Reservas")
@@ -277,18 +339,60 @@ func (s *server) verifyMercadoPago(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
+	if strings.HasPrefix(strings.ToUpper(req.PaymentID), "ORD") {
+		s.verificarOrder(w, ctx, req)
+		return
+	}
 	var item mpPayment
 	if err := s.mpRequest(ctx, http.MethodGet, "/v1/payments/"+req.PaymentID, nil, &item); err != nil {
 		writeError(w, http.StatusBadGateway, "No se pudo consultar el pago en Mercado Pago")
 		return
 	}
-	valid := item.ID > 0 && !item.LiveMode && item.ExternalReference == req.Reference && item.CurrencyID == req.Currency && math.Abs(item.TransactionAmount-req.Amount) < 0.009
+	providerID := mpPaymentID(item)
+	valid := providerID != "" && !item.LiveMode && item.ExternalReference == req.Reference && item.CurrencyID == req.Currency && math.Abs(item.TransactionAmount-req.Amount) < 0.009
 	if !valid {
 		writeError(w, http.StatusConflict, "El pago no coincide con el checkout")
 		return
 	}
-	_, _ = s.payments.UpdateOne(ctx, bson.M{"checkoutId": req.Reference}, bson.M{"$set": bson.M{"providerPaymentId": fmt.Sprint(item.ID), "estado": item.Status}})
-	writeJSON(w, http.StatusOK, map[string]any{"checkoutId": item.ExternalReference, "pagoId": fmt.Sprint(item.ID), "estado": item.Status, "aprobado": item.Status == "approved", "importe": item.TransactionAmount, "moneda": item.CurrencyID})
+	_, _ = s.payments.UpdateOne(ctx, bson.M{"checkoutId": req.Reference}, bson.M{"$set": bson.M{"providerPaymentId": providerID, "estado": item.Status}})
+	writeJSON(w, http.StatusOK, map[string]any{"checkoutId": item.ExternalReference, "pagoId": providerID, "estado": item.Status, "aprobado": item.Status == "approved", "importe": item.TransactionAmount, "moneda": item.CurrencyID})
+}
+
+func (s *server) verificarOrder(w http.ResponseWriter, ctx context.Context, req verifyRequest) {
+	var order mpOrder
+	if err := s.mpRequest(ctx, http.MethodGet, "/v1/orders/"+req.PaymentID, nil, &order); err != nil {
+		writeError(w, http.StatusBadGateway, "No se pudo consultar la orden en Mercado Pago")
+		return
+	}
+	amount, amountErr := strconv.ParseFloat(order.TotalAmount, 64)
+	paid, paidErr := strconv.ParseFloat(order.TotalPaidAmount, 64)
+	if order.ID != req.PaymentID || order.LiveMode || order.ExternalReference != req.Reference || order.Currency != req.Currency || amountErr != nil || paidErr != nil || math.Abs(amount-req.Amount) >= 0.009 {
+		writeError(w, http.StatusConflict, "La orden no coincide con el checkout MELT")
+		return
+	}
+	approved := order.Status == "processed" && order.StatusDetail == "accredited" && math.Abs(paid-req.Amount) < 0.009
+	state := mpOrderState(order)
+	_, _ = s.payments.UpdateOne(ctx, bson.M{"checkoutId": req.Reference}, bson.M{"$set": bson.M{"providerOrderId": order.ID, "providerPaymentId": mpOrderPaymentID(order), "estado": state}})
+	writeJSON(w, http.StatusOK, map[string]any{"checkoutId": order.ExternalReference, "pagoId": req.PaymentID, "estado": state, "aprobado": approved, "importe": amount, "moneda": order.Currency})
+}
+
+func mpOrderState(order mpOrder) string {
+	if order.Status == "processed" && order.StatusDetail == "accredited" {
+		return "approved"
+	}
+	if order.Status == "failed" || order.Status == "canceled" || order.Status == "refunded" {
+		return "rejected"
+	}
+	return order.Status
+}
+
+func mpOrderPaymentID(order mpOrder) string {
+	for _, payment := range order.Transactions.Payments {
+		if payment.ID != "" {
+			return payment.ID
+		}
+	}
+	return ""
 }
 
 func (s *server) internal(next http.Handler) http.Handler {
@@ -413,7 +517,7 @@ func (s *server) refund(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var item payment
-	if err := s.payments.FindOne(ctx, bson.M{"providerPaymentId": req.PaymentID, "estado": "approved"}).Decode(&item); err != nil {
+	if err := s.payments.FindOne(ctx, bson.M{"estado": "approved", "$or": bson.A{bson.M{"providerPaymentId": req.PaymentID}, bson.M{"providerOrderId": req.PaymentID}}}).Decode(&item); err != nil {
 		writeError(w, http.StatusNotFound, "No se encontró un pago aprobado para devolver")
 		return
 	}
@@ -422,13 +526,21 @@ func (s *server) refund(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var mpResult struct {
-		ID        int64   `json:"id"`
-		PaymentID int64   `json:"payment_id"`
-		Amount    float64 `json:"amount"`
-		Status    string  `json:"status"`
+		ID     json.RawMessage `json:"id"`
+		Status string          `json:"status"`
 	}
 	path := "/v1/payments/" + req.PaymentID + "/refunds"
-	body, _ := json.Marshal(map[string]float64{"amount": req.Amount})
+	var body []byte
+	if item.ProviderOrderID != "" {
+		path = "/v1/orders/" + item.ProviderOrderID + "/refund"
+		if item.Refunded+req.Amount < item.Amount-0.009 {
+			body, _ = json.Marshal(map[string]any{"transactions": []any{map[string]string{"id": item.ProviderID, "amount": fmt.Sprintf("%.2f", req.Amount)}}})
+		} else {
+			body = []byte(`{}`)
+		}
+	} else {
+		body, _ = json.Marshal(map[string]float64{"amount": req.Amount})
+	}
 	mpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.mercadopago.com"+path, bytes.NewReader(body))
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "No se pudo iniciar la devolución en Mercado Pago")
@@ -443,11 +555,12 @@ func (s *server) refund(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 || json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&mpResult) != nil || mpResult.ID == 0 {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 || json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&mpResult) != nil || len(mpResult.ID) == 0 || string(mpResult.ID) == "null" {
 		writeError(w, http.StatusBadGateway, "Mercado Pago no confirmó la devolución")
 		return
 	}
-	refund := bson.M{"_id": key, "pagoId": req.PaymentID, "devolucionId": fmt.Sprint(mpResult.ID), "importe": mpResult.Amount, "moneda": req.Currency, "estado": mpResult.Status, "motivo": req.Reason, "creadoEn": time.Now().UTC()}
+	refundID := strings.Trim(string(mpResult.ID), `"`)
+	refund := bson.M{"_id": key, "pagoId": req.PaymentID, "devolucionId": refundID, "importe": req.Amount, "moneda": req.Currency, "estado": mpResult.Status, "motivo": req.Reason, "creadoEn": time.Now().UTC()}
 	if _, err := s.refunds.InsertOne(ctx, refund); err != nil {
 		if s.refunds.FindOne(ctx, bson.M{"_id": key}).Decode(&existing) == nil {
 			writeJSON(w, http.StatusOK, existing)
@@ -456,7 +569,7 @@ func (s *server) refund(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "La devolución fue aceptada pero no se pudo registrar el resultado")
 		return
 	}
-	_, _ = s.payments.UpdateOne(ctx, bson.M{"_id": item.ID}, bson.M{"$inc": bson.M{"devuelto": mpResult.Amount}})
+	_, _ = s.payments.UpdateOne(ctx, bson.M{"_id": item.ID}, bson.M{"$inc": bson.M{"devuelto": req.Amount}})
 	writeJSON(w, http.StatusCreated, refund)
 }
 

@@ -992,7 +992,7 @@ async function confirmCartPurchase() {
 async function processPaymentReturn() {
   const params = new URLSearchParams(window.location.search);
   const checkoutId = state.pendingMPReturn?.checkoutId || params.get("checkout_id");
-  const paymentId = state.pendingMPReturn?.paymentId || params.get("payment_id") || params.get("collection_id");
+  const paymentId = state.pendingMPReturn?.paymentId || params.get("order_id") || params.get("payment_id") || params.get("collection_id");
   if (params.get("checkout_return") !== "1" && !state.pendingMPReturn) return;
   if (!token()) { setStatus("#cart-status", "Iniciá sesión con la misma cuenta para verificar el pago y confirmar la reserva.", true); return; }
   if (!checkoutId || !paymentId) { setStatus("#cart-status", "Mercado Pago volvió sin datos suficientes para verificar el pago. Actualizá el carrito y contactá al equipo si ya pagaste.", true); return; }
