@@ -1262,8 +1262,8 @@ function currentPage() {
   const hash = window.location.hash || "#/inicio";
   if (hash.startsWith("#profesionales/")) return "profesionales";
   if (hash === "#carrito" || hash === "#/carrito") return "carrito";
-  const route = hash.match(/^#\\/([^?/]*)/);
-  if (route) return ["inicio", "tratamientos", "profesionales", "reservas", "cuenta", "carrito"].includes(route[1]) ? route[1] : "inicio";
+  const route = hash.startsWith("#/") ? hash.slice(2).split(/[/?]/)[0] : "";
+  if (route) return ["inicio", "tratamientos", "profesionales", "reservas", "cuenta", "carrito"].includes(route) ? route : "inicio";
   if (new URLSearchParams(hash.slice(1)).has("invitacion")) return "cuenta";
   if (hash.startsWith("#profesionales")) return "profesionales";
   return "inicio";
