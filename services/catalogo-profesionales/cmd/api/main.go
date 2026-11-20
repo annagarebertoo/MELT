@@ -110,7 +110,8 @@ func main() {
 	}
 	uri := os.Getenv("MONGODB_URI")
 	if uri == "" {
-		uri = "mongodb://localhost:27017"
+		slog.Error("mongodb_uri_required")
+		os.Exit(1)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -133,7 +134,7 @@ func main() {
 	}
 
 	coleccion := cliente.Database(databaseName("CATALOGO_MONGODB_DATABASE", "catalogo_db")).Collection("tratamientos")
-	profesionales := cliente.Database(databaseName("PROFESIONALES_MONGODB_DATABASE", databaseName("CATALOGO_MONGODB_DATABASE", "catalogo_db"))).Collection("profesionales")
+	profesionales := cliente.Database(databaseName("PROFESIONALES_MONGODB_DATABASE", "profesionales_db")).Collection("profesionales")
 
 	authURL := strings.TrimRight(strings.TrimSpace(os.Getenv("AUTH_URL")), "/")
 	if authURL == "" {

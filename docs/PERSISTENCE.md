@@ -1,5 +1,7 @@
 # MELT — Validación de D3: Persistencia
 
+> **Registro histórico:** evidencia del 23/10/2026 para la rama y commit indicados debajo. Describe un estado anterior a la migración actual: en aquella revisión Reservas, Pagos y Beneficios usaban MongoDB y Reservas transacciones/outbox. Hoy Pagos sigue en MongoDB; Reservas y Beneficios usan PostgreSQL privado en Supabase. La tabla y los hallazgos de abajo no son el inventario vigente; consultar [arquitectura](ARCHITECTURE.md), [matriz](MATRIZ-CUMPLIMIENTO.md) y [ADR-003](adr/ADR-003-persistencia.md). Se conserva la evidencia histórica sin reescribir sus resultados.
+
 **Responsable:** Sofía. **Entrega:** 2 — 23 de octubre de 2026.
 
 **Rama:** `feature/sofia-d3-persistencia`. **Base D11:** `0273c0b824327ecc480fcf20930fa51ee5d0805e`.

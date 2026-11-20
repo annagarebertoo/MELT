@@ -1,5 +1,7 @@
 # Verificación pública de acreditación — 11 de noviembre de 2026
 
+> Captura histórica fechada, con rama/commit y URLs abajo. No certifica el estado actual de Render ni debe usarse como prueba de despliegue del HEAD de `develop` sin volver a consultar el servicio.
+
 ## Entorno verificado
 
 - Gateway: https://melt-gateway-prueba.onrender.com (`srv-dbpvn4gu01pc739d6vhg`).

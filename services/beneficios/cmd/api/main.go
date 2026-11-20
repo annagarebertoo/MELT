@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/subtle"
+	"database/sql"
 	"errors"
 	"log"
 	"mime"
@@ -14,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -59,6 +61,7 @@ type almacenPuntos interface {
 }
 type Servidor struct {
 	cliente          *mongo.Client
+	database         *sql.DB
 	almacen          almacenPuntos
 	programa         programaStore
 	rabbitURL        string
@@ -71,6 +74,9 @@ type Servidor struct {
 	publicURL        string
 	verificarEmail   func(context.Context, string, string) error
 }
+
+// almacenMongo se conserva para compatibilidad con pruebas históricas.
+// main inicializa y usa exclusivamente almacenPostgres.
 type almacenMongo struct {
 	cliente                                           *mongo.Client
 	registros, movimientos                            *mongo.Collection
@@ -78,32 +84,31 @@ type almacenMongo struct {
 }
 
 func main() {
-	uri := strings.TrimSpace(os.Getenv("MONGODB_URI"))
+	uri := strings.TrimSpace(os.Getenv("BENEFICIOS_DATABASE_URL"))
 	if uri == "" {
-		uri = "mongodb://localhost:27017"
+		log.Fatal("BENEFICIOS_DATABASE_URL es obligatoria")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	cliente, err := mongo.Connect(options.Client().ApplyURI(uri))
+	database, err := sql.Open("pgx", uri)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer cliente.Disconnect(context.Background())
-	if err = cliente.Ping(ctx, nil); err != nil {
-		log.Fatal("no se pudo conectar con MongoDB")
+	defer database.Close()
+	database.SetMaxOpenConns(5)
+	database.SetMaxIdleConns(2)
+	database.SetConnMaxLifetime(30 * time.Minute)
+	if err = database.PingContext(ctx); err != nil {
+		log.Fatal("no se pudo conectar con PostgreSQL")
 	}
-	dbName := strings.TrimSpace(os.Getenv("BENEFICIOS_MONGODB_DATABASE"))
-	if dbName == "" {
-		dbName = "beneficios_db"
-	}
-	a := nuevoAlmacen(cliente, dbName)
-	if err = a.preparar(ctx); err != nil {
-		log.Fatalf("no se pudo preparar Beneficios: %v", err)
+	a := &almacenPostgres{db: database}
+	if err := a.preparar(ctx); err != nil {
+		log.Fatalf("no se pudo preparar Beneficios en PostgreSQL: %v", err)
 	}
 	authURL := strings.TrimRight(strings.TrimSpace(os.Getenv("AUTH_URL")), "/")
 	claveInterna := strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY"))
 	rabbitURL := strings.TrimSpace(os.Getenv("RABBITMQ_URL"))
-	s := &Servidor{cliente: cliente, almacen: a, programa: a, rabbitURL: rabbitURL, claveAPI: strings.TrimSpace(os.Getenv("BENEFICIOS_PARTNER_KEY")), verificarUsuario: verificadorAuth(authURL, claveInterna), verificarSesion: verificadorSesionAuth(authURL), resolverEmail: resolverEmailAuth(authURL, claveInterna), verificarEmail: verificadorEmailAuth(authURL, claveInterna), claveInterna: claveInterna, invitacionSecret: []byte(os.Getenv("BENEFICIOS_INVITATION_SECRET")), publicURL: strings.TrimRight(strings.TrimSpace(os.Getenv("MELT_PUBLIC_URL")), "/")}
+	s := &Servidor{database: database, almacen: a, programa: a, rabbitURL: rabbitURL, claveAPI: strings.TrimSpace(os.Getenv("BENEFICIOS_PARTNER_KEY")), verificarUsuario: verificadorAuth(authURL, claveInterna), verificarSesion: verificadorSesionAuth(authURL), resolverEmail: resolverEmailAuth(authURL, claveInterna), verificarEmail: verificadorEmailAuth(authURL, claveInterna), claveInterna: claveInterna, invitacionSecret: []byte(os.Getenv("BENEFICIOS_INVITATION_SECRET")), publicURL: strings.TrimRight(strings.TrimSpace(os.Getenv("MELT_PUBLIC_URL")), "/")}
 	if rabbitURL != "" {
 		go (&consumidorPrograma{url: rabbitURL, almacen: a}).run(context.Background())
 	}
@@ -164,11 +169,11 @@ func crearRouter(s *Servidor) *gin.Engine {
 	r.GET("/health", func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
-		if s == nil || s.cliente == nil || s.cliente.Ping(ctx, nil) != nil {
+		if s == nil || (s.database != nil && s.database.PingContext(ctx) != nil) || (s.database == nil && (s.cliente == nil || s.cliente.Ping(ctx, nil) != nil)) {
 			c.JSON(503, gin.H{"estado": "degradado"})
 			return
 		}
-		c.JSON(200, gin.H{"servicio": "beneficios", "estado": "ok"})
+		c.JSON(200, gin.H{"servicio": "beneficios", "estado": "ok", "integraciones": gin.H{"ghostkitchen": estadoConfiguracionGhostKitchen()}})
 	})
 	r.POST("/acreditar-puntos", s.acreditarPuntos)
 	r.POST("/acreditaciones", s.acreditarPuntos)
@@ -181,6 +186,14 @@ func crearRouter(s *Servidor) *gin.Engine {
 	s.agregarRutasGhostKitchen(r)
 	return r
 }
+
+func estadoConfiguracionGhostKitchen() string {
+	if strings.TrimSpace(os.Getenv("GHOSTKITCHEN_API_KEY")) == "" {
+		return "sin_configurar"
+	}
+	return "configurada"
+}
+
 func errorJSON(c *gin.Context, status int, code, message string) {
 	c.JSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
 }
@@ -344,7 +357,7 @@ func (a *almacenMongo) acreditarDetalle(ctx context.Context, req AcreditarReques
 		if err == nil {
 			return resultado, false, nil
 		}
-		if !mongo.IsDuplicateKeyError(err) {
+		if !esDuplicado(err) {
 			return Movimiento{}, false, err
 		}
 	}

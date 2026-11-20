@@ -17,13 +17,13 @@ import (
 const exchangeEventos = "melt.dominio"
 
 type eventoOutbox struct {
-	ID          string    `bson:"_id"`
-	Tipo        string    `bson:"tipo"`
-	RoutingKey  string    `bson:"routingKey"`
-	Payload     bson.M    `bson:"payload"`
-	CreadoEn    time.Time `bson:"creadoEn"`
-	PublicadoEn time.Time `bson:"publicadoEn,omitempty"`
-	Intentos    int       `bson:"intentos"`
+	ID          string    `bson:"_id" json:"id"`
+	Tipo        string    `bson:"tipo" json:"tipo"`
+	RoutingKey  string    `bson:"routingKey" json:"routingKey"`
+	Payload     bson.M    `bson:"payload" json:"payload"`
+	CreadoEn    time.Time `bson:"creadoEn" json:"creadoEn"`
+	PublicadoEn time.Time `bson:"publicadoEn,omitempty" json:"publicadoEn,omitempty"`
+	Intentos    int       `bson:"intentos" json:"intentos"`
 }
 
 // publicarEventos confirma el envío al broker antes de marcar el evento como
@@ -42,9 +42,14 @@ func (s *servidorReservas) publicarEventos(ctx context.Context) {
 		}
 		var item eventoOutbox
 		findCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		err := s.outbox.FindOne(findCtx, bson.M{"publicadoEn": bson.M{"$exists": false}}, options.FindOne().SetSort(bson.D{{Key: "creadoEn", Value: 1}})).Decode(&item)
+		var err error
+		if s.pg != nil {
+			item, err = s.pg.eventoPendiente(findCtx)
+		} else {
+			err = s.outbox.FindOne(findCtx, bson.M{"publicadoEn": bson.M{"$exists": false}}, options.FindOne().SetSort(bson.D{{Key: "creadoEn", Value: 1}})).Decode(&item)
+		}
 		cancel()
-		if errors.Is(err, mongo.ErrNoDocuments) {
+		if errors.Is(err, mongo.ErrNoDocuments) || sqlNotFound(err) {
 			continue
 		}
 		if err != nil {
@@ -90,7 +95,11 @@ func (s *servidorReservas) publicarEventos(ctx context.Context) {
 			continue
 		}
 		markCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		_, err = s.outbox.UpdateOne(markCtx, bson.M{"_id": item.ID, "publicadoEn": bson.M{"$exists": false}}, bson.M{"$set": bson.M{"publicadoEn": time.Now().UTC()}, "$inc": bson.M{"intentos": 1}})
+		if s.pg != nil {
+			err = s.pg.publicarEvento(markCtx, item.ID, time.Now().UTC())
+		} else {
+			_, err = s.outbox.UpdateOne(markCtx, bson.M{"_id": item.ID, "publicadoEn": bson.M{"$exists": false}}, bson.M{"$set": bson.M{"publicadoEn": time.Now().UTC()}, "$inc": bson.M{"intentos": 1}})
+		}
 		cancel()
 		if err != nil {
 			log.Printf("reservas_outbox_mark_failed event=%s: %v", item.ID, err)
