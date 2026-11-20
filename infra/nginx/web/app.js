@@ -499,6 +499,7 @@ function accountSectionVisibility(userRoles) {
 
 function showSignedOut() {
   state.user = null;
+  $("#auth-panel").classList.add("signed-out");
   $("#catalog-admin-link").classList.add("hidden");
   $("#cart-menu-link").classList.add("hidden");
   $("#carrito").classList.add("hidden");
