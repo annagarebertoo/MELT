@@ -577,4 +577,4 @@ body[data-page="reservas"] #my-bookings .bookings-heading .eyebrow{color:#987452
 body[data-page="reservas"] #my-bookings .bookings-heading h3{font-size:clamp(1.8rem,3vw,2.5rem);color:#56382b}
 body[data-page="reservas"] #my-bookings #bookings-list{display:grid;gap:12px;margin-top:18px}
 body[data-page="reservas"] #my-bookings #bookings-list>*{padding:18px 20px;border:1px solid #eadfD2;border-radius:14px;background:#fff}
-@media(max-width:900px){.header-cart-link{display:none!important}}
+
