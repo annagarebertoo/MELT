@@ -24,9 +24,9 @@
 
     <div class="menu-backdrop" id="menu-backdrop"></div>
     <aside class="site-menu" id="site-menu" aria-hidden="true" aria-label="Menú principal" inert>
-      <div class="site-menu-top"><span class="brand">MELT</span><button id="menu-close" type="button" aria-label="Cerrar menú">×</button></div>
+      <div class="site-menu-top"><a class="brand" href="#/inicio" data-page="inicio">MELT</a><button id="menu-close" type="button" aria-label="Cerrar menú">×</button></div>
       <nav aria-label="Navegación principal">
-        <a href="#/inicio" data-page="inicio">Inicio</a><a href="#/tratamientos" data-page="tratamientos">Selección MELT</a><a href="#/tratamientos" data-page="tratamientos">Tratamientos</a><a href="#/profesionales" data-page="profesionales">Profesionales</a><a href="#/reservas" data-page="reservas">Reservar turno</a><a href="#/cuenta" data-page="cuenta">Mi cuenta</a><a id="cart-menu-link" class="hidden" href="#/carrito" data-page="carrito">Mi carrito <span id="cart-count" class="cart-count">0</span></a><a id="catalog-admin-link" class="hidden" href="#/cuenta" data-page="cuenta">Administrar catálogo</a>
+        <a href="#/inicio" data-page="inicio">Inicio</a><a href="#/tratamientos" data-page="tratamientos">Tratamientos</a><a href="#/profesionales" data-page="profesionales">Profesionales</a><a href="#/reservas" data-page="reservas">Reservas</a><a href="#/cuenta" data-page="cuenta">Mi cuenta</a><a id="cart-menu-link" class="hidden" href="#/carrito" data-page="carrito">Mi carrito <span id="cart-count" class="cart-count">0</span></a><a id="catalog-admin-link" class="hidden" href="#/cuenta" data-page="cuenta">Administrar catálogo</a>
       </nav>
       <p>Tu tiempo, tu ritual.</p>
     </aside>
@@ -124,9 +124,9 @@
             </form>
           </div>
           <div id="profile-panel" class="profile-card hidden">
-            <div class="profile-top"><div class="avatar" id="profile-initials">M</div><div><p class="eyebrow">Tu espacio MELT</p><h3 id="profile-name">Hola</h3></div></div>
+            <div class="profile-top"><div class="avatar" id="profile-initials">M</div><div><p class="eyebrow">TU PERFIL MELT</p><h3 id="profile-name">Hola</h3></div></div>
             <p id="profile-email" class="muted"></p>
-            <div class="points-box"><span>Tu saldo de beneficios</span><strong><span id="points-balance">—</span> <small>puntos</small></strong></div>
+            <div class="points-box"><div><span class="points-kicker">TU SALDO DISPONIBLE</span><span class="points-caption">Puntos para disfrutar de beneficios y experiencias</span></div><strong><span id="points-balance">—</span> <small>PTS</small></strong><span class="points-spark" aria-hidden="true">✳</span></div>
             <div class="profile-actions"><button id="refresh-account" class="button button-outline" type="button">Actualizar</button><button id="profile-reservations" class="text-button" type="button">Ver mis turnos ↓</button><button id="profile-ghostkitchen" class="text-button hidden" type="button">Cocinas GhostKitchen cercanas ↓</button><button id="logout-button" class="text-button" type="button">Cerrar sesión</button></div>
           </div>
           <div class="calendar-card">
@@ -148,7 +148,7 @@
           </div>
         </div>
         <section id="points-panel" class="benefits-area hidden" aria-labelledby="points-title">
-          <div class="section-heading"><div><p class="eyebrow">Tu recorrido MELT</p><h2 id="points-title">Puntos y recompensas</h2></div><button id="refresh-benefits" class="button button-outline" type="button">Actualizar</button></div>
+          <div class="section-heading"><div><p class="eyebrow">PEQUEÑOS PREMIOS, GRANDES MOMENTOS</p><h2 id="points-title">Tu mundo de beneficios</h2></div><button id="refresh-benefits" class="button button-outline" type="button">Actualizar</button></div>
           <div class="benefits-columns">
             <div class="benefit-card"><h3>Historial de puntos</h3><div id="points-history" class="movement-list" aria-live="polite"></div></div>
             <div class="benefit-card"><h3>Catálogo de recompensas</h3><div id="rewards-list" class="rewards-list" aria-live="polite"></div></div>
