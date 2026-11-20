@@ -756,3 +756,113 @@ input,select,textarea{accent-color:var(--chocolate)}
 @media(prefers-reduced-motion:reduce){
  *,*:before,*:after{scroll-behavior:auto!important;animation:none!important;transition:none!important}
 }
+
+
+/* Ajustes de feedback: carrito con lenguaje de compra y profesionales a ancho completo. */
+body[data-page="carrito"] .cart-section{
+  max-width:none;padding:clamp(34px,5vw,72px) clamp(22px,6vw,92px) 100px;
+  background:linear-gradient(180deg,#f4eee5 0,#fcfaf6 360px);
+}
+body[data-page="carrito"] .cart-page-intro{
+  position:relative;isolation:isolate;min-height:270px;overflow:hidden;
+  padding:clamp(34px,5vw,66px);margin-bottom:34px;
+  border:1px solid rgba(73,49,38,.08);border-radius:24px;
+  background:linear-gradient(112deg,#eee2d1 0%,#e8d8c3 58%,#dfc9ae 100%);
+}
+body[data-page="carrito"] .cart-page-intro:after{
+  content:"";position:absolute;z-index:-1;right:9%;top:-145px;width:430px;height:430px;
+  border:1px solid rgba(73,49,38,.12);border-radius:50%;
+  box-shadow:0 0 0 28px rgba(73,49,38,.025),0 0 0 64px rgba(73,49,38,.02);
+}
+body[data-page="carrito"] .cart-page-intro .eyebrow{color:#986d4d}
+body[data-page="carrito"] .cart-page-intro h2{font-size:clamp(2.8rem,5.6vw,5.2rem)}
+body[data-page="carrito"] .cart-page-intro>div:first-child>p:last-child{max-width:590px;font-size:.96rem}
+body[data-page="carrito"] .cart-intro-mark{
+  position:relative;width:118px;height:118px;margin-right:4%;border:0;border-radius:0;
+  font-size:0;flex:0 0 auto;
+}
+body[data-page="carrito"] .cart-intro-mark:before{
+  content:"";position:absolute;left:22px;right:22px;bottom:18px;height:65px;
+  border:2px solid #674635;border-top:0;border-radius:5px 5px 18px 18px;
+  transform:perspective(90px) rotateX(-5deg);
+}
+body[data-page="carrito"] .cart-intro-mark:after{
+  content:"";position:absolute;left:39px;top:12px;width:36px;height:39px;
+  border:2px solid #674635;border-bottom:0;border-radius:22px 22px 0 0;
+}
+body[data-page="carrito"] .cart-toolbar{
+  align-items:center;padding:22px 0;margin-bottom:10px;border-bottom:1px solid #ddcfbf;
+}
+body[data-page="carrito"] .cart-count-label{display:flex;align-items:center;gap:10px;font-size:.76rem;letter-spacing:.15em}
+body[data-page="carrito"] .cart-count-label:before{
+  content:"";width:9px;height:9px;border-radius:50%;background:#ad795d;box-shadow:0 0 0 5px #efe3d4;
+}
+body[data-page="carrito"] .cart-secure-note{margin-top:5px;color:#89786a}
+body[data-page="carrito"] .cart-header-actions .button{min-height:46px}
+body[data-page="carrito"] #cart-status{margin:8px 0 12px}
+body[data-page="carrito"] #cart-items{display:grid;gap:14px;min-height:190px}
+body[data-page="carrito"] #cart-items .empty-state{
+  min-height:270px;border:1px dashed #cdbba6;border-radius:20px;
+  background:linear-gradient(135deg,#fffdf9,#f7f0e6);font-family:var(--sans);
+  font-size:.95rem;line-height:1.7;color:#827164;
+}
+body[data-page="carrito"] #cart-items .empty-state:before{
+  content:"";display:block;width:42px;height:36px;margin:0 auto 18px;
+  border:1.5px solid #98775e;border-top:0;border-radius:4px 4px 12px 12px;
+  box-shadow:0 -8px 0 -6px #98775e;
+}
+body[data-page="carrito"] .cart-item{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:22px;
+  padding:26px 30px;border:1px solid #e4d7c8;border-radius:18px;background:#fffefa;
+}
+body[data-page="carrito"] .cart-item-summary h3{font-size:1.55rem}
+body[data-page="carrito"] .cart-item-meta{border-top:1px solid #eee5da}
+body[data-page="carrito"] .cart-summary{
+  width:min(100%,520px);margin:24px 0 0 auto;padding:28px 30px;
+  border:1px solid #e2d5c6;border-radius:20px;background:#fffefa;
+}
+body[data-page="carrito"] .cart-summary:before{
+  content:"RESUMEN DE COMPRA";display:block;margin-bottom:14px;
+  color:#987455;font-size:.65rem;font-weight:800;letter-spacing:.17em;
+}
+body[data-page="carrito"] .cart-summary>div{display:flex;justify-content:space-between;gap:18px}
+body[data-page="carrito"] .cart-summary>div:nth-child(4) strong{font-family:var(--serif);font-size:1.8rem}
+body[data-page="profesionales"] .professionals-section{
+  padding:0 0 clamp(76px,9vw,124px);background:var(--paper);
+}
+body[data-page="profesionales"] .professional-intro{
+  position:relative;isolation:isolate;display:flex;flex-direction:column;justify-content:center;
+  width:100%;max-width:none;min-height:390px;overflow:hidden;
+  margin:0;padding:clamp(74px,9vw,126px) clamp(28px,9vw,138px);
+  background:linear-gradient(110deg,#eee2d1 0%,#eee2d1 58%,#e8dac7 100%);
+}
+body[data-page="profesionales"] .professional-intro:after{
+  content:"";position:absolute;z-index:-1;right:10%;top:50%;width:310px;height:310px;
+  transform:translateY(-50%);border:1px solid rgba(73,49,38,.12);border-radius:50%;
+  box-shadow:0 0 0 25px rgba(73,49,38,.025),0 0 0 54px rgba(73,49,38,.02);
+}
+body[data-page="profesionales"] .professional-intro h2{
+  max-width:760px;margin:0 0 18px;font-size:clamp(3.2rem,6vw,5.6rem);
+}
+body[data-page="profesionales"] .professional-intro>p:last-child{max-width:520px;font-size:.96rem}
+body[data-page="profesionales"] .professionals-carousel-heading{
+  margin:clamp(48px,6vw,76px) clamp(22px,8vw,120px) 26px;
+}
+body[data-page="profesionales"] #professionals-status{margin-inline:clamp(22px,8vw,120px)}
+body[data-page="profesionales"] .professionals-grid{
+  margin-inline:clamp(22px,8vw,120px);padding:4px 4px 18px;
+}
+@media(max-width:700px){
+ body[data-page="carrito"] .cart-page-intro{min-height:230px;padding:28px;gap:10px}
+ body[data-page="carrito"] .cart-intro-mark{width:72px;height:72px;margin:0}
+ body[data-page="carrito"] .cart-intro-mark:before{left:13px;right:13px;bottom:8px;height:44px}
+ body[data-page="carrito"] .cart-intro-mark:after{left:24px;top:0;width:24px;height:26px}
+ body[data-page="carrito"] .cart-toolbar{align-items:flex-start;flex-direction:column}
+ body[data-page="carrito"] .cart-header-actions{width:100%;flex-wrap:wrap}
+ body[data-page="carrito"] .cart-header-actions .button{flex:1}
+ body[data-page="carrito"] .cart-item{grid-template-columns:1fr;padding:20px}
+ body[data-page="carrito"] .cart-summary{padding:22px;margin-top:18px}
+ body[data-page="profesionales"] .professional-intro{min-height:330px;padding:72px 24px}
+ body[data-page="profesionales"] .professional-intro:after{right:-120px;top:65%;width:250px;height:250px}
+ body[data-page="profesionales"] .professional-intro h2{font-size:clamp(2.8rem,12vw,4rem)}
+}
