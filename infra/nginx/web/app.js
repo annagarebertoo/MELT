@@ -672,6 +672,26 @@ async function completeTreatment(id, button) {
   }
 }
 
+let noShowTimer;
+function scheduleNoShowButtons() {
+  clearTimeout(noShowTimer);
+  let nextEnd = Infinity;
+  const now = Date.now();
+  for (const button of document.querySelectorAll(".professional-no-show[data-ends-at]")) {
+    const end = Number(button.dataset.endsAt);
+    if (end <= now) {
+      button.disabled = false;
+      button.removeAttribute("title");
+      button.removeAttribute("data-ends-at");
+    } else {
+      nextEnd = Math.min(nextEnd, end);
+    }
+  }
+  if (Number.isFinite(nextEnd)) {
+    noShowTimer = setTimeout(scheduleNoShowButtons, Math.min(nextEnd - now, 2147483647));
+  }
+}
+
 async function loadProfessionalTurns() {
   const upcomingList = $("#professional-upcoming");
   const historyList = $("#professional-history");
@@ -688,7 +708,7 @@ async function loadProfessionalTurns() {
       const date = new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(start);
       const stateText = ({ confirmado: "Confirmado", cancelado: "Cancelado", completado: "Realizado", no_asistio: "No asistió" })[turn.estado] || turn.estado;
       const open = turn.estado === "confirmado";
-      const actions = open ? `<div class="booking-actions"><button class="button button-outline complete-treatment" type="button" data-id="${escapeHTML(turn.id)}">Marcar realizado</button><button class="text-link professional-no-show" type="button" data-id="${escapeHTML(turn.id)}" ${end.getTime() > now ? "disabled title=\"Disponible al finalizar el turno\"" : ""}>Marcar no asistió</button><button class="text-link professional-cancel-turn" type="button" data-id="${escapeHTML(turn.id)}">Cancelar turno</button></div>` : "";
+      const actions = open ? `<div class="booking-actions"><button class="button button-outline complete-treatment" type="button" data-id="${escapeHTML(turn.id)}">Marcar realizado</button><button class="text-link professional-no-show" type="button" data-id="${escapeHTML(turn.id)}" ${end.getTime() > now ? `disabled data-ends-at="${end.getTime()}" title="Disponible al finalizar el turno"` : ""}>Marcar no asistió</button><button class="text-link professional-cancel-turn" type="button" data-id="${escapeHTML(turn.id)}">Cancelar turno</button></div>` : "";
       return `<article class="booking-row"><div><strong>${escapeHTML(names.get(turn.tratamientoId) || turn.tratamientoId || "Tratamiento")}</strong><span>${escapeHTML(date)} · Cliente: ${escapeHTML(turn.clienteNombre || turn.clienteId || "No disponible")}</span><small class="booking-status">${escapeHTML(stateText)}</small></div>${actions}</article>`;
     };
     const upcoming = turns.filter((turn) => turn.estado === "confirmado" && new Date(turn.inicio).getTime() >= now);
@@ -698,6 +718,7 @@ async function loadProfessionalTurns() {
     document.querySelectorAll(".complete-treatment").forEach((button) => button.addEventListener("click", () => completeTreatment(button.dataset.id, button)));
     document.querySelectorAll(".professional-cancel-turn").forEach((button) => button.addEventListener("click", () => cancelProfessionalTurn(button)));
     document.querySelectorAll(".professional-no-show").forEach((button) => button.addEventListener("click", () => recordNoShow(button)));
+    scheduleNoShowButtons();
   } catch (error) {
     upcomingList.innerHTML = historyList.innerHTML = `<p class="form-status error-text">No pudimos cargar tus turnos: ${escapeHTML(error.message)}</p>`;
   }
