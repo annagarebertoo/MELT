@@ -463,8 +463,8 @@ async function loadAccount() {
     const visibility = accountSectionVisibility(roles);
     $("#points-panel").classList.toggle("hidden", !visibility.client);
     $("#points-balance").closest(".points-box").classList.toggle("hidden", !visibility.client);
-    $("#ghostkitchen-panel").classList.toggle("hidden", !visibility.client);
-    $("#profile-ghostkitchen").classList.toggle("hidden", !visibility.client);
+    $("#ghostkitchen-panel").classList.add("hidden");
+    $("#profile-ghostkitchen").classList.add("hidden");
     $("#professional-panel").classList.toggle("hidden", !visibility.professional);
     $("#admin-panel").classList.toggle("hidden", !visibility.admin);
     $("#superadmin-users-panel").classList.toggle("hidden", !visibility.superadmin);
@@ -505,7 +505,7 @@ function showSignedOut() {
   $("#cart-count").textContent = "0";
   window.clearInterval(state.cartTimer);
   $("#points-panel").classList.add("hidden");
-  $("#ghostkitchen-panel").classList.add("hidden");
+  $("#ghostkitchen-panel").classList.remove("hidden");
   $("#profile-ghostkitchen").classList.add("hidden");
   $("#professional-panel").classList.add("hidden");
   $("#admin-panel").classList.add("hidden");
