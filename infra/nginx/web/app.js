@@ -229,7 +229,7 @@ async function showProfessionalProfile(id, updateHash = true) {
 function showProfessionalList(updateHash = true) {
   $("#professional-profile").classList.add("hidden");
   $("#professionals-list-view").classList.remove("hidden");
-  if (updateHash && window.location.hash.startsWith("#profesionales/")) window.location.hash = "#profesionales";
+  if (updateHash && window.location.hash.startsWith("#profesionales/")) window.location.hash = "#/profesionales";
 }
 
 function syncProfessionalHash() {
@@ -340,7 +340,7 @@ function selectTreatment(item) {
   $("#booking-treatment").value = item.id;
   $("#booking-professional").value = "";
   updateProfessionals();
-  document.querySelector("#reservas").scrollIntoView({ behavior: "smooth" });
+  window.location.hash = "#/reservas";
 }
 
 function invitationMessage(message) {
