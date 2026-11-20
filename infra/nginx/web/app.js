@@ -70,7 +70,9 @@ function updateSteps(step) {
 function updateAuthChrome() {
   const signedIn = Boolean(token());
   $("#booking-guest-note").classList.toggle("hidden", signedIn);
-  $("#header-login").textContent = signedIn ? "Mi cuenta" : "Ingresar";
+  // La navegación principal ya tiene la pestaña "Mi cuenta": no duplicarla con otro botón.
+  $("#header-login").classList.toggle("hidden", signedIn);
+  $("#header-login").textContent = "Ingresar";
   $("#header-register").classList.toggle("hidden", signedIn);
   $("#availability-form").classList.toggle("auth-required", !signedIn);
 }
@@ -463,7 +465,9 @@ async function loadAccount() {
     const visibility = accountSectionVisibility(roles);
     $("#points-panel").classList.toggle("hidden", !visibility.client);
     $("#points-balance").closest(".points-box").classList.toggle("hidden", !visibility.client);
-    $("#ghostkitchen-panel").classList.add("hidden");
+    // GhostKitchen pertenece al espacio "Mi cuenta", tanto para invitados como para usuarios logueados.
+    $("#ghostkitchen-panel").classList.remove("hidden");
+    // Evitar un segundo acceso redundante a GK dentro de la misma pantalla.
     $("#profile-ghostkitchen").classList.add("hidden");
     $("#professional-panel").classList.toggle("hidden", !visibility.professional);
     $("#admin-panel").classList.toggle("hidden", !visibility.admin);
@@ -506,6 +510,7 @@ function showSignedOut() {
   $("#cart-count").textContent = "0";
   window.clearInterval(state.cartTimer);
   $("#points-panel").classList.add("hidden");
+  // GK se muestra dentro de Mi cuenta también cuando la persona todavía no inició sesión.
   $("#ghostkitchen-panel").classList.remove("hidden");
   $("#profile-ghostkitchen").classList.add("hidden");
   $("#professional-panel").classList.add("hidden");
