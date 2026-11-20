@@ -374,3 +374,36 @@ section[id],.booking-band[id]{scroll-margin-top:100px}
  .header-nav{gap:6px}
  .header-nav a{padding:7px 9px;font-size:.65rem}
 }
+
+
+/* Navegación multipantalla: cada destino funciona como una vista independiente. */
+.route-hidden{display:none!important}
+body[data-page="reservas"] #cuenta>.section-heading,
+body[data-page="reservas"] #cuenta>.booking-steps,
+body[data-page="reservas"] #cuenta>#points-panel,
+body[data-page="reservas"] #cuenta>#ghostkitchen-panel,
+body[data-page="reservas"] #cuenta>#professional-panel,
+body[data-page="reservas"] #cuenta>#admin-panel,
+body[data-page="reservas"] #cuenta>#catalog-admin,
+body[data-page="reservas"] #cuenta>#superadmin-users-panel{display:none!important}
+body[data-page="reservas"] #cuenta{padding-top:clamp(45px,7vw,80px)}
+body[data-page="reservas"] #cuenta:before{content:"Reservá tu momento";display:block;margin:0 0 28px;font-family:var(--serif);font-size:clamp(2.5rem,5vw,4rem);line-height:1.05;color:var(--chocolate)}
+body[data-page="reservas"] #auth-panel{align-items:start}
+body[data-page="reservas"] #auth-panel .calendar-card{grid-column:2}
+body[data-page="cuenta"] #auth-panel .calendar-card{display:none!important}
+body[data-page="cuenta"] #cuenta{min-height:70vh}
+body[data-page="cuenta"] #cuenta>.section-heading{margin-bottom:30px}
+body[data-page="cuenta"] #cuenta .account-layout{grid-template-columns:minmax(260px,.8fr) minmax(300px,1.2fr)}
+body[data-page="cuenta"] #auth-panel .account-card,
+body[data-page="cuenta"] #auth-panel .profile-card{grid-column:1}
+body[data-page="cuenta"] #cuenta #my-bookings{scroll-margin-top:100px}
+body[data-page="inicio"] .site-header,
+body[data-page="tratamientos"] .site-header,
+body[data-page="profesionales"] .site-header,
+body[data-page="reservas"] .site-header,
+body[data-page="cuenta"] .site-header,
+body[data-page="carrito"] .site-header{position:sticky}
+@media(max-width:760px){
+ body[data-page="reservas"] #auth-panel .calendar-card{grid-column:1}
+ body[data-page="cuenta"] #cuenta .account-layout{grid-template-columns:1fr}
+}
