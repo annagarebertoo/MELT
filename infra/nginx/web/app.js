@@ -2,7 +2,7 @@ const API = "/api/v1";
 const TOKEN_KEY = "melt.session";
 const INVITATION_KEY = "melt.pending-invitation";
 let invitation = null;
-const state = { page: 1, pageSize: 8, hasNext: false, search: "", category: "", priceMax: "", sort: "nombre", order: "asc", bookingTreatment: null, detailTreatment: null, cartTimer: null, selectedSlot: null, cartItems: [], cartSummary: null, checkoutKey: null, cancelling: null, mode: "login", user: null, rewardRequests: new Map(), rewards: [], canjes: [], categories: [], professionals: [] };
+const state = { page: 1, pageSize: 8, hasNext: false, search: "", category: "", priceMax: "", sort: "nombre", order: "asc", bookingTreatment: null, detailTreatment: null, cartTimer: null, selectedSlot: null, cartItems: [], cartSummary: null, checkoutKey: null, pendingMPReturn: null, cancelling: null, mode: "login", user: null, rewardRequests: new Map(), rewards: [], canjes: [], categories: [], professionals: [] };
 const catalogAdminState = { categories: [], treatments: [], professionals: [], adminProfessionals: [], professionalAccounts: [] };
 
 const $ = (selector) => document.querySelector(selector);
@@ -440,6 +440,7 @@ async function submitAuth(event) {
     $("#auth-form").reset();
     updateAuthChrome();
     await loadAccount();
+    await processPaymentReturn();
     showToast("Sesión iniciada. Ya podés consultar tu agenda.");
   } catch (error) { setStatus("#auth-status", error.message, true); }
   finally { $("#auth-submit").disabled = false; }
@@ -887,7 +888,7 @@ async function loadCart() {
       ...treatmentIDs.map(async (id) => { try { const response = await request(`/profesionales?tratamientoId=${encodeURIComponent(id)}`); for (const person of response.profesionales || []) if (professionalIDs.includes(person.id)) professionals.set(person.id, person.nombre); } catch {} })
     ]);
     renderCart(treatments, professionals);
-    setStatus("#cart-status", state.cartItems.length ? `${state.cartItems.length} ${state.cartItems.length === 1 ? "tratamiento retenido" : "tratamientos retenidos"}. Confirmá una compra simulada para todos los turnos.` : "Tu carrito está vacío. Consultá horarios y agregá un tratamiento.");
+    setStatus("#cart-status", state.cartItems.length ? `${state.cartItems.length} ${state.cartItems.length === 1 ? "tratamiento retenido" : "tratamientos retenidos"}. Pagá la seña en Mercado Pago para confirmar los turnos.` : "Tu carrito está vacío. Consultá horarios y agregá un tratamiento.");
   } catch (error) {
     state.cartItems = [];
     state.cartSummary = null;
@@ -928,7 +929,7 @@ function renderCart(treatments = new Map(), professionals = new Map()) {
   $("#cart-checkout").disabled = !items.length || !state.cartSummary;
   const list = $("#cart-items");
   const summary = state.cartSummary || {};
-  $("#cart-summary").innerHTML = items.length && state.cartSummary ? `<div><span>Subtotal</span><strong>${formatPrice(summary.subtotal)}</strong></div><div><span>Descuentos</span><strong>−${formatPrice(summary.descuento)}</strong></div><div><span>Total</span><strong>${formatPrice(summary.total)}</strong></div><div><span>Seña · 30 %</span><strong>${formatPrice(summary.sena)}</strong></div><div><span>Restante</span><strong>${formatPrice(summary.restante)}</strong></div><p class="muted">Pago simulado por MELT · no se realizará ningún cobro real.</p>` : items.length ? `<p class="form-status error-text">Los importes del carrito no son válidos. Actualizá el carrito antes de confirmar.</p>` : "";
+  $("#cart-summary").innerHTML = items.length && state.cartSummary ? `<div><span>Subtotal</span><strong>${formatPrice(summary.subtotal)}</strong></div><div><span>Descuentos</span><strong>−${formatPrice(summary.descuento)}</strong></div><div><span>Total</span><strong>${formatPrice(summary.total)}</strong></div><div><span>Seña · 30 %</span><strong>${formatPrice(summary.sena)}</strong></div><div><span>Restante</span><strong>${formatPrice(summary.restante)}</strong></div><p class="muted">El pago se procesa en el entorno de prueba de Mercado Pago.</p>` : items.length ? `<p class="form-status error-text">Los importes del carrito no son válidos. Actualizá el carrito antes de confirmar.</p>` : "";
   if (!items.length) { list.innerHTML = `<p class="empty-state">Tu carrito está vacío. Podés seguir explorando y agregar varios tratamientos.</p>`; window.clearInterval(state.cartTimer); state.cartTimer = null; return; }
   list.innerHTML = items.map((item) => {
     const treatment = treatments.get(item.tratamientoId) || window.treatments?.find((candidate) => candidate.id === item.tratamientoId);
@@ -966,17 +967,54 @@ async function confirmCartPurchase() {
     state.checkoutKey ||= (globalThis.crypto?.randomUUID?.() || `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     const result = await request("/reservas/carrito/checkout", { method: "POST", body: JSON.stringify({ idempotencyKey: state.checkoutKey }) });
     const checkout = result.checkout || {};
+    if (checkout.urlPago) {
+      setStatus("#cart-status", "Abriendo el checkout de Mercado Pago en modo de prueba…");
+      window.location.assign(checkout.urlPago);
+      return;
+    }
     if (checkout.estado === "confirmed") {
       state.checkoutKey = null;
-      showToast("Compra simulada aprobada. Todos los turnos quedaron confirmados.");
-      setStatus("#cart-status", `Compra confirmada. Se registraron ${checkout.turnos?.length || state.cartItems.length} turnos; no se realizó ningún cobro real.`);
+      showToast("Pago aprobado. Todos los turnos quedaron confirmados.");
+      setStatus("#cart-status", `Pago de prueba aprobado. Se registraron ${checkout.turnos?.length || state.cartItems.length} turnos.`);
       await Promise.all([loadCart(), loadBookings()]);
     } else if (checkout.estado === "rejected") {
       state.checkoutKey = null;
-      setStatus("#cart-status", "Pago simulado rechazado. No se confirmó ningún turno; tus retenciones siguen vigentes para reintentar.", true);
+      setStatus("#cart-status", "El pago fue rechazado. No se confirmó ningún turno; tus retenciones siguen vigentes para reintentar.", true);
       await loadCart();
     } else {
       setStatus("#cart-status", "La compra sigue procesándose. Podés reintentar sin duplicar el pago.");
+    }
+  } catch (error) {
+    setStatus("#cart-status", error.message, true);
+  } finally { button.disabled = !state.cartItems.length || !state.cartSummary; }
+}
+
+async function processPaymentReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const checkoutId = state.pendingMPReturn?.checkoutId || params.get("checkout_id");
+  const paymentId = state.pendingMPReturn?.paymentId || params.get("payment_id") || params.get("collection_id");
+  if (params.get("checkout_return") !== "1" && !state.pendingMPReturn) return;
+  if (!token()) { setStatus("#cart-status", "Iniciá sesión con la misma cuenta para verificar el pago y confirmar la reserva.", true); return; }
+  if (!checkoutId || !paymentId) { setStatus("#cart-status", "Mercado Pago volvió sin datos suficientes para verificar el pago. Actualizá el carrito y contactá al equipo si ya pagaste.", true); return; }
+  state.pendingMPReturn = { checkoutId, paymentId };
+  const button = $("#cart-checkout");
+  button.disabled = true;
+  try {
+    const result = await request("/reservas/carrito/checkout/retorno", { method: "POST", body: JSON.stringify({ checkoutId, pagoId: paymentId }) });
+    const checkout = result.checkout || {};
+    if (checkout.estado === "confirmed") {
+      state.pendingMPReturn = null; state.checkoutKey = null;
+      setStatus("#cart-status", "Pago aprobado por Mercado Pago. La reserva quedó confirmada.");
+      showToast("Pago aprobado y reserva confirmada.");
+      await Promise.all([loadCart(), loadBookings()]);
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    } else if (checkout.pagoEstado === "rejected" || checkout.estado === "rejected") {
+      state.pendingMPReturn = null; state.checkoutKey = null;
+      setStatus("#cart-status", "El pago fue rechazado. No se confirmó la reserva; podés volver a intentar el pago.", true);
+      await loadCart();
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    } else {
+      setStatus("#cart-status", "Mercado Pago informó que el pago sigue pendiente. Actualizá el carrito en unos segundos para volver a consultarlo.");
     }
   } catch (error) {
     setStatus("#cart-status", error.message, true);
@@ -1248,7 +1286,7 @@ function initialize() {
   $("#logout-button").addEventListener("click", async () => { sessionStorage.removeItem(TOKEN_KEY); showSignedOut(); showToast("Cerraste sesión."); });
   $("#refresh-account").addEventListener("click", loadAccount);
   $("#refresh-bookings").addEventListener("click", loadBookings);
-  $("#refresh-cart").addEventListener("click", loadCart);
+  $("#refresh-cart").addEventListener("click", async () => { await loadCart(); await processPaymentReturn(); });
   $("#cart-checkout").addEventListener("click", confirmCartPurchase);
   $("#refresh-benefits").addEventListener("click", async () => { await Promise.all([loadPoints(), loadBenefits()]); });
   $("#refresh-professional-turns").addEventListener("click", () => Promise.all([loadProfessionalAgenda(), loadProfessionalTurns()]));
@@ -1295,7 +1333,7 @@ function initialize() {
   loadProfessionals();
   loadTreatments();
   syncProfessionalHash();
-  initializeInvitation().then(() => loadAccount());
+  initializeInvitation().then(async () => { await loadAccount(); await processPaymentReturn(); });
 }
 
 initialize();

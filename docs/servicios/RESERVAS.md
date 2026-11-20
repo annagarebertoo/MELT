@@ -2,7 +2,7 @@
 
 ## Responsabilidad y persistencia
 
-Reservas es dueño de agenda, turnos, bloqueos por minuto, carritos, operaciones de checkout y outbox. Usa PostgreSQL en el proyecto privado Supabase **MELT-Reservas**. Las transacciones serializables, la exclusión de intervalos, las claves únicas de los bloqueos y la idempotencia del checkout protegen los cambios concurrentes. Consulta Catálogo para precio/duración/compatibilidad, Catálogo para resolver la cuenta Auth del profesional, Auth para verificar usuarios, Pagos para la simulación, Beneficios para aplicar canjes/restituciones y RabbitMQ para eventos posteriores. Las referencias de Auth, Catálogo, Pagos y Beneficios son IDs/API; no hay joins entre servicios.
+Reservas es dueño de agenda, turnos, bloqueos por minuto, carritos, operaciones de checkout y outbox. Usa PostgreSQL en el proyecto privado Supabase **MELT-Reservas**. Las transacciones serializables, la exclusión de intervalos, las claves únicas de los bloqueos y la idempotencia del checkout protegen los cambios concurrentes. Consulta Catálogo para precio/duración/compatibilidad y resolver la cuenta Auth del profesional, Auth para verificar usuarios, Pagos para crear y verificar preferencias/devoluciones de Mercado Pago, Beneficios para aplicar canjes/restituciones y RabbitMQ para eventos posteriores. Las referencias de Auth, Catálogo, Pagos y Beneficios son IDs/API; no hay joins entre servicios.
 
 ## Endpoints del Gateway y autorización
 
@@ -19,9 +19,10 @@ Prefijo `/api/v1/reservas`; Gateway valida Bearer en todo ese prefijo y pasa ide
 | `POST /carrito/bloqueos` | cliente | Retiene slot y lo agrega al carrito; 10 minutos. |
 | `DELETE /carrito/bloqueos/{id}` | cliente | Quita item propio y libera minutos retenidos. |
 | `POST /carrito/checkout` | cliente | Compra agrupada, calcula importe/seña en backend e idempotencia por cliente + clave. |
+| `POST /carrito/checkout/retorno` | cliente | Verifica el pago en Mercado Pago y confirma el checkout aprobado. |
 | `POST /carrito/bloqueos/{id}/pago`, `/confirmar` y `POST /turnos` | cliente | Rutas de compatibilidad/operación existentes; el flujo recomendado de compra es checkout del carrito. |
 | `DELETE /turnos/{id}` | cliente, profesional, recepción, administrador, superadministrador | Cancela cuando dueño/regla y estado lo permiten. |
-| `POST /turnos/{id}/devolucion/reintentar` | cliente, recepción, administrador, superadministrador | Reintento de devolución simulada. |
+| `POST /turnos/{id}/devolucion/reintentar` | cliente, recepción, administrador, superadministrador | Reintento de devolución ante Mercado Pago. |
 | `POST /turnos/{id}/completar` | profesional | Sólo perfil asignado; turno confirmado. Genera outbox de tratamiento realizado una vez. |
 | `POST /turnos/{id}/no-asistio` | profesional | Sólo perfil asignado; registra inasistencia después de la hora final, sin puntos por realización. |
 

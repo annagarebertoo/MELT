@@ -12,7 +12,7 @@
 | Carrito | Conjunto temporal de horarios retenidos por un mismo cliente antes del checkout. |
 | Retención / bloqueo | Reserva temporal de minutos de un profesional/categoría, expira a los diez minutos si no se confirma. |
 | Checkout | Operación de compra agrupada que recalcula montos y procesa en conjunto los elementos del carrito. |
-| Seña | Porción del total (30 %) que el simulador representa como pago inicial; no es dinero cobrado. |
+| Seña | Porción del total (30 %) cobrada mediante Checkout Pro; este proyecto usa credenciales de prueba. |
 | Simulador de pagos | Servicio Pagos que persiste resultados aprobados/rechazados configurables; no llama a una pasarela. |
 | Idempotencia | Repetir una solicitud con la misma clave/referencia no duplica pago, checkout o acreditación. |
 | Concurrencia | Solicitudes simultáneas que intentan reservar o cambiar el mismo recurso; Reservas combina índices únicos, transacciones y validación en backend. |
@@ -26,4 +26,4 @@
 | Invalidación por generación | Cambia un token común de versión para evitar servir claves de cache creadas antes de una modificación. |
 | Circuit breaker | Patrón que corta temporalmente llamadas a una dependencia fallida. No afirmar que existe en MELT salvo evidencia de una implementación concreta. |
 | Balanceador | Selecciona entre instancias. NGINX/Compose declaran upstream/replicas; el ensayo histórico observó un 504 y no probó failover transparente. |
-| Seña y devolución | Pago/devolución simulada; cancelación se rige por reglas actuales en código (24 h), no por proveedor real. |
+| Seña y devolución | Pago y devolución gestionados por Mercado Pago en modo de prueba; cancelación se rige por las reglas actuales en código (24 h). |

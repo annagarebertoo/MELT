@@ -479,6 +479,14 @@ func (p *postgresStore) checkoutPorClienteClave(ctx context.Context, clienteID, 
 	return decodeSQLJSON[checkoutOperation](p.runner(ctx).QueryRowContext(ctx, checkoutJSON+` where cliente_id=$1 and idempotency_key=$2) x`, clienteID, clave))
 }
 
+func (p *postgresStore) checkoutPorIDCliente(ctx context.Context, id, clienteID string) (checkoutOperation, error) {
+	return decodeSQLJSON[checkoutOperation](p.runner(ctx).QueryRowContext(ctx, checkoutJSON+` where id=$1 and cliente_id=$2) x`, id, clienteID))
+}
+
+func (p *postgresStore) checkoutPorID(ctx context.Context, id string) (checkoutOperation, error) {
+	return decodeSQLJSON[checkoutOperation](p.runner(ctx).QueryRowContext(ctx, checkoutJSON+` where id=$1) x`, id))
+}
+
 func (p *postgresStore) checkout(ctx context.Context, id, clienteID string) (checkoutOperation, error) {
 	return decodeSQLJSON[checkoutOperation](p.runner(ctx).QueryRowContext(ctx, checkoutJSON+` where id=$1 and cliente_id=$2 for update) x`, id, clienteID))
 }

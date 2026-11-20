@@ -66,7 +66,7 @@ Inventario del árbol de `develop` de referencia y del conjunto de documentació
 | `docs/adr/ADR-012-balanceo-carga.md` | Balanceo. |
 | `docs/adr/ADR-013-capacidad-costos.md` | Capacidad/costos estimados, no presupuesto cloud vigente. |
 | `docs/adr/ADR-014-consumo-proveedor.md` | Investigación histórica y actualización GhostKitchen; asignación oficial D9 no confirmada. |
-| `docs/adr/ADR-015-checkout-unico-simulador-pagos.md` | Checkout agrupado y simulador actual. |
+| `docs/adr/ADR-015-checkout-unico-simulador-pagos.md` | Checkout agrupado con Mercado Pago en pruebas. |
 
 ## Contratos OpenAPI y mock
 
@@ -77,7 +77,7 @@ Inventario del árbol de `develop` de referencia y del conjunto de documentació
 | `docs/contracts/catalogo-admin-v1.openapi.json` | CRUD Catálogo y vinculación de cuenta profesional. |
 | `docs/contracts/autenticacion-v1.openapi.yaml` | Auth y administración de usuarios/roles. |
 | `docs/contracts/reservas-checkout-v1.openapi.yaml` | Carrito y checkout agrupado; no cubre todo el servicio Reservas. |
-| `docs/contracts/pagos-simulador-v1.openapi.yaml` | API interna del simulador. |
+| `docs/contracts/pagos-checkout-pro-v1.openapi.yaml` | Contrato interno de Checkout Pro y Webhook firmado. |
 | `docs/contracts/acreditar-puntos-v1.openapi.yaml` | API externa de acreditación. |
 | `docs/contracts/registro-externo-v1.openapi.yaml` | Contrato histórico retirado; conservado por trazabilidad. |
 | `docs/contracts/mock/README.md` | Instrucciones del mock de catálogo. |

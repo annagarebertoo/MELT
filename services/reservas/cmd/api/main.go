@@ -211,6 +211,8 @@ func (s *servidorReservas) router() *gin.Engine {
 	r.GET("/turnos", requiereIdentidad(), requierePermiso("reservas.consultar-turnos"), s.listarTurnos)
 	r.GET("/carrito", requiereIdentidad(), requierePermiso("reservas.crear-bloqueo-carrito"), s.listarCarrito)
 	r.POST("/carrito/checkout", requiereIdentidad(), requierePermiso("reservas.confirmar-bloqueo-carrito"), s.checkoutCarrito)
+	r.POST("/carrito/checkout/retorno", requiereIdentidad(), requierePermiso("reservas.confirmar-bloqueo-carrito"), s.verificarRetornoPago)
+	r.POST("/internal/pagos/mercadopago", s.webhookPagoMP)
 	r.POST("/carrito/bloqueos", requiereIdentidad(), requierePermiso("reservas.crear-bloqueo-carrito"), s.crearBloqueoCarrito)
 	r.POST("/carrito/bloqueos/:id/pago", requiereIdentidad(), requierePermiso("reservas.crear-bloqueo-carrito"), s.iniciarPagoBloqueo)
 	r.POST("/carrito/bloqueos/:id/confirmar", requiereIdentidad(), requierePermiso("reservas.confirmar-bloqueo-carrito"), s.confirmarBloqueoCarrito)

@@ -25,7 +25,7 @@ Beneficios también contiene rutas protegidas de GhostKitchen: `GET /ghostkitche
 
 ## Puntos, eventos y prevención de duplicados
 
-Una compra/pago simulado no acredita puntos automáticamente. Al recibir `tratamiento.realizado`, Beneficios consulta regla activa y registra movimiento idempotente por `eventId`. Reservas no publica ese evento para `no_asistio`. Evento `turno.cancelado` permite restituir un canje asociado. RabbitMQ aplica reintentos limitados; después de cuatro intentos, mensaje se registra en fallidos y queda disponible para reintento administrativo. Los endpoints internos de canjes/invitaciones requieren clave interna y no son rutas públicas.
+Una compra o pago aprobado no acredita puntos automáticamente. Al recibir `tratamiento.realizado`, Beneficios consulta regla activa y registra movimiento idempotente por `eventId`. Reservas no publica ese evento para `no_asistio`. Evento `turno.cancelado` permite restituir un canje asociado. RabbitMQ aplica reintentos limitados; después de cuatro intentos, mensaje se registra en fallidos y queda disponible para reintento administrativo. Los endpoints internos de canjes/invitaciones requieren clave interna y no son rutas públicas.
 
 Beneficios consume mensajes, pero no publica eventos de dominio de Reservas. Las operaciones síncronas con Auth verifican token/usuario y las llamadas internas usan clave de servicio. Errores comunes: 400 validación, 401 sesión/partner inválido, 403 rol/destinatario no autorizado, 404 recurso ausente, 409 idempotencia/estado incompatible, 410 invitación vencida, 422 límite de saldo y 503 dependencia/configuración no disponible. No todos los endpoints comparten el mismo esquema de error; revisar el contrato específico.
 

@@ -78,7 +78,10 @@ services:
       MONGODB_URI: ${MONGODB_URI:?Defini MONGODB_URI con la URI compartida de MongoDB Atlas}
       PAGOS_MONGODB_DATABASE: ${PAGOS_MONGODB_DATABASE:-pagos_db}
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
-      PAYMENT_SIMULATOR_RESULT: ${PAYMENT_SIMULATOR_RESULT:-approved}
+      MP_ENV: ${MP_ENV:-test}
+      MP_TEST_ACCESS_TOKEN: ${MP_TEST_ACCESS_TOKEN:-}
+      MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:-}
+      MELT_PUBLIC_URL: ${MELT_PUBLIC_URL:-http://localhost:8080}
     restart: unless-stopped
 
   auth:

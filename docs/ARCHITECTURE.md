@@ -13,7 +13,7 @@ flowchart LR
   G --> B[Beneficios]
   R -->|HTTP interno| C
   R -->|HTTP interno| A
-  R -->|HTTP interno| P[Pagos: simulador]
+  R -->|HTTP interno| P[Pagos: Mercado Pago Checkout Pro]
   R -->|HTTP interno| B
   R -->|outbox / AMQP| Q[(RabbitMQ)]
   Q --> B
@@ -36,7 +36,7 @@ flowchart LR
 | Auth | Cuentas, credenciales, roles, JWT e invitaciones asociadas al alta. | MongoDB Atlas compartido, base lógica `usuarios_db`. |
 | Catálogo y Profesionales | Categorías, tratamientos, perfiles profesionales y vinculación `authUserId`. | MongoDB Atlas compartido, en bases lógicas separadas `catalogo_db` y `profesionales_db`; OpenSearch y Memcached son proyecciones/infra auxiliares. |
 | Reservas | Agendas semanales, turnos, bloqueos, carritos, checkout y outbox. | PostgreSQL privado del proyecto Supabase `MELT-Reservas`; comunica con Auth, Catálogo, Pagos, Beneficios y RabbitMQ. |
-| Pagos | Operaciones de pago, reversas y devoluciones **simuladas**. | MongoDB Atlas compartido, base lógica `pagos_db`; endpoints internos con clave compartida. |
+| Pagos | Checkout Pro, verificación de pago y devoluciones en modo de prueba. | MongoDB Atlas compartido, base lógica `pagos_db`; endpoints internos con clave compartida. |
 | Beneficios | Puntos, movimientos, reglas, recompensas, canjes, invitaciones externas y fallidos. | PostgreSQL privado del proyecto Supabase `MELT-Beneficios`; consume eventos RabbitMQ y consulta Auth. |
 | Infraestructura | MongoDB Atlas compartido, PostgreSQL Supabase, RabbitMQ, OpenSearch, Memcached, Prometheus, Grafana y Jaeger. | No hay servidores MongoDB ni PostgreSQL de negocio locales en Compose. Reservas y Beneficios usan exclusivamente sus bases PostgreSQL privadas; todos los servicios Mongo se conectan a Atlas. |
 
@@ -54,15 +54,15 @@ Para efectos posteriores, Reservas guarda cambios de turno y evento outbox en un
 
 El registro público crea clientes. La creación de otras cuentas se hace con sesión administrativa; listar/modificar roles está reservado al superadministrador. Gateway verifica JWT en las rutas privadas de Reservas; Reservas vuelve a autorizar cada operación y aplica propiedad del turno/agenda. Beneficios valida nuevamente el Bearer. Catálogo valida administración contra Auth. Roles existentes: `cliente`, `profesional`, `recepcion`, `administrador` y `superadministrador`.
 
-### Reserva, checkout y pago simulado
+### Reserva, checkout y Mercado Pago en pruebas
 
 1. El cliente consulta disponibilidad para un tratamiento, profesional y fecha.
 2. Reservas valida asociación, agenda y conflictos, y crea bloqueo del carrito con vencimiento de diez minutos.
 3. El carrito es propiedad del cliente autenticado; Reservas calcula importes usando Catálogo y descuentos asociados.
 4. `POST /carrito/checkout` toma una clave idempotente, vuelve a validar los bloqueos y calcula total y seña del 30 % en el servidor.
-5. Reservas solicita el pago simulado a Pagos. Si se aprueba, confirma el conjunto de turnos; si falla la confirmación posterior, pide reversa simulada. No se confirma parcialmente el checkout.
+5. Reservas solicita a Pagos una preferencia de Checkout Pro. Tras el retorno o un Webhook con firma válida, Pagos consulta el pago al proveedor y Reservas confirma el conjunto de turnos dentro de una transacción PostgreSQL. No se confirma parcialmente el checkout.
 
-La regla de cancelación actual en código reembolsa simuladamente la seña si se cancela con al menos 24 horas; con menos anticipación no. Confirmar este detalle en las pruebas de demostración; no presentarlo como política externa/legal.
+La regla de cancelación actual solicita a Mercado Pago la devolución de la seña si se cancela con al menos 24 horas; con menos anticipación no. Confirmar este detalle en las pruebas de demostración; no presentarlo como política externa/legal.
 
 ### Turno realizado y puntos
 
@@ -91,7 +91,7 @@ sequenceDiagram
   participant G as NGINX Gateway
   participant R as Reservas
   participant C as Catálogo
-  participant P as Pagos simulados
+  participant P as Pagos / Mercado Pago
   Cliente->>G: GET /carrito (Bearer)
   G->>R: identidad verificada
   R->>C: precio, duración y asociaciones
@@ -99,9 +99,14 @@ sequenceDiagram
   Cliente->>G: POST /carrito/checkout (idempotencyKey)
   G->>R: checkout autenticado
   R->>R: validar bloqueos y recalcular importes
-  R->>P: POST /payments/simulate (clave interna)
-  P-->>R: approved / rejected
-  alt aprobado y confirmación completa
+  R->>P: Crear preferencia Checkout Pro (clave interna)
+  P-->>R: URL de pago en entorno de prueba
+  R-->>Cliente: Redirigir a Checkout Pro
+  Cliente->>P: Volver con payment_id
+  Cliente->>R: POST /carrito/checkout/retorno
+  R->>P: Consultar estado al proveedor
+  P-->>R: estado, importe y referencia verificados
+  alt pago aprobado y confirmación completa
     R->>R: confirmar todos los turnos en transacción
   else rechazo o conflicto
     R->>R: no confirmar turnos; compensar pago si aplica

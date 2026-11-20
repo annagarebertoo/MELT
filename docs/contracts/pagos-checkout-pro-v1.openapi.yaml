@@ -1,0 +1,111 @@
+openapi: 3.0.3
+info:
+  title: MELT Pagos - Mercado Pago Checkout Pro
+  version: 1.0.0
+  description: Operaciones internas de preferencia, verificación y devolución; webhook público autenticado mediante la firma HMAC de Mercado Pago.
+servers:
+  - url: http://pagos:8085
+paths:
+  /payments/preferences:
+    post:
+      security: [{ meltInternalKey: [] }]
+      summary: Crea o recupera una preferencia de Checkout Pro
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [checkoutId, importe, moneda, titulo]
+              properties:
+                checkoutId: { type: string }
+                importe: { type: number, exclusiveMinimum: 0 }
+                moneda: { type: string, enum: [ARS] }
+                titulo: { type: string }
+      responses:
+        '201': { description: Preferencia nueva y URL de prueba }
+        '200': { description: Preferencia ya creada para ese checkout }
+        '400': { description: Datos inválidos o proveedor no configurado }
+        '502': { description: Mercado Pago no respondió correctamente }
+  /payments/verify:
+    post:
+      security: [{ meltInternalKey: [] }]
+      summary: Consulta el pago en Mercado Pago y valida referencia, importe y moneda
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pagoId, importe, moneda, referencia]
+              properties:
+                pagoId: { type: string }
+                importe: { type: number, exclusiveMinimum: 0 }
+                moneda: { type: string, enum: [ARS] }
+                referencia: { type: string, description: ID del checkout MELT }
+      responses:
+        '200': { description: Estado recuperado de la API del proveedor }
+        '409': { description: El pago no coincide con el checkout }
+        '502': { description: No se pudo consultar el pago }
+  /payments/refunds:
+    post:
+      security: [{ meltInternalKey: [] }]
+      summary: Solicita una devolución en Mercado Pago
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pagoId, importe, moneda]
+              properties:
+                pagoId: { type: string }
+                importe: { type: number, exclusiveMinimum: 0 }
+                moneda: { type: string, enum: [ARS] }
+                motivo: { type: string }
+      responses:
+        '201': { description: Devolución aceptada y guardada }
+        '400': { description: Solicitud inválida }
+        '502': { description: Mercado Pago no confirmó la devolución }
+  /webhooks/mercadopago:
+    post:
+      security: []
+      summary: Recibe eventos de pago de Mercado Pago
+      description: Valida x-signature mediante HMAC-SHA256, consulta el pago al proveedor y avisa a Reservas con clave interna.
+      parameters:
+        - in: header
+          name: x-signature
+          required: true
+          schema: { type: string }
+        - in: header
+          name: x-request-id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: data.id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: type
+          required: true
+          schema: { type: string, enum: [payment] }
+      responses:
+        '200': { description: Evento procesado o ignorado }
+        '401': { description: Firma inválida }
+        '502': { description: No se pudo consultar o procesar el pago }
+components:
+  securitySchemes:
+    meltInternalKey:
+      type: apiKey
+      in: header
+      name: X-Melt-Internal-Key

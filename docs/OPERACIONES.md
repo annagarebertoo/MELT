@@ -63,7 +63,10 @@ URLs de UI y endpoints locales se listan en [LOCAL-DEV.md](LOCAL-DEV.md). Promet
 | `MEMCACHED_NAMESPACE` | Catálogo | No | `melt:catalogo` | prefijo de claves compartido entre réplicas del entorno. |
 | `RABBITMQ_URL` | Reservas, Beneficios | No en proceso; depend. eventos | `amqp://guest:guest@rabbitmq:5672/` | publicación/consumo asíncrono no opera. |
 | `MELT_TIMEZONE` | Reservas | No | `America/Argentina/Buenos_Aires` | usa esa zona. Valor inválido recurre a default según test. |
-| `PAYMENT_SIMULATOR_RESULT` | Pagos | No | `approved` o `rejected` | `approved`; cualquier otro valor detiene el proceso. |
+| `MP_ENV` | Pagos | Sí en Render | `test` | Pagos rechaza valores distintos de `test`. |
+| `MP_TEST_ACCESS_TOKEN` | Pagos | Sí para checkout | Access Token copiado con el entorno Prueba seleccionado en Mercado Pago Developers | Sin token, checkout responde no disponible; se usa sólo el enlace sandbox y se rechaza cualquier pago marcado como real. |
+| `MP_WEBHOOK_SECRET` | Pagos | Sí para checkout | secreto de Webhooks de la aplicación de prueba | Se valida la firma HMAC de cada notificación. |
+| `MELT_PUBLIC_URL` | Pagos y Beneficios | Sí en Render | `https://melt-gateway-prueba.onrender.com` | Retorno de Mercado Pago y enlaces de invitación. |
 | `BENEFICIOS_PARTNER_KEY` | Beneficios | No para API interna; sí para partner | secreto provisionado privadamente | acreditación externa devuelve no disponible. |
 | `BENEFICIOS_INVITATION_SECRET` | Beneficios | Opcional según flujo | secreto aleatorio estable | enlaces de invitación no se pueden emitir/validar correctamente. |
 | `MELT_PUBLIC_URL` | Beneficios | No | `http://localhost:8080` | default local para URL de invitación. |

@@ -82,7 +82,7 @@ Resultado esperado: `201 Created` y el tratamiento creado en el cuerpo de la res
 
 Los perfiles activos se consultan en `GET /api/v1/profesionales?tratamientoId={id}`. Para habilitar un tratamiento, asociá el ID de un profesional tanto en el perfil (`tratamientosIds`) como en el tratamiento (`profesionalesIds`) y configurá su agenda con `PUT /api/v1/reservas/agenda`. Las tres operaciones de Catálogo requieren un token administrativo. Reservas valida el ID, la duración, la compatibilidad y el horario antes de crear un bloqueo.
 
-El flujo visual y los ejemplos de preparación de profesional, tratamiento y agenda están en [RESERVAS-WEB.md](RESERVAS-WEB.md). El simulador local funciona sin credenciales externas; configura opcionalmente `PAYMENT_SIMULATOR_RESULT=rejected` para probar un rechazo. El valor predeterminado es `approved`.
+El flujo visual y los ejemplos de preparación de profesional, tratamiento y agenda están en [RESERVAS-WEB.md](RESERVAS-WEB.md). El checkout de Mercado Pago requiere un dominio HTTPS público, `MP_ENV=test`, un Access Token copiado desde el entorno Prueba y el secreto Webhook. Sin esas variables, el resto del sistema puede funcionar en local, pero el checkout no se inicia.
 
 Al desplegar Catálogo fuera de Compose, definí `AUTH_URL` con la URL base interna o privada del servicio Auth, por ejemplo `https://melt-tygp.onrender.com`. En Compose, el servicio usa `http://auth:8084` como valor predeterminado. No configures la URL de Auth en el frontend.
 

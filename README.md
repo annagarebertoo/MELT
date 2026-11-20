@@ -8,7 +8,7 @@ MELT es una aplicación web para la operación de un centro de estética: ofrece
 - Categorías, tratamientos y perfiles públicos de profesionales, con asociaciones entre ambos.
 - Agenda semanal profesional, consulta de disponibilidad, reservas y gestión de turnos.
 - Carrito único por cliente, retenciones temporales de 10 minutos y checkout agrupado.
-- Pago simulado, con seña del 30 % y sin cobros reales.
+- Checkout Pro de Mercado Pago en modo de prueba, con seña del 30 %.
 - Puntos y recompensas, canjes, y acreditación externa autenticada.
 - Consulta de sedes y platos de GhostKitchen mediante un proxy server-side de Beneficios, si el proveedor está configurado.
 
@@ -58,7 +58,7 @@ Las variables opcionales, pruebas, comandos de diagnóstico, rutas locales y apa
 
 ## Integraciones y límites relevantes
 
-El servicio Pagos implementa un simulador interno: la variable local `PAYMENT_SIMULATOR_RESULT` controla el resultado de demostración (`approved` por defecto o `rejected`); no hay cobro externo. La integración de puntos para el Grupo 1 se documenta en [Integración Gimnasio](docs/INTEGRACION-GIMNASIO.md). La aplicación incluye un cliente server-side para GhostKitchen, pero una ejecución real requiere configuración y disponibilidad del proveedor; ver [Integración GhostKitchen](docs/GHOSTKITCHEN.md). Los servicios publicados y URLs pueden estar desactualizados: consultar [el estado documentado del despliegue](docs/OPERACIONES.md#entorno-remoto) y verificar el entorno antes de una demostración.
+El servicio Pagos usa Checkout Pro con credenciales copiadas desde el entorno de prueba, valida pagos y webhooks en el backend y mantiene preferencias en MongoDB Atlas. La integración de puntos para el Grupo 1 se documenta en [Integración Gimnasio](docs/INTEGRACION-GIMNASIO.md). La aplicación incluye un cliente server-side para GhostKitchen, pero una ejecución real requiere configuración y disponibilidad del proveedor; ver [Integración GhostKitchen](docs/GHOSTKITCHEN.md). Los servicios publicados y URLs pueden estar desactualizados: consultar [el estado documentado del despliegue](docs/OPERACIONES.md#entorno-remoto) y verificar el entorno antes de una demostración.
 
 ## Equipo y repositorio
 

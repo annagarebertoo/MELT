@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Reservas MELT - Carrito y checkout agrupado
   version: 1.0.0
-  description: Contrato público para retenciones propias y una compra simulada que agrupa varios turnos.
+  description: Contrato público para retenciones propias y checkout Pro de Mercado Pago que agrupa varios turnos.
 servers:
   - url: /api/v1/reservas
 security:
@@ -60,8 +60,8 @@ paths:
         '409': { description: El elemento participa en un checkout en curso }
   /carrito/checkout:
     post:
-      summary: Simula una compra única y confirma todos los turnos del carrito
-      description: El cliente no envía precios ni resultado de pago. Repetir la misma clave recupera el checkout sin duplicar pagos o reservas.
+      summary: Crea o recupera el checkout único del carrito
+      description: El servidor calcula precios y seña y devuelve una URL de Mercado Pago. Los turnos quedan pendientes hasta que el backend verifica el pago aprobado.
       requestBody:
         required: true
         content:
@@ -72,11 +72,30 @@ paths:
               properties:
                 idempotencyKey: { type: string, minLength: 8, maxLength: 80 }
       responses:
-        '201': { description: Todos los turnos quedaron confirmados }
-        '200': { description: Resultado recuperado o checkout rechazado }
+        '201': { description: Checkout de Mercado Pago iniciado; consultar checkout.urlPago }
+        '200': { description: Checkout previo recuperado }
         '400': { description: Carrito vacío o clave inválida }
         '409': { description: Un horario venció o cambió; no hubo confirmación parcial }
         '503': { description: Pagos no está disponible; se conserva el carrito }
+  /carrito/checkout/retorno:
+    post:
+      summary: Verifica el retorno del checkout y confirma la compra aprobada
+      description: El servidor consulta Mercado Pago; no confía en el estado de pago enviado por el navegador.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [checkoutId, pagoId]
+              properties:
+                checkoutId: { type: string }
+                pagoId: { type: string }
+      responses:
+        '200': { description: Estado verificado y reservas confirmadas si el pago está aprobado }
+        '400': { description: Datos de retorno inválidos }
+        '404': { description: Checkout propio no encontrado }
+        '502': { description: No se pudo verificar o procesar el pago }
 components:
   securitySchemes:
     bearerAuth:
