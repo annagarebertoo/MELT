@@ -1365,7 +1365,7 @@ function initialize() {
   $("#rule-admin-form").addEventListener("submit", saveRuleAdmin);
   $("#profile-reservations").addEventListener("click", () => $("#my-bookings").scrollIntoView({ behavior: "smooth" }));
   document.querySelectorAll("[data-booking-auth]").forEach((button) => button.addEventListener("click", () => { setAuthMode(button.dataset.bookingAuth); $("#auth-email").focus({ preventScroll: true }); }));
-  document.querySelectorAll("[data-scroll]").forEach((button) => button.addEventListener("click", () => { window.location.hash = "#/cuenta"; }));
+  document.querySelectorAll("[data-scroll]").forEach((button) => button.addEventListener("click", () => { const target = button.dataset.scroll; const page = target === "tratamientos" || target === "seleccion" ? "tratamientos" : target === "profesionales" ? "profesionales" : target === "reservas" ? "reservas" : "cuenta"; window.location.hash = `#/${page}`; }));
   document.querySelectorAll("[data-register]").forEach((button) => button.addEventListener("click", () => setAuthMode("register")));
   $("#detail-book").addEventListener("click", () => {
     const id = $("#detail-book").dataset.id;
