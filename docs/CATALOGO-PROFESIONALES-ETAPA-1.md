@@ -1,5 +1,7 @@
 # Catálogo y Profesionales — etapa 1 (Sofía)
 
+> **Nota de vigencia (19/11/2026):** este informe registra el alcance y las pruebas de la etapa de Catálogo. Las menciones a GhostKitchen describen únicamente esa etapa y no el estado actual de la integración. Para la implementación vigente y su verificación real, consultar [Integración GhostKitchen](GHOSTKITCHEN.md) y la [matriz de cumplimiento](MATRIZ-CUMPLIMIENTO.md).
+
 ## Base y alcance
 
 Rama local `feature/sofi-catalogo-profesionales`, creada desde la rama remota
