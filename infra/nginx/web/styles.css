@@ -560,3 +560,21 @@ body[data-page="cuenta"] #points-panel .movement-row,body[data-page="cuenta"] #p
 body[data-page="cuenta"] #points-panel .reward-row .button{border-radius:999px}
 body[data-page="cuenta"] #my-bookings{border:1px solid #e5dacb;border-radius:18px;background:#fffdf9;box-shadow:0 10px 28px rgba(55,40,28,.035)}
 @media(max-width:720px){body[data-page="cuenta"] #points-panel .benefits-columns{grid-template-columns:1fr}body[data-page="cuenta"] #profile-panel .profile-email{margin-left:0}body[data-page="cuenta"] #profile-panel .points-box{align-items:flex-start;flex-wrap:wrap}body[data-page="cuenta"] #profile-panel:after{font-size:10rem;right:8px;top:0}}
+
+
+/* Separación funcional de cuenta, reservas y carrito */
+.header-cart-link{display:inline-flex!important;align-items:center;gap:8px}
+.header-cart-link.hidden{display:none!important}
+.header-cart-link .cart-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:50%;background:#e8d8c0;color:#56382b;font-size:.68rem;font-weight:800}
+body[data-page="cuenta"] #my-bookings{display:none!important}
+body[data-page="cuenta"] #profile-ghostkitchen{display:none!important}
+body[data-page="cuenta"] #ghostkitchen-panel{display:none!important}
+body[data-page="cuenta"] #auth-panel.signed-out~#ghostkitchen-panel{display:block!important}
+body[data-page="reservas"] #ghostkitchen-panel{display:none!important}
+body[data-page="reservas"] #my-bookings{display:block!important;max-width:1100px;margin:34px auto 0;padding:clamp(24px,4vw,38px);border:1px solid #e4d6c4;border-radius:22px;background:linear-gradient(135deg,#fffdf9 0%,#f5eee3 100%);box-shadow:0 18px 46px rgba(65,43,31,.08)}
+body[data-page="reservas"] #my-bookings .bookings-heading{padding-bottom:18px;border-bottom:1px solid #e6d9c9}
+body[data-page="reservas"] #my-bookings .bookings-heading .eyebrow{color:#987452}
+body[data-page="reservas"] #my-bookings .bookings-heading h3{font-size:clamp(1.8rem,3vw,2.5rem);color:#56382b}
+body[data-page="reservas"] #my-bookings #bookings-list{display:grid;gap:12px;margin-top:18px}
+body[data-page="reservas"] #my-bookings #bookings-list>*{padding:18px 20px;border:1px solid #eadfD2;border-radius:14px;background:#fff}
+@media(max-width:900px){.header-cart-link{display:none!important}}
