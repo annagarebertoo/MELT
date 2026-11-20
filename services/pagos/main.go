@@ -288,7 +288,7 @@ func (s *server) procesarWebhookOrder(w http.ResponseWriter, ctx context.Context
 		writeError(w, http.StatusBadGateway, "No se pudo consultar la orden notificada")
 		return
 	}
-	if order.ID != orderID || order.LiveMode {
+	if order.ID != orderID || !mpOrderIsTest(order) {
 		writeError(w, http.StatusConflict, "La orden no pertenece al entorno de prueba")
 		return
 	}
@@ -366,7 +366,7 @@ func (s *server) verificarOrder(w http.ResponseWriter, ctx context.Context, req 
 	}
 	amount, amountErr := strconv.ParseFloat(order.TotalAmount, 64)
 	paid, paidErr := strconv.ParseFloat(order.TotalPaidAmount, 64)
-	if order.ID != req.PaymentID || order.LiveMode || order.ExternalReference != req.Reference || order.Currency != req.Currency || amountErr != nil || paidErr != nil || math.Abs(amount-req.Amount) >= 0.009 {
+	if order.ID != req.PaymentID || !mpOrderIsTest(order) || order.ExternalReference != req.Reference || order.Currency != req.Currency || amountErr != nil || paidErr != nil || math.Abs(amount-req.Amount) >= 0.009 {
 		writeError(w, http.StatusConflict, "La orden no coincide con el checkout MELT")
 		return
 	}
@@ -374,6 +374,14 @@ func (s *server) verificarOrder(w http.ResponseWriter, ctx context.Context, req 
 	state := mpOrderState(order)
 	_, _ = s.payments.UpdateOne(ctx, bson.M{"checkoutId": req.Reference}, bson.M{"$set": bson.M{"providerOrderId": order.ID, "providerPaymentId": mpOrderPaymentID(order), "estado": state}})
 	writeJSON(w, http.StatusOK, map[string]any{"checkoutId": order.ExternalReference, "pagoId": req.PaymentID, "estado": state, "aprobado": approved, "importe": amount, "moneda": order.Currency})
+}
+
+// Mercado Pago's sandbox Checkout Pro orders use the ORDTST identifier even
+// though some webhook deliveries mark live_mode=true. The resource is still
+// fetched with the configured test access token and independently matched to
+// the pending MELT checkout before it can confirm a reservation.
+func mpOrderIsTest(order mpOrder) bool {
+	return !order.LiveMode || strings.HasPrefix(strings.ToUpper(order.ID), "ORDTST")
 }
 
 func mpOrderState(order mpOrder) string {

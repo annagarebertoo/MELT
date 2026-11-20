@@ -27,6 +27,24 @@ func TestSimulatorResultOnlyAllowsBackendConfiguredOutcomes(t *testing.T) {
 	}
 }
 
+func TestMPOrderTestEnvironmentDetection(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		order mpOrder
+		want  bool
+	}{
+		{name: "sandbox order marked live by webhook", order: mpOrder{ID: "ORDTST01M7W22Q1FD49CY7R1TKX5WG3K", LiveMode: true}, want: true},
+		{name: "sandbox order marked as test", order: mpOrder{ID: "ORD01K9SN1Q5959CGN8QGW00EH7V5", LiveMode: false}, want: true},
+		{name: "production order", order: mpOrder{ID: "ORD01K9SN1Q5959CGN8QGW00EH7V5", LiveMode: true}, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mpOrderIsTest(tc.order); got != tc.want {
+				t.Fatalf("mpOrderIsTest() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestInternalPaymentRoutesRejectClientSelectedApproval(t *testing.T) {
 	s := &server{internalKey: "local-internal-key", result: "approved"}
 	for _, tc := range []struct {
