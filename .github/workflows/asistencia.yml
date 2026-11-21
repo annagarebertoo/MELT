@@ -1,0 +1,36 @@
+name: Asistencia en PostgreSQL
+on:
+  push:
+    branches: [codex/supabase-postgres-migration]
+    paths:
+      - 'services/reservas/**'
+      - 'infra/supabase/reservas.sql'
+      - '.github/workflows/asistencia.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  asistencia:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: reservas
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 3s --health-retries 12
+    env:
+      RESERVAS_TEST_DATABASE_URL: postgres://postgres:ci@localhost:5432/reservas?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/reservas/go.mod
+          cache-dependency-path: services/reservas/go.sum
+      - name: Aplicar esquema de Reservas
+        run: psql "$RESERVAS_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f infra/supabase/reservas.sql
+      - name: Verificar asistencia, persistencia y eventos
+        working-directory: services/reservas
+        run: go test -race ./cmd/api -run '^TestAsistenciaPostgres$' -count=1 -v
