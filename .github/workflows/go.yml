@@ -7,6 +7,7 @@ on:
       - develop
       - docs/correcciones-reglas-negocio
       - 'feature/**'
+      - codex/supabase-postgres-migration
   pull_request:
 
 permissions:
@@ -59,10 +60,8 @@ jobs:
           go-version-file: ${{ matrix.service }}/go.mod
           cache: true
           cache-dependency-path: ${{ matrix.service }}/go.sum
-      - name: Normalizar y descargar dependencias
-        run: |
-          go mod tidy
-          go mod download
+      - name: Verificar dependencias sin modificar go.mod ni go.sum
+        run: go mod download
       - name: Ejecutar pruebas
         run: go test -race ./...
       - name: Compilar servicio
