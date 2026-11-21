@@ -13,6 +13,8 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
+	"slices"
 	"os"
 	"strconv"
 	"strings"
@@ -163,9 +165,27 @@ func (s *server) createPreference(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
+	// Checkout Pro uses the regular checkout URL even for test sellers.
+	var seller struct {
+		Tags []string `json:"tags"`
+	}
+	if err := s.mpRequest(ctx, http.MethodGet, "/users/me", nil, &seller); err != nil || !slices.Contains(seller.Tags, "test_user") {
+		writeError(w, http.StatusServiceUnavailable, "No se pudo verificar el vendedor de prueba de Mercado Pago")
+		return
+	}
 	var existing payment
 	err := s.payments.FindOne(ctx, bson.M{"checkoutId": req.CheckoutID}).Decode(&existing)
 	if err == nil && existing.InitPoint != "" && existing.Amount == req.Amount && existing.Currency == req.Currency {
+		if strings.HasPrefix(existing.InitPoint, "https://sandbox.") {
+			var preference struct {
+				InitPoint string `json:"init_point"`
+			}
+			if err := s.mpRequest(ctx, http.MethodGet, "/checkout/preferences/"+url.PathEscape(existing.PreferenceID), nil, &preference); err != nil || !strings.HasPrefix(preference.InitPoint, "https://") {
+				writeError(w, http.StatusBadGateway, "No se pudo recuperar el enlace del checkout de prueba")
+				return
+			}
+			existing.InitPoint = preference.InitPoint
+		}
 		writeJSON(w, http.StatusOK, preferenceResult{ID: existing.PreferenceID, CheckoutID: existing.CheckoutID, Amount: existing.Amount, Currency: existing.Currency, Status: existing.Status, InitPoint: existing.InitPoint})
 		return
 	}
@@ -181,14 +201,13 @@ func (s *server) createPreference(w http.ResponseWriter, r *http.Request) {
 	var mpResp struct {
 		ID               string `json:"id"`
 		InitPoint        string `json:"init_point"`
-		SandboxInitPoint string `json:"sandbox_init_point"`
 	}
 	payload := map[string]any{"items": []any{map[string]any{"title": req.Title, "quantity": 1, "unit_price": req.Amount, "currency_id": req.Currency}}, "external_reference": req.CheckoutID, "back_urls": map[string]string{"success": returnURL, "failure": returnURL, "pending": returnURL}, "auto_return": "approved", "notification_url": strings.TrimRight(s.publicURL, "/") + "/api/v1/pagos/webhooks/mercadopago"}
 	if err := s.mpRequest(ctx, http.MethodPost, "/checkout/preferences", payload, &mpResp); err != nil || mpResp.ID == "" {
 		writeError(w, http.StatusBadGateway, "Mercado Pago no pudo iniciar el checkout de prueba")
 		return
 	}
-	url := mpResp.SandboxInitPoint
+	url := mpResp.InitPoint
 	if !strings.HasPrefix(url, "https://") {
 		writeError(w, http.StatusBadGateway, "Mercado Pago no devolvió una URL de checkout de prueba")
 		return
