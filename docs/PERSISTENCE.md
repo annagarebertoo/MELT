@@ -1,6 +1,6 @@
 # MELT — Validación de D3: Persistencia
 
-> **Registro histórico:** evidencia del 23/10/2026 para la rama y commit indicados debajo. Desde entonces Reservas, Pagos y Beneficios usan MongoDB para sus colecciones actuales, y Reservas usa transacciones/outbox. La tabla de este documento no es el inventario vigente; consultar [arquitectura](ARCHITECTURE.md) y [matriz](MATRIZ-CUMPLIMIENTO.md). Se conserva la evidencia original sin reescribir sus resultados.
+> **Registro histórico:** evidencia del 23/10/2026 para la rama y commit indicados debajo. Describe un estado anterior a la migración actual: en aquella revisión Reservas, Pagos y Beneficios usaban MongoDB y Reservas transacciones/outbox. Hoy Pagos sigue en MongoDB; Reservas y Beneficios usan PostgreSQL privado en Supabase. La tabla y los hallazgos de abajo no son el inventario vigente; consultar [arquitectura](ARCHITECTURE.md), [matriz](MATRIZ-CUMPLIMIENTO.md) y [ADR-003](adr/ADR-003-persistencia.md). Se conserva la evidencia histórica sin reescribir sus resultados.
 
 **Responsable:** Sofía. **Entrega:** 2 — 23 de octubre de 2026.
 

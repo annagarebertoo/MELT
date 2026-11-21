@@ -49,18 +49,22 @@ type checkoutOperation struct {
 	ActualizadoEn  time.Time      `bson:"actualizadoEn" json:"actualizadoEn"`
 }
 
-type simulatePaymentRequest struct {
-	CheckoutID string  `json:"checkoutId"`
-	Amount     float64 `json:"importe"`
-	Currency   string  `json:"moneda"`
-}
-
-type simulatedPayment struct {
+type checkoutPreference struct {
 	ID         string  `json:"id"`
 	CheckoutID string  `json:"checkoutId"`
 	Amount     float64 `json:"importe"`
 	Currency   string  `json:"moneda"`
 	Status     string  `json:"estado"`
+	InitPoint  string  `json:"urlPago"`
+}
+
+type paymentVerification struct {
+	CheckoutID string  `json:"checkoutId"`
+	PaymentID  string  `json:"pagoId"`
+	Status     string  `json:"estado"`
+	Approved   bool    `json:"aprobado"`
+	Amount     float64 `json:"importe"`
+	Currency   string  `json:"moneda"`
 }
 
 type profesionalCatalogo struct {
@@ -97,49 +101,57 @@ func (s *servidorReservas) profesionalCompatible(ctx context.Context, profession
 	return errors.New("el profesional ya no está asociado al tratamiento")
 }
 
-func (s *servidorReservas) simularPago(ctx context.Context, checkoutID string, amount float64) (simulatedPayment, error) {
-	var payment simulatedPayment
-	body, _ := json.Marshal(simulatePaymentRequest{CheckoutID: checkoutID, Amount: amount, Currency: "ARS"})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.pagosURL, "/")+"/payments/simulate", strings.NewReader(string(body)))
+func (s *servidorReservas) crearPreferenciaMP(ctx context.Context, order checkoutOperation) (checkoutPreference, error) {
+	var result checkoutPreference
+	body, _ := json.Marshal(map[string]any{"checkoutId": order.ID, "importe": order.Sena, "moneda": "ARS", "titulo": "Seña de reserva MELT"})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.pagosURL, "/")+"/payments/preferences", strings.NewReader(string(body)))
 	if err != nil {
-		return payment, err
+		return result, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Melt-Internal-Key", s.internalKey)
-	req.Header.Set("Idempotency-Key", "checkout-"+checkoutID)
+	req.Header.Set("Idempotency-Key", "checkout-"+order.ID)
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return payment, err
+		return result, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		return payment, errors.New("Pagos no pudo registrar la simulación")
+		return result, errors.New("Pagos no pudo crear la preferencia de Mercado Pago")
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payment); err != nil {
-		return payment, err
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return result, err
 	}
-	if payment.ID == "" || payment.CheckoutID != checkoutID || payment.Currency != "ARS" || math.Abs(payment.Amount-amount) > 0.009 || (payment.Status != "approved" && payment.Status != "rejected") {
-		return payment, errors.New("Pagos devolvió una operación simulada inválida")
+	if result.ID == "" || result.CheckoutID != order.ID || result.Currency != "ARS" || math.Abs(result.Amount-order.Sena) > 0.009 || !strings.HasPrefix(result.InitPoint, "https://") {
+		return result, errors.New("Pagos devolvió una preferencia inválida")
 	}
-	return payment, nil
+	return result, nil
 }
 
-func (s *servidorReservas) revertirPago(ctx context.Context, paymentID string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.pagosURL, "/")+"/payments/"+paymentID+"/reverse", strings.NewReader(`{}`))
+func (s *servidorReservas) verificarPagoMP(ctx context.Context, checkoutID, paymentID string, amount float64) (paymentVerification, error) {
+	var result paymentVerification
+	body, _ := json.Marshal(map[string]any{"pagoId": paymentID, "importe": amount, "moneda": "ARS", "referencia": checkoutID})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.pagosURL, "/")+"/payments/verify", strings.NewReader(string(body)))
 	if err != nil {
-		return err
+		return result, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Melt-Internal-Key", s.internalKey)
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return err
+		return result, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("Pagos no pudo revertir la operación simulada")
+		return result, errors.New("Pagos no pudo verificar la operación en Mercado Pago")
 	}
-	return nil
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return result, err
+	}
+	if result.CheckoutID != checkoutID || result.PaymentID != paymentID || result.Currency != "ARS" || math.Abs(result.Amount-amount) > 0.009 {
+		return result, errors.New("la operación verificada no coincide con el checkout")
+	}
+	return result, nil
 }
 
 func (s *servidorReservas) checkoutCarrito(c *gin.Context) {
@@ -161,64 +173,193 @@ func (s *servidorReservas) checkoutCarrito(c *gin.Context) {
 	defer cancel()
 	filter := bson.M{"clienteId": u.ID, "idempotencyKey": req.IdempotencyKey}
 	var order checkoutOperation
-	err := s.checkouts.FindOne(ctx, filter).Decode(&order)
-	if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+	var err error
+	if s.pg != nil {
+		order, err = s.pg.checkoutPorClienteClave(ctx, u.ID, req.IdempotencyKey)
+	} else {
+		err = s.checkouts.FindOne(ctx, filter).Decode(&order)
+	}
+	noOrder := errors.Is(err, mongo.ErrNoDocuments) || sqlNotFound(err)
+	if err != nil && !noOrder {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo recuperar la compra"})
 		return
 	}
-	if errors.Is(err, mongo.ErrNoDocuments) {
+	if noOrder {
 		order, err = s.prepareCheckout(ctx, u.ID, req.IdempotencyKey)
 		if err != nil {
 			status := http.StatusConflict
 			code := "CHECKOUT_NO_DISPONIBLE"
-			if errors.Is(err, mongo.ErrNoDocuments) {
+			if errors.Is(err, mongo.ErrNoDocuments) || sqlNotFound(err) {
 				status, code = http.StatusBadRequest, "CARRITO_VACIO"
 			}
 			c.JSON(status, gin.H{"error": gin.H{"code": code, "message": err.Error()}})
 			return
 		}
 	}
-	if order.Estado == "confirmed" || order.Estado == "rejected" || order.Estado == "reverted" {
+	if order.Estado == "confirmed" || order.Estado == "rejected" || order.Estado == "reverted" || order.Estado == "approval_needs_recovery" {
 		c.JSON(http.StatusOK, checkoutResponse(order))
 		return
 	}
-	payment, err := s.simularPago(ctx, order.ID, order.Sena)
+	preference, err := s.crearPreferenciaMP(ctx, order)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "PAGO_SIMULADO_NO_DISPONIBLE", "message": "No pudimos registrar la compra simulada; tus horarios siguen retenidos durante su vigencia."}})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "PAGO_NO_DISPONIBLE", "message": "No pudimos iniciar el pago de prueba; tus horarios siguen retenidos durante su vigencia."}})
 		return
 	}
-	order.PagoID = payment.ID
-	if payment.Status == "rejected" {
-		_, _ = s.checkouts.UpdateOne(ctx, bson.M{"_id": order.ID, "estado": "processing"}, bson.M{"$set": bson.M{"estado": "rejected", "pagoId": payment.ID, "actualizadoEn": time.Now().UTC()}})
-		_, _ = s.carritos.UpdateMany(ctx, bson.M{"_id": bson.M{"$in": order.ItemIDs}, "clienteId": u.ID, "checkoutId": order.ID}, bson.M{"$unset": bson.M{"checkoutId": ""}})
-		order.Estado = "rejected"
+	order.PagoID = preference.ID
+	order.Estado = "processing"
+	if s.pg != nil {
+		_, _ = s.pg.actualizarCheckout(ctx, order.ID, "processing", preference.ID, time.Now().UTC())
+	}
+	response := checkoutResponse(order)
+	response["checkout"].(gin.H)["urlPago"] = preference.InitPoint
+	c.JSON(http.StatusCreated, response)
+}
+
+func (s *servidorReservas) verificarRetornoPago(c *gin.Context) {
+	u := c.MustGet("identidad").(identidad)
+	var req struct {
+		CheckoutID string `json:"checkoutId"`
+		PaymentID  string `json:"pagoId"`
+	}
+	decoder := json.NewDecoder(io.LimitReader(c.Request.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&req) != nil || !validCheckoutKey(req.CheckoutID) || !validCheckoutKey(req.PaymentID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Retorno de pago inválido"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+	defer cancel()
+	var order checkoutOperation
+	var err error
+	if s.pg != nil {
+		order, err = s.pg.checkoutPorIDCliente(ctx, req.CheckoutID, u.ID)
+	} else {
+		err = s.checkouts.FindOne(ctx, bson.M{"_id": req.CheckoutID, "clienteId": u.ID}).Decode(&order)
+	}
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Checkout no encontrado"})
+		return
+	}
+	if order.Estado == "confirmed" {
 		c.JSON(http.StatusOK, checkoutResponse(order))
 		return
 	}
-	order.Estado = "processing"
-	if err := s.confirmarCheckout(ctx, &order, payment.ID); err != nil {
-		reverseErr := s.revertirPago(ctx, payment.ID)
-		status := "reverted"
-		if reverseErr != nil {
-			status = "approval_needs_recovery"
-		} else {
-			_, _ = s.carritos.UpdateMany(context.Background(), bson.M{"_id": bson.M{"$in": order.ItemIDs}, "clienteId": order.ClienteID, "checkoutId": order.ID, "estado": "pendiente_pago"}, bson.M{"$unset": bson.M{"checkoutId": ""}})
-		}
-		_, _ = s.checkouts.UpdateOne(context.Background(), bson.M{"_id": order.ID, "estado": "processing"}, bson.M{"$set": bson.M{"estado": status, "pagoId": payment.ID, "actualizadoEn": time.Now().UTC(), "errorConfirmacion": safeError(err)}})
-		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CHECKOUT_NO_CONFIRMADO", "message": "No se confirmaron reservas parciales. La simulación fue revertida; volvé a revisar los horarios retenidos."}})
+	if order.Estado != "processing" {
+		c.JSON(http.StatusConflict, gin.H{"error": "Este checkout ya no está pendiente"})
 		return
 	}
-	c.JSON(http.StatusCreated, checkoutResponse(order))
+	verified, err := s.procesarResultadoPago(ctx, &order, req.PaymentID)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "No se pudo comprobar o procesar el pago. Actualizá el estado en unos segundos."})
+		return
+	}
+	response := checkoutResponse(order)
+	response["checkout"].(gin.H)["pagoEstado"] = verified.Status
+	c.JSON(http.StatusOK, response)
+}
+
+func (s *servidorReservas) webhookPagoMP(c *gin.Context) {
+	if s.internalKey == "" || c.GetHeader("X-Melt-Internal-Key") != s.internalKey {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Operación interna no autorizada"})
+		return
+	}
+	var req struct {
+		CheckoutID string `json:"checkoutId"`
+		PaymentID  string `json:"pagoId"`
+	}
+	if c.ShouldBindJSON(&req) != nil || !validCheckoutKey(req.CheckoutID) || !validCheckoutKey(req.PaymentID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Notificación interna inválida"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+	defer cancel()
+	var order checkoutOperation
+	var err error
+	if s.pg != nil {
+		order, err = s.pg.checkoutPorID(ctx, req.CheckoutID)
+	} else {
+		err = s.checkouts.FindOne(ctx, bson.M{"_id": req.CheckoutID}).Decode(&order)
+	}
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Checkout no encontrado"})
+		return
+	}
+	if order.Estado == "confirmed" {
+		c.JSON(http.StatusOK, checkoutResponse(order))
+		return
+	}
+	if order.Estado != "processing" {
+		c.JSON(http.StatusOK, checkoutResponse(order))
+		return
+	}
+	if _, err := s.procesarResultadoPago(ctx, &order, req.PaymentID); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "No se pudo procesar el pago notificado"})
+		return
+	}
+	c.JSON(http.StatusOK, checkoutResponse(order))
+}
+
+func (s *servidorReservas) procesarResultadoPago(ctx context.Context, order *checkoutOperation, paymentID string) (paymentVerification, error) {
+	verified, err := s.verificarPagoMP(ctx, order.ID, paymentID, order.Sena)
+	if err != nil {
+		return verified, err
+	}
+	order.PagoID = paymentID
+	if verified.Approved {
+		if err := s.confirmarCheckout(ctx, order, paymentID); err != nil {
+			refundErr := s.devolverSena(ctx, paymentID, order.Sena, "refund-checkout-"+order.ID, "checkout_no_confirmado")
+			status := "reverted"
+			if refundErr != nil {
+				status = "approval_needs_recovery"
+			} else if s.pg != nil {
+				_ = s.pg.limpiarCheckoutCarritos(context.Background(), order.ItemIDs, order.ClienteID, order.ID)
+			} else {
+				_, _ = s.carritos.UpdateMany(context.Background(), bson.M{"_id": bson.M{"$in": order.ItemIDs}, "clienteId": order.ClienteID, "checkoutId": order.ID, "estado": "pendiente_pago"}, bson.M{"$unset": bson.M{"checkoutId": ""}})
+			}
+			if s.pg != nil {
+				_ = s.pg.marcarCheckoutResultado(context.Background(), order.ID, status, paymentID, time.Now().UTC())
+			} else {
+				_, _ = s.checkouts.UpdateOne(context.Background(), bson.M{"_id": order.ID, "estado": "processing"}, bson.M{"$set": bson.M{"estado": status, "pagoId": paymentID, "actualizadoEn": time.Now().UTC(), "errorConfirmacion": safeError(errors.Join(err, refundErr))}})
+			}
+			order.Estado = status
+			if refundErr != nil {
+				return verified, errors.Join(errors.New("el pago fue aprobado, pero no se confirmó la reserva ni se pudo completar la devolución"), refundErr)
+			}
+		}
+	} else if verified.Status == "rejected" || verified.Status == "cancelled" {
+		order.Estado = "rejected"
+		if s.pg != nil {
+			_, _ = s.pg.actualizarCheckout(ctx, order.ID, "rejected", paymentID, time.Now().UTC())
+			_ = s.pg.limpiarCheckoutCarritos(ctx, order.ItemIDs, order.ClienteID, order.ID)
+		} else {
+			_, _ = s.checkouts.UpdateOne(ctx, bson.M{"_id": order.ID, "estado": "processing"}, bson.M{"$set": bson.M{"estado": "rejected", "pagoId": paymentID, "actualizadoEn": time.Now().UTC()}})
+			_, _ = s.carritos.UpdateMany(ctx, bson.M{"_id": bson.M{"$in": order.ItemIDs}, "clienteId": order.ClienteID, "checkoutId": order.ID}, bson.M{"$unset": bson.M{"checkoutId": ""}})
+		}
+	}
+	return verified, nil
 }
 
 func (s *servidorReservas) prepareCheckout(ctx context.Context, clientID, key string) (checkoutOperation, error) {
 	var prior checkoutOperation
-	if err := s.checkouts.FindOne(ctx, bson.M{"clienteId": clientID, "idempotencyKey": key}).Decode(&prior); err == nil {
+	var priorErr error
+	if s.pg != nil {
+		prior, priorErr = s.pg.checkoutPorClienteClave(ctx, clientID, key)
+	} else {
+		priorErr = s.checkouts.FindOne(ctx, bson.M{"clienteId": clientID, "idempotencyKey": key}).Decode(&prior)
+	}
+	if err := priorErr; err == nil {
 		return prior, nil
-	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+	} else if !errors.Is(err, mongo.ErrNoDocuments) && !sqlNotFound(err) {
 		return checkoutOperation{}, err
 	}
 	now := time.Now().UTC()
+	if s.pg != nil {
+		holds, err := s.pg.carritosCheckout(ctx, clientID, "pendiente_pago", now)
+		if err != nil {
+			return checkoutOperation{}, err
+		}
+		return s.prepararCheckoutDesdeRetenciones(ctx, clientID, key, now, holds)
+	}
 	cur, err := s.carritos.Find(ctx, bson.M{"clienteId": clientID, "estado": "pendiente_pago", "expiraEn": bson.M{"$gt": now}}, options.Find().SetSort(bson.D{{Key: "inicio", Value: 1}}))
 	if err != nil {
 		return checkoutOperation{}, err
@@ -307,6 +448,77 @@ func (s *servidorReservas) prepareCheckout(ctx context.Context, clientID, key st
 	return order, nil
 }
 
+func (s *servidorReservas) prepararCheckoutDesdeRetenciones(ctx context.Context, clientID, key string, now time.Time, holds []bloqueoCarrito) (checkoutOperation, error) {
+	if len(holds) == 0 {
+		return checkoutOperation{}, mongo.ErrNoDocuments
+	}
+	id := bson.NewObjectID().Hex()
+	order := checkoutOperation{ID: id, ClienteID: clientID, IdempotencyKey: key, Estado: "processing", CreadoEn: now, ActualizadoEn: now, Items: []checkoutItem{}, ItemIDs: []string{}, TurnoIDs: []string{}}
+	for i := range holds {
+		h := &holds[i]
+		if h.CheckoutID != "" {
+			return checkoutOperation{}, errors.New("un elemento del carrito ya está participando en otra compra")
+		}
+		if !h.ExpiraEn.After(now) || !h.Inicio.After(now) {
+			return checkoutOperation{}, errors.New("un horario venció; actualizá el carrito. Los demás horarios retenidos siguen disponibles")
+		}
+		t, _, err := s.obtenerTratamiento(ctx, h.TratamientoID)
+		if err != nil || !tratamientoCompatible(t, h.ProfesionalID) || (t.Moneda != "" && t.Moneda != "ARS") || t.Precio <= 0 {
+			return checkoutOperation{}, errors.New("un tratamiento dejó de estar disponible o su precio no es válido")
+		}
+		if err := s.profesionalCompatible(ctx, h.ProfesionalID, t.ID); err != nil {
+			return checkoutOperation{}, errors.New("un profesional dejó de estar activo o habilitado para este tratamiento")
+		}
+		if t.DuracionMinutos <= 0 || !h.Inicio.Add(time.Duration(t.DuracionMinutos)*time.Minute).Equal(h.Fin) {
+			return checkoutOperation{}, errors.New("la duración o el horario de un tratamiento cambió; volvé a seleccionarlo")
+		}
+		locks, err := s.pg.bloqueoMinutos(ctx, h.ID, now)
+		expected := int64(h.Fin.Sub(h.Inicio) / time.Minute)
+		if err != nil || locks < expected {
+			return checkoutOperation{}, errors.New("un horario ya no conserva todas sus retenciones; actualizá el carrito")
+		}
+		h.Precio, h.PrecioFinal, h.DescuentoBeneficio = t.Precio, t.Precio, 0
+		if h.BeneficioCanjeID != "" {
+			benefit, benefitErr := s.reservarBeneficio(ctx, h.BeneficioCanjeID, clientID, h.ID, h.TratamientoID, t.Precio)
+			if benefitErr != nil {
+				return checkoutOperation{}, errors.New("un beneficio ya no está disponible; quitá ese elemento o actualizá el carrito")
+			}
+			h.DescuentoBeneficio, h.PrecioFinal = benefit.Descuento, benefit.PrecioFinal
+		}
+		h.Sena = importeSena(h.PrecioFinal)
+		if err := s.pg.actualizarPrecioCarrito(ctx, h.ID, clientID, h.Precio, h.PrecioFinal, h.DescuentoBeneficio, h.Sena); err != nil {
+			return checkoutOperation{}, err
+		}
+		turnID := bson.NewObjectID().Hex()
+		order.Items = append(order.Items, checkoutItem{HoldID: h.ID, TurnID: turnID, TratamientoID: h.TratamientoID, ProfesionalID: h.ProfesionalID, Inicio: h.Inicio, Fin: h.Fin, Precio: h.Precio, Descuento: h.DescuentoBeneficio, PrecioFinal: h.PrecioFinal, Sena: h.Sena, BeneficioCanjeID: h.BeneficioCanjeID})
+		order.ItemIDs = append(order.ItemIDs, h.ID)
+		order.TurnoIDs = append(order.TurnoIDs, turnID)
+		order.Subtotal += h.Precio
+		order.Descuento += h.DescuentoBeneficio
+		order.Total += h.PrecioFinal
+		order.Sena += h.Sena
+	}
+	err := s.pg.transaction(ctx, func(tx context.Context) error {
+		for _, holdID := range order.ItemIDs {
+			matched, err := s.pg.asignarCheckoutCarrito(tx, holdID, clientID, id, now)
+			if err != nil {
+				return err
+			}
+			if matched != 1 {
+				return errors.New("un horario venció o cambió mientras se preparaba la compra")
+			}
+		}
+		return s.pg.insertarCheckout(tx, order)
+	})
+	if err != nil {
+		if existing, lookupErr := s.pg.checkoutPorClienteClave(ctx, clientID, key); lookupErr == nil {
+			return existing, nil
+		}
+		return checkoutOperation{}, err
+	}
+	return order, nil
+}
+
 func (s *servidorReservas) confirmarCheckout(ctx context.Context, order *checkoutOperation, paymentID string) error {
 	aplicados := make([]checkoutItem, 0, len(order.Items))
 	for _, item := range order.Items {
@@ -322,6 +534,15 @@ func (s *servidorReservas) confirmarCheckout(ctx context.Context, order *checkou
 		aplicados = append(aplicados, item)
 	}
 	now := time.Now().UTC()
+	if s.pg != nil {
+		if err := s.confirmarCheckoutPostgres(ctx, order, paymentID, now); err != nil {
+			for _, item := range aplicados {
+				_ = s.actualizarBeneficio(context.Background(), item.BeneficioCanjeID, order.ClienteID, item.HoldID, "restituir")
+			}
+			return err
+		}
+		return nil
+	}
 	session, err := s.mongo.StartSession()
 	if err != nil {
 		for _, item := range aplicados {
@@ -387,6 +608,63 @@ func (s *servidorReservas) confirmarCheckout(ctx context.Context, order *checkou
 		return err
 	}
 	return nil
+}
+
+func (s *servidorReservas) confirmarCheckoutPostgres(ctx context.Context, order *checkoutOperation, paymentID string, now time.Time) error {
+	return s.pg.transaction(ctx, func(tx context.Context) error {
+		current, err := s.pg.checkout(tx, order.ID, order.ClienteID)
+		if err != nil {
+			return err
+		}
+		if current.Estado == "confirmed" {
+			*order = current
+			return nil
+		}
+		if current.Estado != "processing" {
+			return errors.New("checkout ya procesado")
+		}
+		for _, item := range current.Items {
+			hold, err := s.pg.carritoForUpdate(tx, item.HoldID)
+			if err != nil || hold.ClienteID != order.ClienteID || hold.Estado != "pendiente_pago" || hold.CheckoutID != current.ID || !hold.ExpiraEn.After(now) {
+				return errors.New("una retención venció o dejó de pertenecer a la compra")
+			}
+			t, status, err := s.obtenerTratamiento(tx, hold.TratamientoID)
+			if err != nil || status != http.StatusOK || !tratamientoCompatible(t, hold.ProfesionalID) || math.Abs(t.Precio-hold.Precio) > 0.009 {
+				return errors.New("un tratamiento cambió o dejó de estar disponible")
+			}
+			if err := s.profesionalCompatible(tx, hold.ProfesionalID, t.ID); err != nil {
+				return errors.New("un profesional cambió o dejó de estar habilitado")
+			}
+			lockCount, err := s.pg.bloqueoMinutos(tx, hold.ID, now)
+			if err != nil || lockCount < int64(hold.Fin.Sub(hold.Inicio)/time.Minute) {
+				return errors.New("una retención ya no protege todo el horario")
+			}
+			turn := turno{ID: item.TurnID, ClienteID: current.ClienteID, ProfesionalID: item.ProfesionalID, TratamientoID: item.TratamientoID, CategoriaID: hold.CategoriaID, Inicio: item.Inicio, Fin: item.Fin, Estado: "confirmado", CreadoEn: now, PrecioTratamiento: item.Precio, Sena: item.Sena, PagoID: paymentID, EstadoPago: "aprobado", BeneficioCanjeID: item.BeneficioCanjeID, BeneficioReservaID: item.HoldID, DescuentoBeneficio: item.Descuento, PrecioFinal: item.PrecioFinal}
+			if err := s.pg.insertarTurno(tx, turn); err != nil {
+				return err
+			}
+			matched, err := s.pg.confirmarCarrito(tx, item.HoldID, current.ID, turn.ID, paymentID)
+			if err != nil {
+				return err
+			}
+			if matched != 1 {
+				return errors.New("una retención dejó de pertenecer al checkout")
+			}
+			if err := s.pg.transferirBloqueos(tx, item.HoldID, turn.ID); err != nil {
+				return err
+			}
+		}
+		matched, err := s.pg.confirmarCheckoutEstado(tx, current.ID, paymentID, now)
+		if err != nil {
+			return err
+		}
+		if matched != 1 {
+			return errors.New("checkout cambió durante la confirmación")
+		}
+		current.Estado, current.PagoID, current.ActualizadoEn = "confirmed", paymentID, now
+		*order = current
+		return nil
+	})
 }
 
 func checkoutResponse(order checkoutOperation) gin.H {

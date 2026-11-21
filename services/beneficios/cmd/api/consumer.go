@@ -47,7 +47,19 @@ type mensajeFallido struct {
 
 type consumidorPrograma struct {
 	url     string
-	almacen *almacenMongo
+	almacen almacenConsumidor
+}
+
+type almacenFallidos interface {
+	guardarMensajeFallido(context.Context, mensajeFallido) error
+	listarMensajesFallidos(context.Context) ([]mensajeFallido, error)
+	obtenerMensajeFallido(context.Context, string) (mensajeFallido, error)
+	cambiarEstadoFallido(context.Context, string, string, string, *time.Time) (bool, error)
+}
+
+type almacenConsumidor interface {
+	programaStore
+	almacenFallidos
 }
 
 func (w *consumidorPrograma) run(ctx context.Context) {
@@ -199,8 +211,7 @@ func (w *consumidorPrograma) failPermanently(ctx context.Context, ch *amqp091.Ch
 		event.Tipo = delivery.Type
 	}
 	failure := mensajeFallido{ID: event.EventID, Evento: event, Error: reason, Intentos: attempts, Estado: "pendiente", CreadoEn: time.Now().UTC().Truncate(time.Millisecond)}
-	_, err := w.almacen.fallidos.UpdateOne(ctx, bson.M{"_id": failure.ID}, bson.M{"$set": bson.M{"evento": failure.Evento, "error": failure.Error, "intentos": failure.Intentos, "estado": failure.Estado}, "$setOnInsert": bson.M{"creadoEn": failure.CreadoEn}}, options.UpdateOne().SetUpsert(true))
-	if err != nil {
+	if err := w.almacen.guardarMensajeFallido(ctx, failure); err != nil {
 		_ = delivery.Nack(false, true)
 		return err
 	}
@@ -215,6 +226,37 @@ func (w *consumidorPrograma) failPermanently(ctx context.Context, ch *amqp091.Ch
 	}
 	_ = delivery.Ack(false)
 	return nil
+}
+
+func (a *almacenMongo) guardarMensajeFallido(ctx context.Context, failure mensajeFallido) error {
+	_, err := a.fallidos.UpdateOne(ctx, bson.M{"_id": failure.ID}, bson.M{"$set": bson.M{"evento": failure.Evento, "error": failure.Error, "intentos": failure.Intentos, "estado": failure.Estado}, "$setOnInsert": bson.M{"creadoEn": failure.CreadoEn}}, options.UpdateOne().SetUpsert(true))
+	return err
+}
+
+func (a *almacenMongo) listarMensajesFallidos(ctx context.Context) ([]mensajeFallido, error) {
+	cur, err := a.fallidos.Find(ctx, bson.M{"estado": "pendiente"}, options.Find().SetSort(bson.D{{Key: "creadoEn", Value: -1}}).SetLimit(50))
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	items := []mensajeFallido{}
+	err = cur.All(ctx, &items)
+	return items, err
+}
+
+func (a *almacenMongo) obtenerMensajeFallido(ctx context.Context, id string) (mensajeFallido, error) {
+	var item mensajeFallido
+	err := a.fallidos.FindOne(ctx, bson.M{"_id": id, "estado": "pendiente"}).Decode(&item)
+	return item, err
+}
+
+func (a *almacenMongo) cambiarEstadoFallido(ctx context.Context, id, desde, hacia string, cuando *time.Time) (bool, error) {
+	set := bson.M{"estado": hacia}
+	if cuando != nil {
+		set["reintentadoEn"] = *cuando
+	}
+	res, err := a.fallidos.UpdateOne(ctx, bson.M{"_id": id, "estado": desde}, bson.M{"$set": set})
+	return res != nil && res.MatchedCount == 1, err
 }
 
 func publishConfirmed(ch *amqp091.Channel, exchange, key, typ, messageID string, body []byte, headers amqp091.Table) error {

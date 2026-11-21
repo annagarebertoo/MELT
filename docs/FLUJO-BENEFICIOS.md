@@ -10,7 +10,7 @@ La administración define puntos por tratamiento con `PUT /beneficios/admin/regl
 
 El profesional asignado confirma la realización con `POST /reservas/turnos/{turnoId}/completar`. La operación solo admite turnos confirmados y verifica que el usuario autenticado sea el profesional asignado. Una segunda confirmación responde como repetida y no crea otro evento.
 
-En la misma transacción de MongoDB, Reservas cambia el turno a `completado` y guarda un registro outbox con tipo `tratamiento.realizado`. El publicador entrega ese registro al exchange durable `melt.dominio` de RabbitMQ y lo marca publicado después de la confirmación del broker. Si se repite la publicación, Beneficios deduplica por `eventId` antes de acreditar.
+En una misma transacción de PostgreSQL, Reservas cambia el turno a `completado` y guarda un registro outbox con tipo `tratamiento.realizado`. El publicador entrega ese registro al exchange durable `melt.dominio` de RabbitMQ y lo marca publicado después de la confirmación del broker. Si se repite la publicación, Beneficios deduplica por `eventId` antes de acreditar.
 
 Ejemplo de evento:
 
@@ -39,7 +39,7 @@ Administración puede revisar `GET /beneficios/admin/mensajes-fallidos` y solici
 
 Administración crea o actualiza recompensas con `POST /beneficios/admin/recompensas`. Los tipos admitidos son `descuento_porcentaje` y `tratamiento_gratis`. Los clientes consultan el catálogo en `GET /beneficios/recompensas`, canjean con `POST /beneficios/canjes` y consultan sus canjes con `GET /beneficios/mis-canjes`.
 
-El costo de puntos y el registro del canje se confirman en una transacción MongoDB, con `solicitudId` único para idempotencia. El beneficio puede quedar disponible, reservado para una reserva, aplicado al confirmar el pago o restituido al cancelar el turno. Los bloqueos de canje vencen junto con la ventana de 10 minutos del carrito.
+El costo de puntos y el registro del canje se confirman en una transacción PostgreSQL, con `solicitudId` único para idempotencia. El beneficio puede quedar disponible, reservado para una reserva, aplicado al confirmar el pago o restituido al cancelar el turno. Los bloqueos de canje vencen junto con la ventana de 10 minutos del carrito.
 
 Reservas consume la API interna de Beneficios con `MELT_INTERNAL_KEY`; esa clave no se envía al navegador. La seña se calcula sobre el importe final después del descuento.
 
@@ -47,4 +47,4 @@ Reservas consume la API interna de Beneficios con `MELT_INTERNAL_KEY`; esa clave
 
 Compose configura `RABBITMQ_URL` para Reservas y Beneficios y espera a que RabbitMQ esté saludable. Reservas también recibe `BENEFICIOS_URL` y la clave interna `MELT_INTERNAL_KEY`.
 
-Las pruebas unitarias se ejecutan con `go test ./...` dentro de `services/beneficios` y `services/reservas`. Las pruebas transaccionales de Mongo requieren un replica set aislado en `BENEFICIOS_TEST_MONGODB_URI` y `RESERVAS_TEST_MONGODB_URI`, respectivamente; si no se configuran, esas pruebas se omiten.
+Las pruebas unitarias se ejecutan con `go test ./...` dentro de `services/beneficios` y `services/reservas`. Algunas pruebas históricas usan adaptadores de compatibilidad Mongo y no validan la persistencia vigente en Supabase; la comprobación de conexión actual se hace con los endpoints `/health` y requiere `BENEFICIOS_DATABASE_URL` y `RESERVAS_DATABASE_URL`.

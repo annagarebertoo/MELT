@@ -1,6 +1,6 @@
 # Documentación MELT
 
-Esta carpeta combina guías vigentes con registros históricos de entregas. La implementación de referencia es `develop` en `ea1ead7e85f533ba54aff85bd95958bb749897a0`; para el estado actual prevalecen los manuales de esta página y el código de esa revisión. Los JSON de `evidence/` conservan fecha y contexto originales: no deben presentarse como pruebas ejecutadas contra el HEAD actual.
+Esta carpeta combina guías vigentes con registros históricos de entregas. Para el trabajo actual, consultar el código de `codex/supabase-postgres-migration` y el [estado de verificación de noviembre de 2026](ESTADO-VERIFICACION-2026-11-20.md). La revisión de `develop` en `ea1ead7e85f533ba54aff85bd95958bb749897a0` es una **referencia histórica**, no el HEAD vigente de la rama de migración. Los JSON de `evidence/` conservan fecha y contexto originales: no deben presentarse como pruebas ejecutadas contra el HEAD actual.
 
 Para el inventario archivo por archivo, incluidas las referencias PDF y la evidencia JSON, ver [INVENTARIO.md](INVENTARIO.md).
 
@@ -15,6 +15,7 @@ Para el inventario archivo por archivo, incluidas las referencias PDF y la evide
 | Entender rutas, ownership, dependencias y datos | [Manuales de microservicios](servicios/README.md) |
 | Encontrar contratos HTTP | [Contratos OpenAPI e integraciones](contracts/README.md) |
 | Comparar el estado verificable con la consigna | [Matriz de cumplimiento](MATRIZ-CUMPLIMIENTO.md) |
+| Consultar el último CI, despliegue Render y prueba pendiente de asistencia | [Estado de verificación — noviembre 2026](ESTADO-VERIFICACION-2026-11-20.md) |
 | Resolver síntomas comunes | [Troubleshooting](TROUBLESHOOTING.md) |
 | Aclarar términos | [Glosario](GLOSARIO.md) |
 | Revisar aprendizajes y fallos observados | [Postmortem](POSTMORTEM.md) |

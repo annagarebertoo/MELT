@@ -5,13 +5,13 @@
 | Requisito/capacidad identificada | Evidencia en código/configuración | Documento/evidencia | Estado documental |
 |---|---|---|---|
 | API Gateway y frontend integrado | `infra/nginx/default.conf`, `infra/nginx/web/`, `compose.yaml` | [Arquitectura](ARCHITECTURE.md), [OPERACIONES](OPERACIONES.md) | Implementado localmente; remoto no verificado aquí. |
-| Servicios con ownership y persistencia MongoDB | `services/*`, bases separadas y colecciones en `main.go` | [Arquitectura](ARCHITECTURE.md), [Persistencia](PERSISTENCE.md) | Implementado; PostgreSQL está declarado pero no usado por servicios de negocio. |
+| Persistencia por servicio | Auth, Catálogo/Profesionales y Pagos usan MongoDB; Reservas y Beneficios usan PostgreSQL privado en proyectos Supabase separados (`*_DATABASE_URL`) | [Arquitectura](ARCHITECTURE.md), [ADR-003](adr/ADR-003-persistencia.md), [Supabase](../infra/supabase/README.md) | Arquitectura y conexión verificadas localmente en la rama actual; el registro histórico de `PERSISTENCE.md` corresponde a otra versión. |
 | Roles y controles de Auth | `services/auth/cmd/api/main.go`; middlewares de Reservas, Catálogo, Beneficios | Manual [Auth](servicios/AUTH.md), [Reservas](servicios/RESERVAS.md) | Rutas y controles presentes; no se repitieron pruebas en esta tarea. |
 | CRUD de catálogo, perfiles y asociaciones | `services/catalogo-profesionales/cmd/api/`; transacciones administrativas | [Catálogo](servicios/CATALOGO-PROFESIONALES.md), contrato admin | Implementado según código revisado. |
 | Búsqueda OpenSearch y caché Memcached | `search_cache.go`, configuración Compose, pruebas con build tags | [Etapa Catálogo](CATALOGO-PROFESIONALES-ETAPA-1.md), ADR-006/007 | Implementado; resultados de benchmarks son muestras locales históricas. |
 | Disponibilidad, agenda, turnos y concurrencia | `services/reservas/cmd/api/`; índices únicos/transacciones | [Reservas](servicios/RESERVAS.md), [web](RESERVAS-WEB.md) | Código presente. Reglas validan conflictos por profesional/minuto y por cliente/categoría/minuto. |
-| Retenciones y checkout agrupado, seña del 30 % | `checkout.go`, rutas de carrito, transacción de confirmación | [Reservas](servicios/RESERVAS.md), ADR-015, OpenAPI checkout | Implementado en código; Pago es simulado. |
-| Pago real externo | No se encuentra integración de pasarela en `services/pagos` | [Pagos](servicios/PAGOS.md), ADR-015 | No implementado; simulador académico no cobra. |
+| Retenciones y checkout agrupado, seña del 30 % | `checkout.go`, rutas de carrito, transacción de confirmación | [Reservas](RESERVAS-WEB.md), ADR-015, OpenAPI checkout | Implementado; sólo confirma tras verificar aprobación. |
+| Checkout Pro de Mercado Pago en modo de prueba | Preferencias, retorno, consulta server-side y Webhook HMAC en `services/pagos` | [Pagos](servicios/PAGOS.md), ADR-015 | Implementado; requiere credenciales de prueba y secreto Webhook configurados en Render. |
 | Puntos por tratamiento realizado / idempotencia | outbox Reservas, RabbitMQ, consumidor Beneficios, deduplicación | [Beneficios](servicios/BENEFICIOS.md), [flujo](FLUJO-BENEFICIOS.md) | Implementado por código; extremo a extremo en producción no verificado. |
 | Canje de recompensas | rutas del programa en Beneficios y frontend | [Beneficios](servicios/BENEFICIOS.md), README | Implementado en código. |
 | Acreditación externa para Gimnasio | `/api/v1/beneficios/acreditar-puntos` y `/acreditaciones`, partner key, invitaciones | [contrato](contracts/acreditar-puntos-v1.openapi.yaml), [integración](INTEGRACION-GIMNASIO.md) | Implementada; verificar disponibilidad/URL remota al momento de consumir. |
@@ -25,3 +25,7 @@
 ## Verificaciones anteriores citadas
 
 Los documentos de Catálogo, D3/D5/D8/D11 y `docs/evidence/*.json` conservan pruebas de fechas/commits anteriores. No se reejecutaron aquí. Para presentar cumplimiento, adjuntar evidencia de la versión entregada, indicar su commit y no reutilizar las marcas históricas como resultado de la revisión documental actual.
+
+## Actualización de evidencia — 20/11/2026
+
+Esta matriz conserva el alcance y las limitaciones de su revisión documental original. Para el estado más reciente de GitHub Actions, despliegues de Render, el botón «No asistió» y las comprobaciones pendientes, consultar [Estado de verificación de noviembre de 2026](ESTADO-VERIFICACION-2026-11-20.md). No extrapolar el resultado de CI a pruebas funcionales autenticadas en Render.

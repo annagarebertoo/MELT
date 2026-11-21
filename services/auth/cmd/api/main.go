@@ -84,7 +84,7 @@ func main() {
 	}
 	uri := strings.TrimSpace(os.Getenv("MONGODB_URI"))
 	if uri == "" {
-		uri = "mongodb://localhost:27017"
+		log.Fatal("MONGODB_URI es obligatorio; configurar el clúster compartido de MongoDB Atlas")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

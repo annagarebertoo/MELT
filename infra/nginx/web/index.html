@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#f8f3e9">
     <meta name="description" content="Encontrá tu próximo ritual de estética y bienestar. Elegí un tratamiento y reservá tu turno en MELT.">
     <title>MELT | Fundite con tu esencia</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2218%22 fill=%22%2356382b%22/%3E%3Cpath d=%22M13 46V18h7l12 16 12-16h7v28h-8V31L32 44 21 31v15z%22 fill=%22%23f8f3e9%22/%3E%3C/svg%3E">
     <link rel="stylesheet" href="/styles.css">
     <script src="/app.js" defer></script>
     <script src="/ghostkitchen.js" defer></script>
@@ -13,7 +14,8 @@
   <body>
     <header class="site-header">
       <button class="header-menu-button" id="menu-toggle" type="button" aria-label="Abrir menú" aria-controls="site-menu" aria-expanded="false"><span></span><span></span></button>
-      <a class="brand" href="#inicio" aria-label="MELT, inicio">MELT</a>
+      <a class="brand" href="#/inicio" data-page="inicio" aria-label="MELT, inicio">MELT</a>
+      <nav class="header-nav" aria-label="Secciones"><a href="#/inicio" data-page="inicio">Inicio</a><a href="#/tratamientos" data-page="tratamientos">Tratamientos</a><a href="#/profesionales" data-page="profesionales">Profesionales</a><a href="#/reservas" data-page="reservas">Reservas</a><a href="#/cuenta" data-page="cuenta">Mi cuenta</a><a id="cart-menu-link" class="header-cart-link hidden" href="#/carrito" data-page="carrito">Carrito <span id="cart-count" class="cart-count">0</span></a></nav>
       <div class="header-actions">
         <button class="header-login" id="header-login" type="button" data-scroll="cuenta">Ingresar</button>
         <button class="header-register" id="header-register" type="button" data-scroll="cuenta" data-register>Crear cuenta</button>
@@ -22,9 +24,9 @@
 
     <div class="menu-backdrop" id="menu-backdrop"></div>
     <aside class="site-menu" id="site-menu" aria-hidden="true" aria-label="Menú principal" inert>
-      <div class="site-menu-top"><span class="brand">MELT</span><button id="menu-close" type="button" aria-label="Cerrar menú">×</button></div>
+      <div class="site-menu-top"><a class="brand" href="#/inicio" data-page="inicio">MELT</a><button id="menu-close" type="button" aria-label="Cerrar menú">×</button></div>
       <nav aria-label="Navegación principal">
-        <a href="#inicio">Inicio</a><a href="#seleccion">Selección MELT</a><a href="#tratamientos">Tratamientos</a><a href="#profesionales">Profesionales</a><a href="#reservas">Reservar turno</a><a href="#cuenta">Mi cuenta</a><a id="cart-menu-link" class="hidden" href="#carrito">Mi carrito <span id="cart-count" class="cart-count">0</span></a><a id="catalog-admin-link" class="hidden" href="#catalog-admin">Administrar catálogo</a>
+        <a href="#/inicio" data-page="inicio">Inicio</a><a href="#/tratamientos" data-page="tratamientos">Tratamientos</a><a href="#/profesionales" data-page="profesionales">Profesionales</a><a href="#/reservas" data-page="reservas">Reservas</a><a href="#/cuenta" data-page="cuenta">Mi cuenta</a><a id="catalog-admin-link" class="hidden" href="#/cuenta" data-page="cuenta">Administrar catálogo</a>
       </nav>
       <p>Tu tiempo, tu ritual.</p>
     </aside>
@@ -36,7 +38,7 @@
         <div class="hero-copy">
           <p class="eyebrow light">Centro de estética &amp; bienestar</p>
           <h1>Fundite con<br>tu esencia.</h1>
-          <div class="hero-actions"><a class="hero-cta" href="#seleccion">Encontrá tu próximo ritual <span aria-hidden="true">↗</span></a><a class="hero-secondary" href="#tratamientos">Explorar tratamientos</a></div>
+          <div class="hero-actions"><a class="hero-cta" href="#/tratamientos" data-page="tratamientos">Encontrá tu próximo ritual <span aria-hidden="true">↗</span></a><a class="hero-secondary" href="#/tratamientos" data-page="tratamientos">Explorar tratamientos</a></div>
         </div>
         <a class="scroll-cue" href="#seleccion" aria-label="Ver tratamientos destacados"><span aria-hidden="true">⌄</span></a>
       </section>
@@ -95,9 +97,9 @@
       </section>
 
       <section class="section account-section" id="cuenta">
-        <div class="section-heading">
-          <div><p class="eyebrow">Todo empieza acá</p><h2>Tu cuenta</h2></div>
-          <p class="section-description">Ingresá o creá tu cuenta para reservar y gestionar tus turnos.</p>
+        <div class="section-heading account-heading">
+          <div><p class="eyebrow">Tu espacio personal</p><h2>Tu cuenta</h2></div>
+          <p class="section-description">Tus turnos, beneficios y experiencias MELT, en un solo lugar.</p>
         </div>
         <ol class="booking-steps" aria-label="Pasos de la reserva">
           <li class="active" data-booking-step="1"><span>01</span><b>Elegí tu tratamiento</b></li>
@@ -122,9 +124,9 @@
             </form>
           </div>
           <div id="profile-panel" class="profile-card hidden">
-            <div class="profile-top"><div class="avatar" id="profile-initials">M</div><div><p class="eyebrow">Tu espacio MELT</p><h3 id="profile-name">Hola</h3></div></div>
+            <div class="profile-top"><div class="avatar" id="profile-initials">M</div><div><p class="eyebrow">TU PERFIL MELT</p><h3 id="profile-name">Hola</h3></div></div>
             <p id="profile-email" class="muted"></p>
-            <div class="points-box"><span>Tu saldo de beneficios</span><strong><span id="points-balance">—</span> <small>puntos</small></strong></div>
+            <div class="points-box"><div><span class="points-kicker">TU SALDO DISPONIBLE</span><span class="points-caption">Puntos para disfrutar de beneficios y experiencias</span></div><strong><span id="points-balance">—</span> <small>PTS</small></strong><span class="points-spark" aria-hidden="true">✳</span></div>
             <div class="profile-actions"><button id="refresh-account" class="button button-outline" type="button">Actualizar</button><button id="profile-reservations" class="text-button" type="button">Ver mis turnos ↓</button><button id="profile-ghostkitchen" class="text-button hidden" type="button">Cocinas GhostKitchen cercanas ↓</button><button id="logout-button" class="text-button" type="button">Cerrar sesión</button></div>
           </div>
           <div class="calendar-card">
@@ -142,11 +144,11 @@
             <div id="time-slots" class="time-slots"></div>
             <div id="selected-slot-action" class="selected-slot-action hidden" aria-live="polite"></div>
             <div id="booking-summary" class="booking-summary-inline hidden" aria-live="polite"></div>
-            <p class="payment-guidance">Los horarios agregados se revisan y confirman juntos desde <a href="#carrito">Mi carrito</a>. El pago de la seña es simulado y no se realiza ningún cobro real.</p>
+            <p class="payment-guidance">Los horarios agregados se revisan y confirman juntos desde <a href="#/carrito" data-page="carrito">Mi carrito</a>. El checkout abre Mercado Pago en modo de prueba.</p>
           </div>
         </div>
         <section id="points-panel" class="benefits-area hidden" aria-labelledby="points-title">
-          <div class="section-heading"><div><p class="eyebrow">Tu recorrido MELT</p><h2 id="points-title">Puntos y recompensas</h2></div><button id="refresh-benefits" class="button button-outline" type="button">Actualizar</button></div>
+          <div class="section-heading"><div><p class="eyebrow">PEQUEÑOS PREMIOS, GRANDES MOMENTOS</p><h2 id="points-title">Tu mundo de beneficios</h2></div><button id="refresh-benefits" class="button button-outline" type="button">Actualizar</button></div>
           <div class="benefits-columns">
             <div class="benefit-card"><h3>Historial de puntos</h3><div id="points-history" class="movement-list" aria-live="polite"></div></div>
             <div class="benefit-card"><h3>Catálogo de recompensas</h3><div id="rewards-list" class="rewards-list" aria-live="polite"></div></div>
@@ -154,10 +156,9 @@
           <div class="benefit-card redeemed-card"><h3>Mis canjes</h3><div id="my-rewards" class="movement-list" aria-live="polite"></div></div>
         </section>
         <section id="ghostkitchen-panel" class="benefits-area ghostkitchen-area hidden" aria-labelledby="ghostkitchen-title">
-          <div class="section-heading"><div><p class="eyebrow">Una opción rica cerca tuyo</p><h2 id="ghostkitchen-title">Cocinas GhostKitchen cercanas</h2></div><button id="ghostkitchen-retry" class="button button-outline" type="button">Actualizar</button></div>
-          <p class="section-description">Consultá la cocina más cercana y explorá sus restaurantes y platos disponibles.</p>
+          <div class="ghostkitchen-masthead"><div class="ghostkitchen-brand-lockup"><span class="ghostkitchen-brand-mark">GK</span><div><p class="eyebrow">GK · GOOD KITCHEN</p><h2 id="ghostkitchen-title">Algo rico está más cerca.</h2></div></div><button id="ghostkitchen-retry" class="button button-outline" type="button">Actualizar cocinas</button><p class="ghostkitchen-lead">Descubrí cocinas, restaurantes y platos cerca tuyo. Elegí qué se te antoja; nosotros te mostramos dónde encontrarlo.</p><div class="ghostkitchen-tags"><span>Hecho para antojos</span><span>Opciones cerca tuyo</span><span>Un mundo de sabores</span></div></div>
           <div class="ghostkitchen-location-card">
-            <div><strong>Buscá por ubicación</strong><p>Podés compartir tu ubicación o ingresar las coordenadas manualmente.</p></div>
+            <div><p class="eyebrow">PRIMER PASO</p><strong>¿Dónde tenés ganas de comer?</strong><p>Compartí tu ubicación o ingresá las coordenadas para descubrir qué hay alrededor.</p></div>
             <button id="ghostkitchen-geolocate" class="button button-dark" type="button">Usar mi ubicación</button>
             <form id="ghostkitchen-location-form" class="ghostkitchen-coordinates">
               <label class="form-field">Latitud<input id="ghostkitchen-lat" type="number" min="-90" max="90" step="any" required placeholder="-31.4262"></label>
@@ -179,7 +180,7 @@
           </form>
           <div id="ghostkitchen-results" class="ghostkitchen-grid" aria-live="polite"></div>
           <div id="ghostkitchen-pagination" class="pagination hidden"><button id="ghostkitchen-prev" class="button button-outline" type="button">← Anterior</button><span id="ghostkitchen-page">Página 1</span><button id="ghostkitchen-next" class="button button-outline" type="button">Siguiente →</button></div>
-          <p class="ghostkitchen-note">La disponibilidad es orientativa y no garantiza una reserva ni una compra.</p>
+          <p class="ghostkitchen-note">GK conecta tu antojo con cocinas cercanas. La disponibilidad es orientativa y no garantiza una reserva ni una compra.</p>
         </section>        <section id="professional-panel" class="benefits-area hidden" aria-labelledby="professional-title">
           <div class="section-heading"><div><p class="eyebrow">Atención profesional</p><h2 id="professional-title">Mi agenda</h2></div><button id="refresh-professional-turns" class="button button-outline" type="button">Actualizar</button></div>
           <section class="benefit-card professional-agenda" aria-labelledby="professional-availability-title">
@@ -276,8 +277,8 @@
     </main>
 
     <section id="carrito" class="cart-section section-pad hidden" aria-labelledby="cart-title">
-      <div class="section-heading"><div><p class="eyebrow">Tus horarios retenidos</p><h2 id="cart-title">Mi carrito</h2></div><div class="cart-header-actions"><button id="refresh-cart" class="button button-outline" type="button">Actualizar</button><button id="cart-checkout" class="button button-dark" type="button" disabled>Confirmar compra</button></div></div>
-      <p class="section-description">Revisá todos tus tratamientos y confirmalos en una única compra simulada. Cada horario se retiene durante diez minutos.</p>
+      <div class="cart-page-intro"><div><p class="eyebrow">TU COMPRA, EN UN SOLO LUGAR</p><h2 id="cart-title">Tu carrito MELT<span class="cart-title-dot">.</span></h2><p>Revisá tus tratamientos, comprobá los horarios y prepará tu reserva. Tu próximo momento está cada vez más cerca.</p></div><div class="cart-intro-mark" aria-hidden="true"> </div></div>
+      <div class="cart-toolbar"><div><span class="cart-count-label">TU CARRITO</span><span class="cart-secure-note">Horarios retenidos por 10 minutos</span></div><div class="cart-header-actions"><button id="refresh-cart" class="button button-outline" type="button">Actualizar</button><button id="cart-checkout" class="button button-dark" type="button" disabled>Continuar al pago <span aria-hidden="true">↗</span></button></div></div>
       <div id="cart-status" class="form-status" aria-live="polite"></div>
       <div id="cart-items" class="cart-items" aria-live="polite"><p class="muted">Iniciá sesión como cliente para consultar el carrito.</p></div>
       <div id="cart-summary" class="cart-summary" aria-live="polite"></div>

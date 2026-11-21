@@ -8,7 +8,7 @@ MELT es una aplicación web para la operación de un centro de estética: ofrece
 - Categorías, tratamientos y perfiles públicos de profesionales, con asociaciones entre ambos.
 - Agenda semanal profesional, consulta de disponibilidad, reservas y gestión de turnos.
 - Carrito único por cliente, retenciones temporales de 10 minutos y checkout agrupado.
-- Pago simulado, con seña del 30 % y sin cobros reales.
+- Checkout Pro de Mercado Pago en modo de prueba, con seña del 30 %.
 - Puntos y recompensas, canjes, y acreditación externa autenticada.
 - Consulta de sedes y platos de GhostKitchen mediante un proxy server-side de Beneficios, si el proveedor está configurado.
 
@@ -16,9 +16,9 @@ El alcance implementado y sus límites, con referencias al código y evidencia, 
 
 ## Arquitectura y tecnologías
 
-El navegador accede a NGINX, que sirve el frontend HTML/CSS/JavaScript y actúa como Gateway. El Gateway deriva solicitudes a Auth, Catálogo y Profesionales, Reservas o Beneficios. Reservas llama a Catálogo, Auth, Pagos y Beneficios para completar los flujos; Reservas publica eventos de dominio a RabbitMQ y Beneficios los consume. Cada backend es dueño de sus colecciones MongoDB. Catálogo además usa OpenSearch para búsqueda y Memcached para lecturas cacheables.
+El navegador accede a NGINX, que sirve el frontend HTML/CSS/JavaScript y actúa como Gateway. El Gateway deriva solicitudes a Auth, Catálogo y Profesionales, Reservas o Beneficios. Reservas llama a Catálogo, Auth, Pagos y Beneficios para completar los flujos; publica eventos a RabbitMQ y Beneficios los consume. Auth, Catálogo, Profesionales y Pagos comparten un clúster MongoDB Atlas con bases lógicas separadas. Reservas y Beneficios son dueños de bases PostgreSQL privadas e independientes en Supabase. No se levanta una base de negocio local en Compose.
 
-Tecnologías declaradas: Go/Gin, MongoDB, NGINX, Docker Compose, RabbitMQ, OpenSearch, Memcached, Prometheus, Grafana y Jaeger. PostgreSQL está declarado en Compose, pero los servicios de negocio de este commit no lo usan. Más información: [arquitectura y diagramas](docs/ARCHITECTURE.md).
+Tecnologías declaradas: Go/Gin, MongoDB Atlas, PostgreSQL (Supabase), NGINX, Docker Compose, RabbitMQ, OpenSearch, Memcached, Prometheus, Grafana y Jaeger. Más información: [arquitectura y diagramas](docs/ARCHITECTURE.md), [configuración de Atlas](infra/mongodb/README.md) y [configuración de Supabase](infra/supabase/README.md).
 
 ## Requisitos previos
 
@@ -28,7 +28,7 @@ Tecnologías declaradas: Go/Gin, MongoDB, NGINX, Docker Compose, RabbitMQ, OpenS
 
 ## Inicio local
 
-Desde la raíz, crear valores locales fuera del repositorio para los secretos requeridos. En PowerShell:
+Desde la raíz, prepará `.env` a partir de `.env.example`, configurá `MONGODB_URI` con la URI del clúster Atlas, aplicá los dos SQL de `infra/supabase/` y configurá `BENEFICIOS_DATABASE_URL` y `RESERVAS_DATABASE_URL` con sus URLs privadas respectivas. Reservas y Beneficios requieren sus PostgreSQL de Supabase; no usan MongoDB. Luego creá los secretos locales fuera del repositorio. En PowerShell:
 
 ```powershell
 $env:AUTH_JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
@@ -38,7 +38,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Abrir <http://localhost:8080>. Salud del Gateway: <http://localhost:8080/health>. El primer arranque puede tardar mientras se descargan imágenes e inicia MongoDB replica set. No uses `docker compose down -v` salvo que quieras borrar deliberadamente los datos locales.
+Abrir <http://localhost:8080>. Salud del Gateway: <http://localhost:8080/health>. No uses `docker compose down -v` salvo que quieras borrar deliberadamente los datos de infraestructura local.
 
 Las variables opcionales, pruebas, comandos de diagnóstico, rutas locales y apagado están en [operaciones y ejecución](docs/OPERACIONES.md). Un `.env.example` sirve como referencia, no como lugar para guardar claves reales.
 
@@ -51,6 +51,7 @@ Las variables opcionales, pruebas, comandos de diagnóstico, rutas locales y apa
 - [Manual de microservicios y endpoints](docs/servicios/README.md)
 - [Contratos y APIs](docs/contracts/README.md)
 - [Matriz académica y estado verificable](docs/MATRIZ-CUMPLIMIENTO.md)
+- [Estado de verificación de CI, Render y asistencia (noviembre 2026)](docs/ESTADO-VERIFICACION-2026-11-20.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Glosario](docs/GLOSARIO.md)
 - [Postmortem y evidencia de resiliencia](docs/POSTMORTEM.md)
@@ -58,7 +59,7 @@ Las variables opcionales, pruebas, comandos de diagnóstico, rutas locales y apa
 
 ## Integraciones y límites relevantes
 
-El servicio Pagos implementa un simulador interno: la variable local `PAYMENT_SIMULATOR_RESULT` controla el resultado de demostración (`approved` por defecto o `rejected`); no hay cobro externo. La integración de puntos para el Grupo 1 se documenta en [Integración Gimnasio](docs/INTEGRACION-GIMNASIO.md). La aplicación incluye un cliente server-side para GhostKitchen, pero una ejecución real requiere configuración y disponibilidad del proveedor; ver [Integración GhostKitchen](docs/GHOSTKITCHEN.md). Los servicios publicados y URLs pueden estar desactualizados: consultar [el estado documentado del despliegue](docs/OPERACIONES.md#entorno-remoto) y verificar el entorno antes de una demostración.
+El servicio Pagos usa Checkout Pro con credenciales copiadas desde el entorno de prueba, valida pagos y webhooks en el backend y mantiene preferencias en MongoDB Atlas. La integración de puntos para el Grupo 1 se documenta en [Integración Gimnasio](docs/INTEGRACION-GIMNASIO.md). La aplicación incluye un cliente server-side para GhostKitchen, pero una ejecución real requiere configuración y disponibilidad del proveedor; ver [Integración GhostKitchen](docs/GHOSTKITCHEN.md). Los servicios publicados y URLs pueden estar desactualizados: consultar [el estado documentado del despliegue](docs/OPERACIONES.md#entorno-remoto) y verificar el entorno antes de una demostración.
 
 ## Equipo y repositorio
 

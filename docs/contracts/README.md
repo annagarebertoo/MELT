@@ -5,7 +5,7 @@
 Contratos adicionales para reservas y pagos:
 
 - [Carrito y checkout agrupado de Reservas](reservas-checkout-v1.openapi.yaml).
-- [Simulador interno de Pagos](pagos-simulador-v1.openapi.yaml). Sus operaciones requieren `X-Melt-Internal-Key` y no se exponen al frontend.
+- [Mercado Pago Checkout Pro](pagos-checkout-pro-v1.openapi.yaml). Las operaciones internas requieren `X-Melt-Internal-Key`; sólo el Webhook firmado se publica.
 
 ## Descripción
 
@@ -145,7 +145,7 @@ La versión actual del contrato es `v1`. Los cambios incompatibles deberán publ
 | `catalogo-admin-v1.openapi.json` | CRUD administrativo de categorías, tratamientos y profesionales y operaciones de cuenta que cubre su archivo. Comparar sus paths con `services/catalogo-profesionales/cmd/api/main.go` ante cambios. |
 | `autenticacion-v1.openapi.yaml` | Registro/login/identidad, altas, lista de usuarios/cuentas profesionales y cambio de rol en la versión descrita; rutas internas no se publican y no deben incluirse como API de navegador. |
 | `reservas-checkout-v1.openapi.yaml` | Carrito/retenciones/checkout agrupado. No sustituye un contrato exhaustivo de agenda, disponibilidad, estados de turnos, cancelación y ausencias. |
-| `pagos-simulador-v1.openapi.yaml` | API interna del simulador; servidor a servidor con `X-Melt-Internal-Key`. No es endpoint público del Gateway. |
+| `pagos-checkout-pro-v1.openapi.yaml` | Preferencias, verificación y devolución internas; Webhook firmado accesible mediante el Gateway. |
 | `acreditar-puntos-v1.openapi.yaml` | Acreditación externa del partner e invitaciones por usuario/email, clave y ejemplos. Servidor de producción consignado es histórico hasta verificarlo en el proveedor actual. |
 | `registro-externo-v1.openapi.yaml` | Retirado; se conserva por trazabilidad. Reemplazado por `acreditar-puntos-v1.openapi.yaml`. |
 | `mock/` | Implementación de prueba de la API de lectura del catálogo; datos estáticos, no es el servicio real ni prueba disponibilidad de un despliegue. |

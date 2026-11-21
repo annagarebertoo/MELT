@@ -56,6 +56,47 @@ func (s *servidorReservas) registrarInasistencia(ctx context.Context, turnoID, p
 	if turnoID == "" || profesionalID == "" {
 		return turno{}, false, errors.New("identidad incompleta")
 	}
+	if s.pg != nil {
+		var resultado turno
+		repetido := false
+		err := s.pg.transaction(ctx, func(tx context.Context) error {
+			item, err := s.pg.turnoForUpdate(tx, turnoID)
+			if sqlNotFound(err) {
+				return errInasistenciaTurnoNoEncontrado
+			}
+			if err != nil {
+				return err
+			}
+			if item.ProfesionalID != profesionalID {
+				return errInasistenciaTurnoAjeno
+			}
+			if item.Estado == "no_asistio" {
+				resultado, repetido = item, true
+				return nil
+			}
+			if item.Estado != "confirmado" {
+				return errInasistenciaNoConfirmado
+			}
+			now := time.Now().UTC().Truncate(time.Millisecond)
+			if item.Fin.After(now) {
+				return errInasistenciaFutura
+			}
+			matched, err := s.pg.marcarTurno(tx, item.ID, profesionalID, "no_asistio", now)
+			if err != nil {
+				return err
+			}
+			if matched != 1 {
+				return errInasistenciaNoConfirmado
+			}
+			if err := s.pg.borrarBloqueosTurno(tx, item.ID); err != nil {
+				return err
+			}
+			item.Estado, item.NoAsistioPor, item.NoAsistioEn = "no_asistio", profesionalID, &now
+			resultado = item
+			return nil
+		})
+		return resultado, repetido, err
+	}
 	session, err := s.mongo.StartSession()
 	if err != nil {
 		return turno{}, false, err

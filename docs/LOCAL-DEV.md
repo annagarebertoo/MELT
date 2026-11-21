@@ -82,7 +82,7 @@ Resultado esperado: `201 Created` y el tratamiento creado en el cuerpo de la res
 
 Los perfiles activos se consultan en `GET /api/v1/profesionales?tratamientoId={id}`. Para habilitar un tratamiento, asociá el ID de un profesional tanto en el perfil (`tratamientosIds`) como en el tratamiento (`profesionalesIds`) y configurá su agenda con `PUT /api/v1/reservas/agenda`. Las tres operaciones de Catálogo requieren un token administrativo. Reservas valida el ID, la duración, la compatibilidad y el horario antes de crear un bloqueo.
 
-El flujo visual y los ejemplos de preparación de profesional, tratamiento y agenda están en [RESERVAS-WEB.md](RESERVAS-WEB.md). El simulador local funciona sin credenciales externas; configura opcionalmente `PAYMENT_SIMULATOR_RESULT=rejected` para probar un rechazo. El valor predeterminado es `approved`.
+El flujo visual y los ejemplos de preparación de profesional, tratamiento y agenda están en [RESERVAS-WEB.md](RESERVAS-WEB.md). El checkout de Mercado Pago requiere un dominio HTTPS público, `MP_ENV=test`, un Access Token copiado desde el entorno Prueba y el secreto Webhook. Sin esas variables, el resto del sistema puede funcionar en local, pero el checkout no se inicia.
 
 Al desplegar Catálogo fuera de Compose, definí `AUTH_URL` con la URL base interna o privada del servicio Auth, por ejemplo `https://melt-tygp.onrender.com`. En Compose, el servicio usa `http://auth:8084` como valor predeterminado. No configures la URL de Auth en el frontend.
 
@@ -106,7 +106,7 @@ node --check infra/nginx/web/app.js
 docker compose config --quiet
 ```
 
-Las pruebas de Reservas incluyen `TestReservasMongoIntegrationFlujoCompleto`, que usa MongoDB real para disponibilidad, solicitudes simultáneas, bloqueo temporal, seña, confirmación idempotente, devolución y liberación; Catálogo y Pagos se simulan en esa prueba. Para ejecutarla, con MongoDB local levantado:
+Las pruebas históricas de Reservas incluyen `TestReservasMongoIntegrationFlujoCompleto`, que usa un adaptador de compatibilidad Mongo para disponibilidad, solicitudes simultáneas, bloqueo temporal, seña, confirmación idempotente, devolución y liberación; Catálogo y Pagos se simulan en esa prueba. No comprueba el almacenamiento vigente en PostgreSQL ni forma parte del arranque normal. Si se decide ejecutarla, requiere una instancia desechable exclusiva para pruebas; no uses las bases compartidas del equipo.
 
 ```powershell
 $env:RESERVAS_TEST_MONGODB_URI = 'mongodb://localhost:27017'
@@ -120,7 +120,7 @@ La cobertura automatizada no reemplaza una comprobación de pago sandbox con las
 
 ## Alcance y limitaciones actuales
 
-El catálogo y los perfiles profesionales persisten en MongoDB (`catalogo_db.tratamientos` y `catalogo_db.profesionales`). Reservas persiste agendas, turnos, bloqueos y carritos en MongoDB (`reservas_db`). La búsqueda actual es simple en MongoDB, con filtro, paginación y ordenamiento; OpenSearch no está integrado. El POST de administración de catálogo es una ruta privada compatible; la API pública contractual v1 expone lectura. La web local en `http://localhost:8080` permite explorar catálogo, registrarse, iniciar sesión, consultar perfil/puntos, revisar disponibilidad, crear el carrito, pagar la seña en modo test y cancelar reservas. RabbitMQ, OpenSearch, Memcached, PostgreSQL y Prometheus están declarados, pero sus integraciones de negocio siguen pendientes. También están pendientes la API externa de búsqueda de sedes cercanas del grupo de Cocina Fantasma, notificaciones por correo, canjes de puntos y pruebas de carga.
+Auth, Catálogo, Profesionales y Pagos persisten en el clúster MongoDB Atlas compartido (`usuarios_db`, `catalogo_db`, `profesionales_db` y `pagos_db`), configurado con `MONGODB_URI`. Reservas y Beneficios requieren sus proyectos PostgreSQL Supabase, configurados con `RESERVAS_DATABASE_URL` y `BENEFICIOS_DATABASE_URL`; aplicá primero los scripts de `infra/supabase/`. Compose no levanta bases de negocio locales. La búsqueda actual es simple en MongoDB, con filtro, paginación y ordenamiento; OpenSearch no está integrado. La web local en `http://localhost:8080` permite explorar catálogo, registrarse, iniciar sesión, consultar perfil/puntos, revisar disponibilidad, crear el carrito, pagar la seña en modo test y cancelar reservas. También están pendientes la API externa de búsqueda de sedes cercanas del grupo de Cocina Fantasma, notificaciones por correo y pruebas de carga.
 
 
 ## Acreditación externa de puntos
@@ -203,19 +203,19 @@ Cada ruta privada encadena `requiereIdentidad()` y `requierePermiso("clave.de.op
 
 ## Reservas: agenda, disponibilidad y turnos
 
-El servicio Reservas persiste agendas semanales y turnos en MongoDB, en la base `reservas_db`. Compose configura `MONGODB_URI=mongodb://mongodb:27017` y espera que MongoDB esté saludable.
+El servicio Reservas persiste agendas semanales, turnos, bloqueos, carritos y checkout en PostgreSQL del proyecto Supabase MELT-Reservas. Compose requiere `RESERVAS_DATABASE_URL`; el esquema debe estar aplicado antes de iniciarlo.
 
 - `PUT /api/v1/reservas/agenda`: crea o actualiza el horario semanal. `diaSemana` usa 0=domingo y 6=sábado; `horaInicio` y `horaFin` usan `HH:MM`. Un profesional solo puede editar su propia agenda; recepción y administración pueden gestionar la agenda de un profesional indicado.
 - `GET /api/v1/reservas/disponibilidad?profesionalId=ID&tratamientoId=ID&fecha=YYYY-MM-DD`: devuelve inicios cada 15 minutos dentro de la agenda del profesional, tomando duración del Catálogo. Rechaza profesionales que no estén asociados al tratamiento, turnos confirmados y bloqueos activos del carrito. La zona horaria local se configura con `MELT_TIMEZONE`; por omisión es `America/Argentina/Buenos_Aires`.
 - `POST /api/v1/reservas/carrito/bloqueos`: JSON con `profesionalId`, `tratamientoId` e `inicio` RFC3339 con zona. Valida que el profesional sea compatible, que el horario futuro esté dentro de su agenda y que no se superponga; reserva los minutos con un índice único compartido por todas las réplicas. En la interfaz se envía `diferirPago: true`; el bloqueo vence a los 10 minutos.
-- `POST /api/v1/reservas/carrito/checkout`: JSON `{"idempotencyKey":"..."}`. Reservas recalcula precios/beneficios, agrupa todos los bloqueos activos propios, calcula una sola seña del 30 %, solicita una simulación idempotente a Pagos y confirma todas las reservas en una transacción.
+- `POST /api/v1/reservas/carrito/checkout`: JSON `{"idempotencyKey":"..."}`. Reservas recalcula precios/beneficios, agrupa todos los bloqueos activos propios, calcula una sola seña del 30 %, crea o recupera una preferencia idempotente de Mercado Pago y deja los turnos en proceso hasta verificar el pago aprobado.
 - `POST /api/v1/reservas/carrito/bloqueos/{id}/pago` y `POST /carrito/bloqueos/{id}/confirmar` se conservan como alias históricos y responden `409 CHECKOUT_UNICO_REQUERIDO`; ya no crean ni confirman pagos individuales.
 - `DELETE /api/v1/reservas/carrito/bloqueos/{id}`: libera un bloqueo pendiente que pertenece al cliente autenticado.
 - `POST /api/v1/reservas/turnos`: la creación directa está deshabilitada; devuelve `CARRITO_REQUERIDO`. Usá el bloqueo temporal y confirmalo después de pagar la seña.
 - `GET /api/v1/reservas/turnos`: clientes ven sus turnos, profesionales sus turnos asignados y recepción/administración pueden consultar todos.
 - `DELETE /api/v1/reservas/turnos/{id}`: el cliente solo cancela turnos propios; recepción/administración pueden cancelar otros. Desde 24 horas antes inclusive se devuelve el 100 % de la seña; con menos de 24 horas no hay devolución. Si el proveedor falla, la cancelación queda registrada y la devolución puede reintentarse en `POST /api/v1/reservas/turnos/{id}/devolucion/reintentar`.
 
-Los endpoints privados quedan detrás de `auth_request` en el gateway y aplican identidad y permisos por operación en Reservas. La restricción única de profesional y minuto coordina bloqueos aun con varias réplicas; al cancelar se liberan los minutos ocupados. Catálogo y Pagos se invocan con timeout. La disponibilidad usa la duración real y profesionales habilitados que devuelve Catálogo. Pagos persiste simulaciones y devoluciones en `pagos_db`, una base separada; no necesita tokens ni llamadas externas.
+Los endpoints privados quedan detrás de `auth_request` en el gateway y aplican identidad y permisos por operación en Reservas. La restricción única de profesional y minuto coordina bloqueos aun con varias réplicas; al cancelar se liberan los minutos ocupados. Catálogo y Pagos se invocan con timeout. La disponibilidad usa la duración real y profesionales habilitados que devuelve Catálogo. Pagos persiste referencias de preferencias/pagos y devoluciones de Mercado Pago en `pagos_db`, una base separada.
 
 ### Pruebas de Reservas
 
@@ -226,14 +226,14 @@ cd services/reservas
 go test -p=1 -count=1 ./...
 ```
 
-La prueba `TestReservasMongoIntegrationFlujoCompleto` recorre disponibilidad, dos solicitudes simultáneas, bloqueo, seña, confirmación idempotente, devolución y liberación contra MongoDB real, con Catálogo y Pagos simulados. Para ejecutarla, dejá MongoDB de Compose levantado y configurá la URI de prueba:
+La prueba histórica `TestReservasMongoIntegrationFlujoCompleto` recorre esos flujos por el adaptador de compatibilidad Mongo; no verifica la ruta de producción PostgreSQL. Solo para esa prueba opcional, configurá la URI de una instancia desechable aislada:
 
 ```powershell
 $env:RESERVAS_TEST_MONGODB_URI = 'mongodb://localhost:27017'
 go test -p=1 -count=1 -run TestReservasMongoIntegrationFlujoCompleto ./...
 ```
 
-La prueba crea y elimina una base de datos de nombre único; no toca `reservas_db`.
+La prueba crea y elimina una base Mongo de nombre único; no toca Supabase y no representa el almacenamiento de Reservas en la aplicación.
 
 
 ### Flujo por email y registro seguro

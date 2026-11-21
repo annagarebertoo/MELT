@@ -2,7 +2,7 @@ const API = "/api/v1";
 const TOKEN_KEY = "melt.session";
 const INVITATION_KEY = "melt.pending-invitation";
 let invitation = null;
-const state = { page: 1, pageSize: 8, hasNext: false, search: "", category: "", priceMax: "", sort: "nombre", order: "asc", bookingTreatment: null, detailTreatment: null, cartTimer: null, selectedSlot: null, cartItems: [], cartSummary: null, checkoutKey: null, cancelling: null, mode: "login", user: null, rewardRequests: new Map(), rewards: [], canjes: [], categories: [], professionals: [] };
+const state = { page: 1, pageSize: 8, hasNext: false, search: "", category: "", priceMax: "", sort: "nombre", order: "asc", bookingTreatment: null, detailTreatment: null, cartTimer: null, selectedSlot: null, cartItems: [], cartSummary: null, checkoutKey: null, pendingMPReturn: null, cancelling: null, mode: "login", user: null, rewardRequests: new Map(), rewards: [], canjes: [], categories: [], professionals: [] };
 const catalogAdminState = { categories: [], treatments: [], professionals: [], adminProfessionals: [], professionalAccounts: [] };
 
 const $ = (selector) => document.querySelector(selector);
@@ -70,7 +70,9 @@ function updateSteps(step) {
 function updateAuthChrome() {
   const signedIn = Boolean(token());
   $("#booking-guest-note").classList.toggle("hidden", signedIn);
-  $("#header-login").textContent = signedIn ? "Mi cuenta" : "Ingresar";
+  // La navegación principal ya tiene la pestaña "Mi cuenta": no duplicarla con otro botón.
+  $("#header-login").classList.toggle("hidden", signedIn);
+  $("#header-login").textContent = "Ingresar";
   $("#header-register").classList.toggle("hidden", signedIn);
   $("#availability-form").classList.toggle("auth-required", !signedIn);
 }
@@ -229,7 +231,7 @@ async function showProfessionalProfile(id, updateHash = true) {
 function showProfessionalList(updateHash = true) {
   $("#professional-profile").classList.add("hidden");
   $("#professionals-list-view").classList.remove("hidden");
-  if (updateHash && window.location.hash.startsWith("#profesionales/")) window.location.hash = "#profesionales";
+  if (updateHash && window.location.hash.startsWith("#profesionales/")) window.location.hash = "#/profesionales";
 }
 
 function syncProfessionalHash() {
@@ -340,7 +342,7 @@ function selectTreatment(item) {
   $("#booking-treatment").value = item.id;
   $("#booking-professional").value = "";
   updateProfessionals();
-  document.querySelector("#reservas").scrollIntoView({ behavior: "smooth" });
+  window.location.hash = "#/reservas";
 }
 
 function invitationMessage(message) {
@@ -440,6 +442,7 @@ async function submitAuth(event) {
     $("#auth-form").reset();
     updateAuthChrome();
     await loadAccount();
+    await processPaymentReturn();
     showToast("Sesión iniciada. Ya podés consultar tu agenda.");
   } catch (error) { setStatus("#auth-status", error.message, true); }
   finally { $("#auth-submit").disabled = false; }
@@ -462,8 +465,10 @@ async function loadAccount() {
     const visibility = accountSectionVisibility(roles);
     $("#points-panel").classList.toggle("hidden", !visibility.client);
     $("#points-balance").closest(".points-box").classList.toggle("hidden", !visibility.client);
-    $("#ghostkitchen-panel").classList.toggle("hidden", !visibility.client);
-    $("#profile-ghostkitchen").classList.toggle("hidden", !visibility.client);
+    // GhostKitchen pertenece al espacio "Mi cuenta", tanto para invitados como para usuarios logueados.
+    $("#ghostkitchen-panel").classList.remove("hidden");
+    // Evitar un segundo acceso redundante a GK dentro de la misma pantalla.
+    $("#profile-ghostkitchen").classList.add("hidden");
     $("#professional-panel").classList.toggle("hidden", !visibility.professional);
     $("#admin-panel").classList.toggle("hidden", !visibility.admin);
     $("#superadmin-users-panel").classList.toggle("hidden", !visibility.superadmin);
@@ -498,13 +503,15 @@ function accountSectionVisibility(userRoles) {
 
 function showSignedOut() {
   state.user = null;
+  $("#auth-panel").classList.add("signed-out");
   $("#catalog-admin-link").classList.add("hidden");
   $("#cart-menu-link").classList.add("hidden");
   $("#carrito").classList.add("hidden");
   $("#cart-count").textContent = "0";
   window.clearInterval(state.cartTimer);
   $("#points-panel").classList.add("hidden");
-  $("#ghostkitchen-panel").classList.add("hidden");
+  // GK se muestra dentro de Mi cuenta también cuando la persona todavía no inició sesión.
+  $("#ghostkitchen-panel").classList.remove("hidden");
   $("#profile-ghostkitchen").classList.add("hidden");
   $("#professional-panel").classList.add("hidden");
   $("#admin-panel").classList.add("hidden");
@@ -665,6 +672,26 @@ async function completeTreatment(id, button) {
   }
 }
 
+let noShowTimer;
+function scheduleNoShowButtons() {
+  clearTimeout(noShowTimer);
+  let nextEnd = Infinity;
+  const now = Date.now();
+  for (const button of document.querySelectorAll(".professional-no-show[data-ends-at]")) {
+    const end = Number(button.dataset.endsAt);
+    if (end <= now) {
+      button.disabled = false;
+      button.removeAttribute("title");
+      button.removeAttribute("data-ends-at");
+    } else {
+      nextEnd = Math.min(nextEnd, end);
+    }
+  }
+  if (Number.isFinite(nextEnd)) {
+    noShowTimer = setTimeout(scheduleNoShowButtons, Math.min(nextEnd - now, 2147483647));
+  }
+}
+
 async function loadProfessionalTurns() {
   const upcomingList = $("#professional-upcoming");
   const historyList = $("#professional-history");
@@ -681,7 +708,7 @@ async function loadProfessionalTurns() {
       const date = new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(start);
       const stateText = ({ confirmado: "Confirmado", cancelado: "Cancelado", completado: "Realizado", no_asistio: "No asistió" })[turn.estado] || turn.estado;
       const open = turn.estado === "confirmado";
-      const actions = open ? `<div class="booking-actions"><button class="button button-outline complete-treatment" type="button" data-id="${escapeHTML(turn.id)}">Marcar realizado</button><button class="text-link professional-no-show" type="button" data-id="${escapeHTML(turn.id)}" ${end.getTime() > now ? "disabled title=\"Disponible al finalizar el turno\"" : ""}>Marcar no asistió</button><button class="text-link professional-cancel-turn" type="button" data-id="${escapeHTML(turn.id)}">Cancelar turno</button></div>` : "";
+      const actions = open ? `<div class="booking-actions"><button class="button button-outline complete-treatment" type="button" data-id="${escapeHTML(turn.id)}">Marcar realizado</button><button class="text-link professional-no-show" type="button" data-id="${escapeHTML(turn.id)}" ${end.getTime() > now ? `disabled data-ends-at="${end.getTime()}" title="Disponible al finalizar el turno"` : ""}>Marcar no asistió</button><button class="text-link professional-cancel-turn" type="button" data-id="${escapeHTML(turn.id)}">Cancelar turno</button></div>` : "";
       return `<article class="booking-row"><div><strong>${escapeHTML(names.get(turn.tratamientoId) || turn.tratamientoId || "Tratamiento")}</strong><span>${escapeHTML(date)} · Cliente: ${escapeHTML(turn.clienteNombre || turn.clienteId || "No disponible")}</span><small class="booking-status">${escapeHTML(stateText)}</small></div>${actions}</article>`;
     };
     const upcoming = turns.filter((turn) => turn.estado === "confirmado" && new Date(turn.inicio).getTime() >= now);
@@ -691,6 +718,7 @@ async function loadProfessionalTurns() {
     document.querySelectorAll(".complete-treatment").forEach((button) => button.addEventListener("click", () => completeTreatment(button.dataset.id, button)));
     document.querySelectorAll(".professional-cancel-turn").forEach((button) => button.addEventListener("click", () => cancelProfessionalTurn(button)));
     document.querySelectorAll(".professional-no-show").forEach((button) => button.addEventListener("click", () => recordNoShow(button)));
+    scheduleNoShowButtons();
   } catch (error) {
     upcomingList.innerHTML = historyList.innerHTML = `<p class="form-status error-text">No pudimos cargar tus turnos: ${escapeHTML(error.message)}</p>`;
   }
@@ -887,7 +915,7 @@ async function loadCart() {
       ...treatmentIDs.map(async (id) => { try { const response = await request(`/profesionales?tratamientoId=${encodeURIComponent(id)}`); for (const person of response.profesionales || []) if (professionalIDs.includes(person.id)) professionals.set(person.id, person.nombre); } catch {} })
     ]);
     renderCart(treatments, professionals);
-    setStatus("#cart-status", state.cartItems.length ? `${state.cartItems.length} ${state.cartItems.length === 1 ? "tratamiento retenido" : "tratamientos retenidos"}. Confirmá una compra simulada para todos los turnos.` : "Tu carrito está vacío. Consultá horarios y agregá un tratamiento.");
+    setStatus("#cart-status", state.cartItems.length ? `${state.cartItems.length} ${state.cartItems.length === 1 ? "tratamiento retenido" : "tratamientos retenidos"}. Pagá la seña en Mercado Pago para confirmar los turnos.` : "Tu carrito está vacío. Consultá horarios y agregá un tratamiento.");
   } catch (error) {
     state.cartItems = [];
     state.cartSummary = null;
@@ -928,7 +956,7 @@ function renderCart(treatments = new Map(), professionals = new Map()) {
   $("#cart-checkout").disabled = !items.length || !state.cartSummary;
   const list = $("#cart-items");
   const summary = state.cartSummary || {};
-  $("#cart-summary").innerHTML = items.length && state.cartSummary ? `<div><span>Subtotal</span><strong>${formatPrice(summary.subtotal)}</strong></div><div><span>Descuentos</span><strong>−${formatPrice(summary.descuento)}</strong></div><div><span>Total</span><strong>${formatPrice(summary.total)}</strong></div><div><span>Seña · 30 %</span><strong>${formatPrice(summary.sena)}</strong></div><div><span>Restante</span><strong>${formatPrice(summary.restante)}</strong></div><p class="muted">Pago simulado por MELT · no se realizará ningún cobro real.</p>` : items.length ? `<p class="form-status error-text">Los importes del carrito no son válidos. Actualizá el carrito antes de confirmar.</p>` : "";
+  $("#cart-summary").innerHTML = items.length && state.cartSummary ? `<div><span>Subtotal</span><strong>${formatPrice(summary.subtotal)}</strong></div><div><span>Descuentos</span><strong>−${formatPrice(summary.descuento)}</strong></div><div><span>Total</span><strong>${formatPrice(summary.total)}</strong></div><div><span>Seña · 30 %</span><strong>${formatPrice(summary.sena)}</strong></div><div><span>Restante</span><strong>${formatPrice(summary.restante)}</strong></div><p class="muted">Vas a continuar a Mercado Pago para abonar la seña. El turno se confirma al completar el pago.</p>` : items.length ? `<p class="form-status error-text">Los importes del carrito no son válidos. Actualizá el carrito antes de confirmar.</p>` : "";
   if (!items.length) { list.innerHTML = `<p class="empty-state">Tu carrito está vacío. Podés seguir explorando y agregar varios tratamientos.</p>`; window.clearInterval(state.cartTimer); state.cartTimer = null; return; }
   list.innerHTML = items.map((item) => {
     const treatment = treatments.get(item.tratamientoId) || window.treatments?.find((candidate) => candidate.id === item.tratamientoId);
@@ -966,17 +994,68 @@ async function confirmCartPurchase() {
     state.checkoutKey ||= (globalThis.crypto?.randomUUID?.() || `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     const result = await request("/reservas/carrito/checkout", { method: "POST", body: JSON.stringify({ idempotencyKey: state.checkoutKey }) });
     const checkout = result.checkout || {};
+    if (checkout.urlPago) {
+      setStatus("#cart-status", "Abriendo el checkout de Mercado Pago en modo de prueba…");
+      window.location.assign(checkout.urlPago);
+      return;
+    }
     if (checkout.estado === "confirmed") {
       state.checkoutKey = null;
-      showToast("Compra simulada aprobada. Todos los turnos quedaron confirmados.");
-      setStatus("#cart-status", `Compra confirmada. Se registraron ${checkout.turnos?.length || state.cartItems.length} turnos; no se realizó ningún cobro real.`);
+      showToast("Pago aprobado. Todos los turnos quedaron confirmados.");
+      setStatus("#cart-status", `Pago de prueba aprobado. Se registraron ${checkout.turnos?.length || state.cartItems.length} turnos.`);
       await Promise.all([loadCart(), loadBookings()]);
+    } else if (checkout.estado === "reverted") {
+      state.checkoutKey = null;
+      setStatus("#cart-status", "Mercado Pago aprobó el cobro, pero no se pudo confirmar el turno. La seña fue devuelta y podés elegir otro horario.", true);
+      await loadCart();
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    } else if (checkout.estado === "approval_needs_recovery") {
+      setStatus("#cart-status", "Mercado Pago aprobó el cobro, pero MELT no pudo confirmar la reserva ni completar la devolución. Contactá al equipo con el ID de checkout para resolverlo.", true);
     } else if (checkout.estado === "rejected") {
       state.checkoutKey = null;
-      setStatus("#cart-status", "Pago simulado rechazado. No se confirmó ningún turno; tus retenciones siguen vigentes para reintentar.", true);
+      setStatus("#cart-status", "El pago fue rechazado. No se confirmó ningún turno; tus retenciones siguen vigentes para reintentar.", true);
       await loadCart();
     } else {
       setStatus("#cart-status", "La compra sigue procesándose. Podés reintentar sin duplicar el pago.");
+    }
+  } catch (error) {
+    setStatus("#cart-status", error.message, true);
+  } finally { button.disabled = !state.cartItems.length || !state.cartSummary; }
+}
+
+async function processPaymentReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const checkoutId = state.pendingMPReturn?.checkoutId || params.get("checkout_id");
+  const paymentId = state.pendingMPReturn?.paymentId || params.get("order_id") || params.get("payment_id") || params.get("collection_id");
+  if (params.get("checkout_return") !== "1" && !state.pendingMPReturn) return;
+  if (!token()) { setStatus("#cart-status", "Iniciá sesión con la misma cuenta para verificar el pago y confirmar la reserva.", true); return; }
+  if (!checkoutId || !paymentId) { setStatus("#cart-status", "Mercado Pago volvió sin datos suficientes para verificar el pago. Actualizá el carrito y contactá al equipo si ya pagaste.", true); return; }
+  state.pendingMPReturn = { checkoutId, paymentId };
+  const button = $("#cart-checkout");
+  button.disabled = true;
+  try {
+    const result = await request("/reservas/carrito/checkout/retorno", { method: "POST", body: JSON.stringify({ checkoutId, pagoId: paymentId }) });
+    const checkout = result.checkout || {};
+    if (checkout.estado === "confirmed") {
+      state.pendingMPReturn = null; state.checkoutKey = null;
+      setStatus("#cart-status", "Pago aprobado por Mercado Pago. La reserva quedó confirmada.");
+      showToast("Pago aprobado y reserva confirmada.");
+      await Promise.all([loadCart(), loadBookings()]);
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    } else if (checkout.estado === "reverted") {
+      state.pendingMPReturn = null; state.checkoutKey = null;
+      setStatus("#cart-status", "Mercado Pago aprobó el cobro, pero no se pudo confirmar el turno. La seña fue devuelta y podés elegir otro horario.", true);
+      await loadCart();
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    } else if (checkout.estado === "approval_needs_recovery") {
+      setStatus("#cart-status", "Mercado Pago aprobó el cobro, pero MELT no pudo confirmar la reserva ni completar la devolución. Contactá al equipo con el ID de checkout para resolverlo.", true);
+    } else if (checkout.pagoEstado === "rejected" || checkout.estado === "rejected") {
+      state.pendingMPReturn = null; state.checkoutKey = null;
+      setStatus("#cart-status", "El pago fue rechazado. No se confirmó la reserva; podés volver a intentar el pago.", true);
+      await loadCart();
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    } else {
+      setStatus("#cart-status", "Mercado Pago informó que el pago sigue pendiente. Actualizá el carrito en unos segundos para volver a consultarlo.");
     }
   } catch (error) {
     setStatus("#cart-status", error.message, true);
@@ -1205,7 +1284,50 @@ async function handleProfessionalAccountLink(event) {
   }
 }
 
+
+function currentPage() {
+  const hash = window.location.hash || "#/inicio";
+  if (hash.startsWith("#profesionales/")) return "profesionales";
+  if (hash === "#carrito" || hash === "#/carrito") return "carrito";
+  const route = hash.startsWith("#/") ? hash.slice(2).split(/[/?]/)[0] : "";
+  if (route) return ["inicio", "tratamientos", "profesionales", "reservas", "cuenta", "carrito"].includes(route) ? route : "inicio";
+  if (new URLSearchParams(hash.slice(1)).has("invitacion")) return "cuenta";
+  if (hash.startsWith("#profesionales")) return "profesionales";
+  return "inicio";
+}
+
+function applyPageRoute() {
+  const page = currentPage();
+  document.body.dataset.page = page;
+  document.body.classList.remove("page-inicio", "page-tratamientos", "page-profesionales", "page-reservas", "page-cuenta", "page-carrito");
+  document.body.classList.add(`page-${page}`);
+  const main = $("#inicio");
+  const visible = {
+    inicio: [".hero"],
+    tratamientos: ["#tratamientos"],
+    profesionales: ["#profesionales"],
+    reservas: ["#cuenta"],
+    cuenta: ["#cuenta"],
+    carrito: ["#carrito"]
+  }[page] || [".hero"];
+  Array.from(main.children).forEach((element) => {
+    const keep = visible.some((selector) => element.matches(selector));
+    element.classList.toggle("route-hidden", !keep);
+  });
+  const cart = $("#carrito");
+  if (cart) cart.classList.toggle("hidden", page !== "carrito");
+  document.querySelectorAll("[data-page]").forEach((link) => {
+    const active = link.dataset.page === page;
+    link.classList.toggle("is-current", active);
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+  if (page !== "profesionales") showProfessionalList(false);
+  window.scrollTo({ top: 0, behavior: "auto" });
+}
+
 function initialize() {
+  applyPageRoute();
   const updateHeaderOnScroll = () => $(".site-header").classList.toggle("site-header-scrolled", window.scrollY > 70);
   window.addEventListener("scroll", updateHeaderOnScroll, { passive: true });
   updateHeaderOnScroll();
@@ -1236,10 +1358,14 @@ function initialize() {
   $("#auth-form").addEventListener("submit", submitAuth);
   $("#discard-invitation").addEventListener("click", clearInvitation);
   window.addEventListener("hashchange", () => {
+    applyPageRoute();
     if (new URLSearchParams(window.location.hash.slice(1)).has("invitacion")) initializeInvitation().then(() => loadAccount());
-    if (window.location.hash.startsWith("#profesionales")) syncProfessionalHash();
+    if (window.location.hash.startsWith("#profesionales/")) syncProfessionalHash();
     else showProfessionalList(false);
   });
+  document.querySelectorAll("a[data-page]").forEach((link) => link.addEventListener("click", () => {
+    if (link.dataset.page === currentPage()) applyPageRoute();
+  }));
   window.addEventListener("popstate", syncProfessionalHash);
   $("#availability-form").addEventListener("submit", loadAvailability);
   $("#booking-treatment").addEventListener("change", () => { state.selectedSlot = null; $("#time-slots").innerHTML = ""; $("#selected-slot-action").classList.add("hidden"); updateProfessionals(); });
@@ -1248,7 +1374,7 @@ function initialize() {
   $("#logout-button").addEventListener("click", async () => { sessionStorage.removeItem(TOKEN_KEY); showSignedOut(); showToast("Cerraste sesión."); });
   $("#refresh-account").addEventListener("click", loadAccount);
   $("#refresh-bookings").addEventListener("click", loadBookings);
-  $("#refresh-cart").addEventListener("click", loadCart);
+  $("#refresh-cart").addEventListener("click", async () => { await loadCart(); await processPaymentReturn(); });
   $("#cart-checkout").addEventListener("click", confirmCartPurchase);
   $("#refresh-benefits").addEventListener("click", async () => { await Promise.all([loadPoints(), loadBenefits()]); });
   $("#refresh-professional-turns").addEventListener("click", () => Promise.all([loadProfessionalAgenda(), loadProfessionalTurns()]));
@@ -1268,7 +1394,7 @@ function initialize() {
   $("#rule-admin-form").addEventListener("submit", saveRuleAdmin);
   $("#profile-reservations").addEventListener("click", () => $("#my-bookings").scrollIntoView({ behavior: "smooth" }));
   document.querySelectorAll("[data-booking-auth]").forEach((button) => button.addEventListener("click", () => { setAuthMode(button.dataset.bookingAuth); $("#auth-email").focus({ preventScroll: true }); }));
-  document.querySelectorAll("[data-scroll]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.scroll).scrollIntoView({ behavior: "smooth" })));
+  document.querySelectorAll("[data-scroll]").forEach((button) => button.addEventListener("click", () => { const target = button.dataset.scroll; const page = target === "tratamientos" || target === "seleccion" ? "tratamientos" : target === "profesionales" ? "profesionales" : target === "reservas" ? "reservas" : "cuenta"; window.location.hash = `#/${page}`; }));
   document.querySelectorAll("[data-register]").forEach((button) => button.addEventListener("click", () => setAuthMode("register")));
   $("#detail-book").addEventListener("click", () => {
     const id = $("#detail-book").dataset.id;
@@ -1295,7 +1421,7 @@ function initialize() {
   loadProfessionals();
   loadTreatments();
   syncProfessionalHash();
-  initializeInvitation().then(() => loadAccount());
+  initializeInvitation().then(async () => { await loadAccount(); await processPaymentReturn(); });
 }
 
 initialize();

@@ -52,7 +52,7 @@ Después, detener todas las instancias del catálogo, repetir las consultas y co
 ## Limitaciones conocidas del entorno actual
 
 - El gateway configura timeouts de conexión y lectura; eso no sustituye un test de resiliencia ejecutado.
-- Los endpoints de salud de Catálogo verifican MongoDB. Reservas y Beneficios todavía tienen endpoints mínimos de salud.
+- En el ensayo documentado, los endpoints de salud de Reservas y Beneficios eran mínimos. La implementación actual verifica sus conexiones PostgreSQL; esta nota describe solo aquel ensayo histórico.
 - La configuración actual de Prometheus solo scrapea Prometheus; aún no hay instrumentación de métricas de negocio ni dashboard provisionado.
 - La autenticación de MongoDB y las credenciales de desarrollo no son aptas para despliegue público. No exponer este Compose a Internet.
 

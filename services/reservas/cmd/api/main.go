@@ -71,7 +71,10 @@ type turno struct {
 }
 
 type servidorReservas struct {
+	// Los campos Mongo se conservan para adaptadores de compatibilidad usados
+	// por pruebas históricas; main inicia Reservas con postgresStore.
 	mongo         *mongo.Client
+	pg            *postgresStore
 	agendas       *mongo.Collection
 	turnos        *mongo.Collection
 	bloqueos      *mongo.Collection
@@ -162,21 +165,13 @@ var permisosPorOperacion = map[string]map[string]bool{
 }
 
 func main() {
-	uri := strings.TrimSpace(os.Getenv("MONGODB_URI"))
-	if uri == "" {
-		uri = "mongodb://localhost:27017"
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	client, err := mongo.Connect(options.Client().ApplyURI(uri))
+	pg, err := abrirReservasPostgres(ctx)
 	if err != nil {
-		log.Fatal("no se pudo configurar MongoDB")
+		log.Fatal("no se pudo iniciar Reservas con PostgreSQL; verificá RESERVAS_DATABASE_URL y aplicá infra/supabase/reservas.sql")
 	}
-	defer client.Disconnect(context.Background())
-	if err := client.Ping(ctx, nil); err != nil {
-		log.Fatal("no se pudo conectar con MongoDB")
-	}
-	db := client.Database("reservas_db")
+	defer pg.db.Close()
 	catalogoURL := strings.TrimSpace(os.Getenv("CATALOGO_URL"))
 	if catalogoURL == "" {
 		catalogoURL = "http://catalogo-profesionales:8081"
@@ -190,39 +185,7 @@ func main() {
 		authURL = "http://auth:8084"
 	}
 	rabbitURL := strings.TrimSpace(os.Getenv("RABBITMQ_URL"))
-	s := &servidorReservas{mongo: client, agendas: db.Collection("agendas_semanales"), turnos: db.Collection("turnos"), bloqueos: db.Collection("bloqueos_turnos"), carritos: db.Collection("carritos_bloqueos"), checkouts: db.Collection("checkouts"), outbox: db.Collection("outbox_eventos"), controlAgenda: db.Collection("control_agendas"), catalogoURL: catalogoURL, authURL: authURL, pagosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("PAGOS_URL")), "/"), beneficiosURL: beneficiosURL, internalKey: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY")), rabbitURL: rabbitURL, httpClient: &http.Client{Timeout: 7 * time.Second}}
-	_, err = s.agendas.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "profesionalId", Value: 1}, {Key: "diaSemana", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_agenda_profesional_dia")})
-	if err != nil {
-		log.Fatal("no se pudo crear índice de agenda")
-	}
-	_, err = s.turnos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "profesionalId", Value: 1}, {Key: "inicio", Value: 1}}, Options: options.Index().SetName("ix_turnos_profesional_inicio")})
-	if err != nil {
-		log.Fatal("no se pudo crear índice de turnos")
-	}
-	_, err = s.bloqueos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "profesionalId", Value: 1}, {Key: "minuto", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_bloqueo_profesional_minuto")})
-	if err != nil {
-		log.Fatal("no se pudo crear índice de bloqueos de turnos")
-	}
-	_, err = s.bloqueos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "clienteId", Value: 1}, {Key: "categoriaId", Value: 1}, {Key: "minuto", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_bloqueo_cliente_categoria_minuto").SetPartialFilterExpression(bson.M{"clienteId": bson.M{"$exists": true}, "categoriaId": bson.M{"$exists": true}})})
-	if err != nil {
-		log.Fatal("no se pudo crear índice de categoría por cliente")
-	}
-	_, err = s.bloqueos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "expiraEn", Value: 1}}, Options: options.Index().SetExpireAfterSeconds(0).SetName("ttl_bloqueos_carrito")})
-	if err != nil {
-		log.Fatal("no se pudo crear índice TTL de bloqueos")
-	}
-	_, err = s.carritos.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "expiraEn", Value: 1}}, Options: options.Index().SetExpireAfterSeconds(0).SetName("ttl_carritos")})
-	if err != nil {
-		log.Fatal("no se pudo crear índice TTL de carritos")
-	}
-	_, err = s.checkouts.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "clienteId", Value: 1}, {Key: "idempotencyKey", Value: 1}}, Options: options.Index().SetUnique(true).SetName("uq_checkout_cliente_idempotencia")})
-	if err != nil {
-		log.Fatal("no se pudo crear índice de idempotencia de checkout")
-	}
-	_, err = s.outbox.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "publicadoEn", Value: 1}, {Key: "creadoEn", Value: 1}}})
-	if err != nil {
-		log.Fatal("no se pudo crear índice de eventos pendientes")
-	}
+	s := &servidorReservas{pg: pg, catalogoURL: catalogoURL, authURL: authURL, pagosURL: strings.TrimRight(strings.TrimSpace(os.Getenv("PAGOS_URL")), "/"), beneficiosURL: beneficiosURL, internalKey: strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY")), rabbitURL: rabbitURL, httpClient: &http.Client{Timeout: 7 * time.Second}}
 	publisherCtx, cancelPublisher := context.WithCancel(context.Background())
 	defer cancelPublisher()
 	go s.publicarEventos(publisherCtx)
@@ -234,7 +197,13 @@ func main() {
 func (s *servidorReservas) router() *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
-	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"servicio": "reservas", "estado": "ok"}) })
+	r.GET("/health", func(c *gin.Context) {
+		if s.pg == nil || s.pg.db.PingContext(c.Request.Context()) != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"servicio": "reservas", "estado": "degradado"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"servicio": "reservas", "estado": "ok", "base": "postgresql"})
+	})
 	r.GET("/me", requiereIdentidad(), func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"usuario": identidadDesdeHeaders(c)}) })
 	r.PUT("/agenda", requiereIdentidad(), requierePermiso("reservas.gestionar-agenda"), s.guardarAgenda)
 	r.GET("/agenda", requiereIdentidad(), requierePermiso("reservas.gestionar-agenda"), s.consultarAgenda)
@@ -242,6 +211,8 @@ func (s *servidorReservas) router() *gin.Engine {
 	r.GET("/turnos", requiereIdentidad(), requierePermiso("reservas.consultar-turnos"), s.listarTurnos)
 	r.GET("/carrito", requiereIdentidad(), requierePermiso("reservas.crear-bloqueo-carrito"), s.listarCarrito)
 	r.POST("/carrito/checkout", requiereIdentidad(), requierePermiso("reservas.confirmar-bloqueo-carrito"), s.checkoutCarrito)
+	r.POST("/carrito/checkout/retorno", requiereIdentidad(), requierePermiso("reservas.confirmar-bloqueo-carrito"), s.verificarRetornoPago)
+	r.POST("/internal/pagos/mercadopago", s.webhookPagoMP)
 	r.POST("/carrito/bloqueos", requiereIdentidad(), requierePermiso("reservas.crear-bloqueo-carrito"), s.crearBloqueoCarrito)
 	r.POST("/carrito/bloqueos/:id/pago", requiereIdentidad(), requierePermiso("reservas.crear-bloqueo-carrito"), s.iniciarPagoBloqueo)
 	r.POST("/carrito/bloqueos/:id/confirmar", requiereIdentidad(), requierePermiso("reservas.confirmar-bloqueo-carrito"), s.confirmarBloqueoCarrito)
@@ -371,6 +342,26 @@ func bloquesAgendaDe(agenda agendaSemanal) []bloqueAgenda {
 	return []bloqueAgenda{}
 }
 
+// Las agendas nuevas usan bloques como fuente de verdad. HoraInicio/HoraFin
+// son campos heredados y pueden estar vacíos en agendas válidas guardadas con
+// el formato de bloques; sólo se consultan como compatibilidad si no hay bloques.
+func bloquesAgendaValidados(agenda agendaSemanal) ([]bloqueAgenda, bool) {
+	if agenda.DiaSemana < 0 || agenda.DiaSemana > 6 {
+		return nil, false
+	}
+	if !agenda.Activo {
+		return []bloqueAgenda{}, true
+	}
+	if agenda.Bloques != nil {
+		bloques, ok := validarBloquesAgenda(agenda.Bloques)
+		return bloques, ok && len(bloques) > 0
+	}
+	if !agendaValida(agenda.DiaSemana, agenda.HoraInicio, agenda.HoraFin) {
+		return nil, false
+	}
+	return []bloqueAgenda{{Inicio: agenda.HoraInicio, Fin: agenda.HoraFin}}, true
+}
+
 func intervaloEnBloques(inicio, fin time.Time, bloques []bloqueAgenda, loc *time.Location) bool {
 	localInicio, localFin := inicio.In(loc), fin.In(loc)
 	if localInicio.Year() != localFin.Year() || localInicio.YearDay() != localFin.YearDay() {
@@ -459,6 +450,9 @@ func agendaControlID(profesionalID string, dia int) string {
 }
 
 func (s *servidorReservas) asegurarAgendaControl(ctx context.Context, profesionalID string, dia int) error {
+	if s.pg != nil {
+		return s.pg.asegurarAgendaControl(ctx, profesionalID, dia)
+	}
 	_, err := s.agendaControl().UpdateOne(ctx, bson.M{"_id": agendaControlID(profesionalID, dia)}, bson.M{"$setOnInsert": bson.M{"version": 0}}, options.UpdateOne().SetUpsert(true))
 	if mongo.IsDuplicateKeyError(err) {
 		return nil
@@ -466,9 +460,43 @@ func (s *servidorReservas) asegurarAgendaControl(ctx context.Context, profesiona
 	return err
 }
 
+func (s *servidorReservas) obtenerAgenda(ctx context.Context, profesionalID string, dia int, soloActiva bool) (agendaSemanal, error) {
+	if s.pg != nil {
+		return s.pg.agenda(ctx, profesionalID, dia, soloActiva)
+	}
+	filter := bson.M{"profesionalId": profesionalID, "diaSemana": dia}
+	if soloActiva {
+		filter["activo"] = true
+	}
+	var agenda agendaSemanal
+	err := s.agendas.FindOne(ctx, filter).Decode(&agenda)
+	return agenda, err
+}
+
 func (s *servidorReservas) agendaRespetaReservas(ctx context.Context, profesionalID string, dia int, bloques []bloqueAgenda) (bool, error) {
 	now := time.Now().UTC()
 	loc := zonaHorariaReservas()
+	if s.pg != nil {
+		turnos, err := s.pg.turnosDesde(ctx, profesionalID, now)
+		if err != nil {
+			return false, err
+		}
+		for _, item := range turnos {
+			if int(item.Inicio.In(loc).Weekday()) == dia && !intervaloEnBloques(item.Inicio, item.Fin, bloques, loc) {
+				return false, nil
+			}
+		}
+		carritos, err := s.pg.carritosProfesionalFuturos(ctx, profesionalID, "pendiente_pago", now)
+		if err != nil {
+			return false, err
+		}
+		for _, item := range carritos {
+			if int(item.Inicio.In(loc).Weekday()) == dia && !intervaloEnBloques(item.Inicio, item.Fin, bloques, loc) {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
 	turns, err := s.turnos.Find(ctx, bson.M{"profesionalId": profesionalID, "estado": "confirmado", "inicio": bson.M{"$gte": now}})
 	if err != nil {
 		return false, err
@@ -517,6 +545,15 @@ func (s *servidorReservas) consultarAgenda(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
+	if s.pg != nil {
+		guardadas, err := s.pg.agendas(ctx, profesionalID)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo consultar la agenda"})
+			return
+		}
+		c.JSON(http.StatusOK, respuestaAgenda(profesionalID, guardadas))
+		return
+	}
 	cur, err := s.agendas.Find(ctx, bson.M{"profesionalId": profesionalID}, options.Find().SetSort(bson.D{{Key: "diaSemana", Value: 1}}))
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo consultar la agenda"})
@@ -528,6 +565,10 @@ func (s *servidorReservas) consultarAgenda(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo leer la agenda"})
 		return
 	}
+	c.JSON(http.StatusOK, respuestaAgenda(profesionalID, guardadas))
+}
+
+func respuestaAgenda(profesionalID string, guardadas []agendaSemanal) gin.H {
 	porDia := make(map[int]agendaSemanal, len(guardadas))
 	for _, item := range guardadas {
 		porDia[item.DiaSemana] = item
@@ -543,7 +584,7 @@ func (s *servidorReservas) consultarAgenda(c *gin.Context) {
 		}
 		dias = append(dias, item)
 	}
-	c.JSON(http.StatusOK, gin.H{"profesionalId": profesionalID, "dias": dias})
+	return gin.H{"profesionalId": profesionalID, "dias": dias}
 }
 
 func (s *servidorReservas) guardarAgenda(c *gin.Context) {
@@ -584,6 +625,31 @@ func (s *servidorReservas) guardarAgenda(c *gin.Context) {
 	defer cancel()
 	if err := s.asegurarAgendaControl(ctx, profesionalID, req.DiaSemana); err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo bloquear la modificación de agenda"})
+		return
+	}
+	if s.pg != nil {
+		err := s.pg.transaction(ctx, func(tx context.Context) error {
+			if err := s.pg.modificarVersionAgenda(tx, profesionalID, req.DiaSemana); err != nil {
+				return err
+			}
+			compatible, err := s.agendaRespetaReservas(tx, profesionalID, req.DiaSemana, bloques)
+			if err != nil {
+				return err
+			}
+			if !compatible {
+				return errAgendaIncompatible
+			}
+			return s.pg.guardarAgenda(tx, doc)
+		})
+		if err != nil {
+			if errors.Is(err, errAgendaIncompatible) {
+				c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": err.Error(), "message": "La nueva disponibilidad dejaría fuera un turno confirmado o un horario retenido."}})
+				return
+			}
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo guardar la agenda"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"agenda": doc})
 		return
 	}
 	session, err := s.mongo.StartSession()
@@ -647,7 +713,7 @@ func (s *servidorReservas) disponibilidad(c *gin.Context) {
 	loc := zonaHorariaReservas()
 	base := time.Date(fecha.Year(), fecha.Month(), fecha.Day(), 0, 0, 0, 0, loc)
 	var agenda agendaSemanal
-	if err := s.agendas.FindOne(ctx, bson.D{{Key: "profesionalId", Value: prof}, {Key: "diaSemana", Value: int(base.Weekday())}, {Key: "activo", Value: true}}).Decode(&agenda); err != nil {
+	if agenda, err = s.obtenerAgenda(ctx, prof, int(base.Weekday()), true); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			c.JSON(http.StatusOK, gin.H{"profesionalId": prof, "fecha": c.Query("fecha"), "horarios": []string{}})
 			return
@@ -655,17 +721,13 @@ func (s *servidorReservas) disponibilidad(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo consultar la agenda"})
 		return
 	}
-	if !agendaValida(agenda.DiaSemana, agenda.HoraInicio, agenda.HoraFin) {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "La agenda del profesional contiene un rango horario inválido."}})
-		return
-	}
 	if !agenda.Activo {
 		c.JSON(http.StatusOK, gin.H{"profesionalId": prof, "fecha": c.Query("fecha"), "horarios": []string{}})
 		return
 	}
-	bloques, agendaOK := validarBloquesAgenda(bloquesAgendaDe(agenda))
+	bloques, agendaOK := bloquesAgendaValidados(agenda)
 	if !agendaOK {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "La agenda del profesional contiene bloques inválidos."}})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "La agenda del profesional contiene bloques o rangos horarios inválidos."}})
 		return
 	}
 	var slots []string
@@ -712,6 +774,20 @@ func zonaHorariaReservas() *time.Location {
 }
 
 func (s *servidorReservas) horarioOcupado(ctx context.Context, profesionalID, clienteID, categoriaID string, inicio, fin time.Time) (bool, error) {
+	if s.pg != nil {
+		turnos, err := s.pg.contarTurnosSuperpuestos(ctx, profesionalID, inicio, fin)
+		if err != nil || turnos > 0 {
+			return turnos > 0, err
+		}
+		locks, err := s.pg.bloqueosProfesionalRango(ctx, profesionalID, inicio.UTC().Unix()/60, fin.UTC().Unix()/60, time.Now().UTC())
+		if err != nil || locks > 0 {
+			return locks > 0, err
+		}
+		if clienteID != "" && categoriaID != "" {
+			return s.categoriaOcupadaCliente(ctx, clienteID, categoriaID, inicio, fin)
+		}
+		return false, nil
+	}
 	turnos, err := s.turnos.CountDocuments(ctx, bson.D{{Key: "profesionalId", Value: profesionalID}, {Key: "estado", Value: "confirmado"}, {Key: "inicio", Value: bson.D{{Key: "$lt", Value: fin}}}, {Key: "fin", Value: bson.D{{Key: "$gt", Value: inicio}}}})
 	if err != nil {
 		return false, err
@@ -742,6 +818,47 @@ func (s *servidorReservas) horarioOcupado(ctx context.Context, profesionalID, cl
 
 func (s *servidorReservas) categoriaOcupadaCliente(ctx context.Context, clienteID, categoriaID string, inicio, fin time.Time) (bool, error) {
 	minutoInicio, minutoFin := inicio.UTC().Unix()/60, fin.UTC().Unix()/60
+	if s.pg != nil {
+		count, err := s.pg.bloqueosCategoriaClienteRango(ctx, clienteID, categoriaID, minutoInicio, minutoFin, time.Now().UTC())
+		if err != nil || count > 0 {
+			return count > 0, err
+		}
+		turns, err := s.pg.turnosClienteEnRango(ctx, clienteID, inicio, fin)
+		if err != nil {
+			return false, err
+		}
+		for _, item := range turns {
+			id := item.CategoriaID
+			if id == "" {
+				t, _, e := s.obtenerTratamiento(ctx, item.TratamientoID)
+				if e != nil {
+					return false, e
+				}
+				id = t.CategoriaID
+			}
+			if id == categoriaID {
+				return true, nil
+			}
+		}
+		carts, err := s.pg.carritosClienteEnRango(ctx, clienteID, "pendiente_pago", inicio, fin, time.Now().UTC())
+		if err != nil {
+			return false, err
+		}
+		for _, item := range carts {
+			id := item.CategoriaID
+			if id == "" {
+				t, _, e := s.obtenerTratamiento(ctx, item.TratamientoID)
+				if e != nil {
+					return false, e
+				}
+				id = t.CategoriaID
+			}
+			if id == categoriaID {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
 	filter := bson.M{"clienteId": clienteID, "categoriaId": categoriaID, "minuto": bson.M{"$gte": minutoInicio, "$lt": minutoFin}, "$or": bson.A{bson.M{"expiraEn": bson.M{"$exists": false}}, bson.M{"expiraEn": bson.M{"$gt": time.Now().UTC()}}}}
 	count, err := s.bloqueos.CountDocuments(ctx, filter)
 	if err != nil || count > 0 {
@@ -834,28 +951,30 @@ func (s *servidorReservas) crearTurno(c *gin.Context) {
 		return
 	}
 	var agenda agendaSemanal
-	if err := s.agendas.FindOne(ctx, bson.D{{Key: "profesionalId", Value: req.ProfesionalID}, {Key: "diaSemana", Value: int(localStart.Weekday())}, {Key: "activo", Value: true}}).Decode(&agenda); err != nil {
+	if agenda, err = s.obtenerAgenda(ctx, req.ProfesionalID, int(localStart.Weekday()), true); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "FUERA_DE_AGENDA", "message": "El profesional no atiende ese día."}})
 		return
 	}
-	if !agendaValida(agenda.DiaSemana, agenda.HoraInicio, agenda.HoraFin) {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "La agenda del profesional contiene un rango horario inválido."}})
+	bloques, agendaOK := bloquesAgendaValidados(agenda)
+	if !agendaOK {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENDA_INVALIDA", "message": "La agenda del profesional contiene bloques o rangos horarios inválidos."}})
 		return
 	}
-	from, _ := parseHora(agenda.HoraInicio)
-	to, _ := parseHora(agenda.HoraFin)
-	minute := localStart.Hour()*60 + localStart.Minute()
-	if minute < from || minute+duracionMinutos > to {
+	if !intervaloEnBloques(start, end, bloques, zonaHorariaReservas()) {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "FUERA_DE_AGENDA", "message": "El horario queda fuera de la agenda del profesional."}})
 		return
 	}
 	var overlap turno
-	err = s.turnos.FindOne(ctx, bson.D{{Key: "profesionalId", Value: req.ProfesionalID}, {Key: "estado", Value: "confirmado"}, {Key: "inicio", Value: bson.D{{Key: "$lt", Value: end}}}, {Key: "fin", Value: bson.D{{Key: "$gt", Value: start}}}}).Decode(&overlap)
+	if s.pg != nil {
+		overlap, err = s.pg.turnoSuperpuesto(ctx, req.ProfesionalID, start, end)
+	} else {
+		err = s.turnos.FindOne(ctx, bson.D{{Key: "profesionalId", Value: req.ProfesionalID}, {Key: "estado", Value: "confirmado"}, {Key: "inicio", Value: bson.D{{Key: "$lt", Value: end}}}, {Key: "fin", Value: bson.D{{Key: "$gt", Value: start}}}}).Decode(&overlap)
+	}
 	if err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "HORARIO_OCUPADO", "message": "Ese horario ya está reservado."}})
 		return
 	}
-	if !errors.Is(err, mongo.ErrNoDocuments) {
+	if !errors.Is(err, mongo.ErrNoDocuments) && !sqlNotFound(err) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo verificar el horario"})
 		return
 	}
@@ -864,6 +983,24 @@ func (s *servidorReservas) crearTurno(c *gin.Context) {
 	bloqueos := make([]interface{}, 0, duracionMinutos)
 	for minuto := start.UTC().Unix() / 60; minuto < end.UTC().Unix()/60; minuto++ {
 		bloqueos = append(bloqueos, bloqueoTurno{ProfesionalID: req.ProfesionalID, ClienteID: u.ID, CategoriaID: tratamiento.CategoriaID, Minuto: minuto, TurnoID: doc.ID})
+	}
+	if s.pg != nil {
+		err = s.pg.transaction(ctx, func(tx context.Context) error {
+			if e := s.pg.insertarBloqueos(tx, convertirBloqueos(bloqueos)); e != nil {
+				return e
+			}
+			return s.pg.insertarTurno(tx, doc)
+		})
+		if err != nil {
+			if s.pg.conflictoUnico(err) {
+				c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "HORARIO_OCUPADO", "message": "Ese horario ya está reservado o fue tomado por otra solicitud."}})
+				return
+			}
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo crear el turno de forma segura"})
+			return
+		}
+		c.JSON(http.StatusCreated, gin.H{"turno": doc})
+		return
 	}
 	if len(bloqueos) > 0 {
 		if _, err := s.bloqueos.InsertMany(ctx, bloqueos); err != nil {
@@ -887,9 +1024,11 @@ func (s *servidorReservas) crearTurno(c *gin.Context) {
 func (s *servidorReservas) listarTurnos(c *gin.Context) {
 	u := c.MustGet("identidad").(identidad)
 	filter := bson.D{}
+	clienteFiltro, profesionalFiltro := "", ""
 	if tieneRol(u, "recepcion", "administrador", "superadministrador") {
 		// Personal autorizado puede consultar todos los turnos.
 	} else if tieneRol(u, "cliente") {
+		clienteFiltro = u.ID
 		filter = append(filter, bson.E{Key: "clienteId", Value: u.ID})
 	} else if tieneRol(u, "profesional") {
 		profesionalID, status, err := s.resolverPerfilProfesional(c.Request.Context(), u.ID)
@@ -897,6 +1036,7 @@ func (s *servidorReservas) listarTurnos(c *gin.Context) {
 			c.JSON(status, gin.H{"error": gin.H{"code": "PERFIL_PROFESIONAL_NO_DISPONIBLE", "message": err.Error()}})
 			return
 		}
+		profesionalFiltro = profesionalID
 		filter = append(filter, bson.E{Key: "profesionalId", Value: profesionalID})
 	} else {
 		c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "PERMISOS_INSUFICIENTES", "message": "No tenés permisos para consultar turnos."}})
@@ -904,6 +1044,20 @@ func (s *servidorReservas) listarTurnos(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
+	if s.pg != nil {
+		out, err := s.pg.listarTurnos(ctx, clienteFiltro, profesionalFiltro)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudieron consultar los turnos"})
+			return
+		}
+		if profesionalFiltro != "" {
+			for i := range out {
+				out[i].ClienteNombre = s.nombreClienteInterno(ctx, out[i].ClienteID)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"turnos": out})
+		return
+	}
 	cur, err := s.turnos.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "inicio", Value: 1}}))
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudieron consultar los turnos"})
@@ -923,11 +1077,11 @@ func (s *servidorReservas) listarTurnos(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"turnos": out})
 }
 
-func (s *servidorReservas) devolverSena(ctx context.Context, pagoID string, importe float64, idempotencyKey string) error {
+func (s *servidorReservas) devolverSena(ctx context.Context, pagoID string, importe float64, idempotencyKey, reason string) error {
 	if s.pagosURL == "" {
 		return errors.New("proveedor de pagos no configurado")
 	}
-	payload, _ := json.Marshal(gin.H{"pagoId": pagoID, "importe": importe, "moneda": "ARS", "motivo": "cancelacion_turno"})
+	payload, _ := json.Marshal(gin.H{"pagoId": pagoID, "importe": importe, "moneda": "ARS", "motivo": reason})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.pagosURL+"/payments/refunds", strings.NewReader(string(payload)))
 	if err != nil {
 		return err
@@ -952,8 +1106,14 @@ func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	var t turno
-	if err := s.turnos.FindOne(ctx, bson.D{{Key: "_id", Value: id}}).Decode(&t); err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
+	var getErr error
+	if s.pg != nil {
+		t, getErr = s.pg.turno(ctx, id)
+	} else {
+		getErr = s.turnos.FindOne(ctx, bson.D{{Key: "_id", Value: id}}).Decode(&t)
+	}
+	if getErr != nil {
+		if errors.Is(getErr, mongo.ErrNoDocuments) || sqlNotFound(getErr) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "turno no encontrado"})
 			return
 		}
@@ -1001,11 +1161,15 @@ func (s *servidorReservas) cancelarTurno(c *gin.Context) {
 		return
 	}
 	if devolucion > 0 {
-		if err := s.devolverSena(ctx, t.PagoID, devolucion, "refund-turno-"+id); err != nil {
+		if err := s.devolverSena(ctx, t.PagoID, devolucion, "refund-turno-"+id, "cancelacion_turno"); err != nil {
 			c.JSON(http.StatusAccepted, gin.H{"turnoId": id, "estado": "cancelado", "devolucion": gin.H{"importe": devolucion, "moneda": "ARS", "estado": "pendiente", "mensaje": "La cancelación quedó registrada; la devolución requiere reintento operativo."}})
 			return
 		}
-		_, _ = s.turnos.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "estado", Value: "cancelado"}, {Key: "estadoDevolucion", Value: "pendiente"}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estadoDevolucion", Value: "devuelta"}}}})
+		if s.pg != nil {
+			_ = s.pg.actualizarDevolucion(ctx, id, "pendiente", "devuelta")
+		} else {
+			_, _ = s.turnos.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "estado", Value: "cancelado"}, {Key: "estadoDevolucion", Value: "pendiente"}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estadoDevolucion", Value: "devuelta"}}}})
+		}
 		estadoDevolucion = "devuelta"
 	}
 	c.JSON(http.StatusOK, gin.H{"turnoId": id, "estado": "cancelado", "devolucion": gin.H{"importe": devolucion, "moneda": "ARS", "estado": estadoDevolucion, "regla": "100% si se cancela con 24 horas o más; sin devolución con menos de 24 horas"}})
@@ -1058,8 +1222,19 @@ func (s *servidorReservas) descartarBloqueoPendiente(id, clienteID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	var cart bloqueoCarrito
-	if s.carritos.FindOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "clienteId", Value: clienteID}}).Decode(&cart) == nil {
+	var err error
+	if s.pg != nil {
+		cart, err = s.pg.carrito(ctx, id)
+	} else {
+		err = s.carritos.FindOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "clienteId", Value: clienteID}}).Decode(&cart)
+	}
+	if err == nil && cart.ClienteID == clienteID {
 		s.liberarBeneficio(ctx, cart.BeneficioCanjeID, clienteID, id)
+	}
+	if s.pg != nil {
+		_ = s.pg.borrarBloqueosTurno(ctx, id)
+		_ = s.pg.borrarCarrito(ctx, id, clienteID)
+		return
 	}
 	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key: "turnoId", Value: id}})
 	_, _ = s.carritos.DeleteOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "clienteId", Value: clienteID}, {Key: "estado", Value: "pendiente_pago"}})
@@ -1069,6 +1244,27 @@ func (s *servidorReservas) listarCarrito(c *gin.Context) {
 	u := c.MustGet("identidad").(identidad)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
+	if s.pg != nil {
+		items, err := s.pg.carritosCliente(ctx, u.ID, "pendiente_pago", time.Now().UTC())
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo consultar el carrito"})
+			return
+		}
+		resumen := gin.H{"subtotal": float64(0), "descuento": float64(0), "total": float64(0), "sena": float64(0), "restante": float64(0)}
+		var subtotal, descuento, total, sena float64
+		for _, item := range items {
+			subtotal += item.Precio
+			descuento += item.DescuentoBeneficio
+			total += item.PrecioFinal
+			sena += item.Sena
+		}
+		if total == 0 {
+			total = subtotal - descuento
+		}
+		resumen["subtotal"], resumen["descuento"], resumen["total"], resumen["sena"], resumen["restante"] = subtotal, descuento, total, sena, math.Max(0, total-sena)
+		c.JSON(http.StatusOK, gin.H{"items": items, "resumen": resumen})
+		return
+	}
 	cur, err := s.carritos.Find(ctx, bson.M{"clienteId": u.ID, "estado": "pendiente_pago", "expiraEn": bson.M{"$gt": time.Now().UTC()}}, options.Find().SetSort(bson.D{{Key: "creadoEn", Value: 1}, {Key: "inicio", Value: 1}}))
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo consultar el carrito"})
@@ -1135,7 +1331,7 @@ func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
 	localStart := start.In(zonaHorariaReservas())
 	end := start.Add(time.Duration(t.DuracionMinutos) * time.Minute)
 	var agenda agendaSemanal
-	if err := s.agendas.FindOne(ctx, bson.D{{Key: "profesionalId", Value: req.ProfesionalID}, {Key: "diaSemana", Value: int(localStart.Weekday())}, {Key: "activo", Value: true}}).Decode(&agenda); err != nil {
+	if agenda, err = s.obtenerAgenda(ctx, req.ProfesionalID, int(localStart.Weekday()), true); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "FUERA_DE_AGENDA", "message": "El profesional no atiende ese día."}})
 		return
 	}
@@ -1149,14 +1345,22 @@ func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
 		return
 	}
 	now := time.Now().UTC()
-	_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key: "expiraEn", Value: bson.D{{Key: "$lte", Value: now}}}})
+	if s.pg != nil {
+		_ = s.pg.borrarBloqueosVencidos(ctx, now)
+	} else {
+		_, _ = s.bloqueos.DeleteMany(ctx, bson.D{{Key: "expiraEn", Value: bson.D{{Key: "$lte", Value: now}}}})
+	}
 	var overlap turno
-	err = s.turnos.FindOne(ctx, bson.D{{Key: "profesionalId", Value: req.ProfesionalID}, {Key: "estado", Value: "confirmado"}, {Key: "inicio", Value: bson.D{{Key: "$lt", Value: end}}}, {Key: "fin", Value: bson.D{{Key: "$gt", Value: start}}}}).Decode(&overlap)
+	if s.pg != nil {
+		overlap, err = s.pg.turnoSuperpuesto(ctx, req.ProfesionalID, start, end)
+	} else {
+		err = s.turnos.FindOne(ctx, bson.D{{Key: "profesionalId", Value: req.ProfesionalID}, {Key: "estado", Value: "confirmado"}, {Key: "inicio", Value: bson.D{{Key: "$lt", Value: end}}}, {Key: "fin", Value: bson.D{{Key: "$gt", Value: start}}}}).Decode(&overlap)
+	}
 	if err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "HORARIO_OCUPADO", "message": "Ese horario ya está reservado."}})
 		return
 	}
-	if !errors.Is(err, mongo.ErrNoDocuments) {
+	if !errors.Is(err, mongo.ErrNoDocuments) && !sqlNotFound(err) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo verificar el horario"})
 		return
 	}
@@ -1188,6 +1392,40 @@ func (s *servidorReservas) crearBloqueoCarrito(c *gin.Context) {
 	if err := s.asegurarAgendaControl(ctx, req.ProfesionalID, int(localStart.Weekday())); err != nil {
 		s.liberarBeneficio(context.Background(), doc.BeneficioCanjeID, u.ID, id)
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo proteger la agenda durante la reserva"})
+		return
+	}
+	if s.pg != nil {
+		err = s.pg.transaction(ctx, func(tx context.Context) error {
+			if err := s.pg.modificarVersionAgenda(tx, req.ProfesionalID, int(localStart.Weekday())); err != nil {
+				return err
+			}
+			agendaActual, err := s.pg.agenda(tx, req.ProfesionalID, int(localStart.Weekday()), true)
+			if err != nil {
+				return errAgendaIncompatible
+			}
+			bloquesActuales, ok := validarBloquesAgenda(bloquesAgendaDe(agendaActual))
+			if !ok || !intervaloEnBloques(start, end, bloquesActuales, zonaHorariaReservas()) {
+				return errAgendaIncompatible
+			}
+			if err := s.pg.insertarBloqueos(tx, convertirBloqueos(bloqueos)); err != nil {
+				return err
+			}
+			return s.pg.insertarCarrito(tx, doc)
+		})
+		if err != nil {
+			s.liberarBeneficio(context.Background(), doc.BeneficioCanjeID, u.ID, id)
+			if s.pg.conflictoUnico(err) {
+				c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "HORARIO_OCUPADO", "message": "Ese horario ya está reservado o bloqueado por otro carrito."}})
+				return
+			}
+			if errors.Is(err, errAgendaIncompatible) {
+				c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "FUERA_DE_AGENDA", "message": "La disponibilidad cambió. Volvé a consultar los horarios."}})
+				return
+			}
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo bloquear el horario de forma segura"})
+			return
+		}
+		c.JSON(http.StatusCreated, gin.H{"bloqueo": doc, "seña": gin.H{"porcentaje": 30, "importe": doc.Sena, "moneda": doc.Moneda}, "mensaje": "Tratamiento agregado al carrito. El horario queda retenido durante diez minutos; el pago se simula una sola vez desde el checkout."})
 		return
 	}
 	session, sessionErr := s.mongo.StartSession()
@@ -1239,8 +1477,48 @@ func (s *servidorReservas) liberarBloqueoCarrito(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	var cart bloqueoCarrito
-	if err := s.carritos.FindOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "clienteId", Value: u.ID}}).Decode(&cart); err != nil {
+	var cartErr error
+	if s.pg != nil {
+		cart, cartErr = s.pg.carrito(ctx, id)
+		if cartErr == nil && cart.ClienteID != u.ID {
+			cartErr = errRegistroNoEncontrado
+		}
+	} else {
+		cartErr = s.carritos.FindOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "clienteId", Value: u.ID}}).Decode(&cart)
+	}
+	if cartErr != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "CARRITO_NO_ENCONTRADO", "message": "No encontramos ese carrito."}})
+		return
+	}
+	if s.pg != nil {
+		err := s.pg.transaction(ctx, func(tx context.Context) error {
+			matched, err := s.pg.liberarCarrito(tx, id, u.ID, time.Now().UTC())
+			if err != nil {
+				return err
+			}
+			if matched == 0 {
+				locked, e := s.pg.carrito(tx, id)
+				if e == nil && locked.ClienteID == u.ID && locked.CheckoutID != "" {
+					return errCheckoutEnCurso
+				}
+				return mongo.ErrNoDocuments
+			}
+			return s.pg.borrarBloqueosTurno(tx, id)
+		})
+		if errors.Is(err, mongo.ErrNoDocuments) || sqlNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "CARRITO_NO_ENCONTRADO", "message": "No existe un bloqueo pendiente de tu propiedad."}})
+			return
+		}
+		if errors.Is(err, errCheckoutEnCurso) {
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CHECKOUT_EN_CURSO", "message": "No se puede quitar un elemento mientras se confirma la compra."}})
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no se pudo liberar el carrito"})
+			return
+		}
+		s.liberarBeneficio(ctx, cart.BeneficioCanjeID, u.ID, id)
+		c.Status(http.StatusNoContent)
 		return
 	}
 	session, err := s.mongo.StartSession()
@@ -1296,7 +1574,13 @@ func (s *servidorReservas) reintentarDevolucion(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
 	defer cancel()
 	var t turno
-	if err := s.turnos.FindOne(ctx, bson.D{{Key: "_id", Value: id}}).Decode(&t); err != nil {
+	var getErr error
+	if s.pg != nil {
+		t, getErr = s.pg.turno(ctx, id)
+	} else {
+		getErr = s.turnos.FindOne(ctx, bson.D{{Key: "_id", Value: id}}).Decode(&t)
+	}
+	if getErr != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "turno no encontrado"})
 		return
 	}
@@ -1308,11 +1592,16 @@ func (s *servidorReservas) reintentarDevolucion(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "DEVOLUCION_NO_PENDIENTE", "message": "El turno no tiene una devolución pendiente."}})
 		return
 	}
-	if err := s.devolverSena(ctx, t.PagoID, t.ImporteDevolucion, "refund-turno-"+id); err != nil {
+	if err := s.devolverSena(ctx, t.PagoID, t.ImporteDevolucion, "refund-turno-"+id, "cancelacion_turno"); err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "DEVOLUCION_PENDIENTE", "message": "El proveedor todavía no confirmó la devolución; se puede reintentar."}})
 		return
 	}
-	_, err := s.turnos.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "estadoDevolucion", Value: "pendiente"}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estadoDevolucion", Value: "devuelta"}}}})
+	var err error
+	if s.pg != nil {
+		err = s.pg.actualizarDevolucion(ctx, id, "pendiente", "devuelta")
+	} else {
+		_, err = s.turnos.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}, {Key: "estadoDevolucion", Value: "pendiente"}}, bson.D{{Key: "$set", Value: bson.D{{Key: "estadoDevolucion", Value: "devuelta"}}}})
+	}
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "la devolución fue enviada pero no se pudo actualizar su estado"})
 		return

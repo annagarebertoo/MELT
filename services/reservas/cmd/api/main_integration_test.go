@@ -115,33 +115,44 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 	}))
 	defer beneficios.Close()
 	var refundCalls, preferenceCalls int
-	simulateResult := "approved"
+	verifiedPaymentStatus := "approved"
 	expireHoldID := ""
 	pagos := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/payments/simulate":
+		case "/payments/preferences":
 			preferenceCalls++
-			var req simulatePaymentRequest
+			var req struct {
+				CheckoutID string  `json:"checkoutId"`
+				Amount     float64 `json:"importe"`
+				Currency   string  `json:"moneda"`
+			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Amount <= 0 || req.Currency != "ARS" || req.CheckoutID == "" || r.Header.Get("X-Melt-Internal-Key") != "integration-internal" {
-				http.Error(w, "invalid simulation", http.StatusBadRequest)
+				http.Error(w, "invalid preference", http.StatusBadRequest)
 				return
 			}
-			payment := simulatedPayment{ID: "pago-" + req.CheckoutID, CheckoutID: req.CheckoutID, Amount: req.Amount, Currency: req.Currency, Status: simulateResult}
 			if expireHoldID != "" {
 				_, _ = carritos.UpdateOne(ctx, bson.M{"_id": expireHoldID}, bson.M{"$set": bson.M{"expiraEn": time.Now().UTC().Add(-time.Minute)}})
 				expireHoldID = ""
 			}
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(payment)
+			_ = json.NewEncoder(w).Encode(checkoutPreference{ID: "preference-" + req.CheckoutID, CheckoutID: req.CheckoutID, Amount: req.Amount, Currency: req.Currency, InitPoint: "https://sandbox.mercadopago.com/checkout/" + req.CheckoutID})
+		case "/payments/verify":
+			var req struct {
+				PaymentID string  `json:"pagoId"`
+				Amount    float64 `json:"importe"`
+				Currency  string  `json:"moneda"`
+				Reference string  `json:"referencia"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "invalid verification", http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(paymentVerification{CheckoutID: req.Reference, PaymentID: req.PaymentID, Amount: req.Amount, Currency: req.Currency, Status: verifiedPaymentStatus, Approved: verifiedPaymentStatus == "approved"})
 		case "/payments/refunds":
 			refundCalls++
 			w.WriteHeader(http.StatusCreated)
 		default:
-			if strings.HasSuffix(r.URL.Path, "/reverse") {
-				w.WriteHeader(http.StatusOK)
-			} else {
-				http.NotFound(w, r)
-			}
+			http.NotFound(w, r)
 		}
 	}))
 	defer pagos.Close()
@@ -149,6 +160,25 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 	s := &servidorReservas{mongo: client, agendas: agendas, turnos: turnos, bloqueos: bloqueos, carritos: carritos, checkouts: checkouts, outbox: outbox, catalogoURL: catalogo.URL, pagosURL: pagos.URL, beneficiosURL: beneficios.URL, internalKey: "integration-internal", httpClient: &http.Client{Timeout: 3 * time.Second}}
 	gin.SetMode(gin.TestMode)
 	router := s.router()
+	checkoutAndReturn := func(idempotencyKey string) *httptest.ResponseRecorder {
+		body := fmt.Sprintf(`{"idempotencyKey":%q}`, idempotencyKey)
+		started := integrationRequest(router, http.MethodPost, "/carrito/checkout", body)
+		if started.Code != http.StatusCreated {
+			return started
+		}
+		var startedResult struct {
+			Checkout struct {
+				ID      string `json:"id"`
+				URLPago string `json:"urlPago"`
+				Estado  string `json:"estado"`
+			} `json:"checkout"`
+		}
+		if json.Unmarshal(started.Body.Bytes(), &startedResult) != nil || startedResult.Checkout.ID == "" || startedResult.Checkout.URLPago == "" || startedResult.Checkout.Estado != "processing" {
+			return started
+		}
+		paymentID := "payment-" + startedResult.Checkout.ID
+		return integrationRequest(router, http.MethodPost, "/carrito/checkout/retorno", fmt.Sprintf(`{"checkoutId":%q,"pagoId":%q}`, startedResult.Checkout.ID, paymentID))
+	}
 	turnoProfesionalUno := turno{ID: "turno-profesional-uno", ClienteID: "cliente-test", ProfesionalID: "prof-1", TratamientoID: "facial-01", Inicio: inicioLocal, Fin: inicioLocal.Add(time.Hour), Estado: "completado"}
 	turnoProfesionalDos := turno{ID: "turno-profesional-dos", ClienteID: "cliente-test-2", ProfesionalID: "prof-2", TratamientoID: "facial-01", Inicio: inicioLocal, Fin: inicioLocal.Add(time.Hour), Estado: "completado"}
 	if _, err := turnos.InsertMany(ctx, []any{turnoProfesionalUno, turnoProfesionalDos}); err != nil {
@@ -292,11 +322,11 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 	}
 	startPayment := integrationRequest(router, http.MethodPost, "/carrito/bloqueos/"+bloqueoID+"/pago", "{}")
 	if startPayment.Code != http.StatusConflict || preferenceCalls != 0 {
-		t.Fatalf("no se debe permitir un pago por elemento: status=%d body=%s simulaciones=%d", startPayment.Code, startPayment.Body.String(), preferenceCalls)
+		t.Fatalf("no se debe permitir un pago por elemento: status=%d body=%s preferencias=%d", startPayment.Code, startPayment.Body.String(), preferenceCalls)
 	}
 	repeatedStartPayment := integrationRequest(router, http.MethodPost, "/carrito/bloqueos/"+bloqueoID+"/pago", "{}")
 	if repeatedStartPayment.Code != http.StatusConflict || preferenceCalls != 0 {
-		t.Fatalf("el endpoint individual debe seguir bloqueado: status=%d simulaciones=%d", repeatedStartPayment.Code, preferenceCalls)
+		t.Fatalf("el endpoint individual debe seguir bloqueado: status=%d preferencias=%d", repeatedStartPayment.Code, preferenceCalls)
 	}
 	failedPayment := integrationRequest(router, http.MethodPost, "/carrito/bloqueos/"+bloqueoID+"/confirmar", `{"pagoId":"pago-fallido"}`)
 	if failedPayment.Code != http.StatusConflict {
@@ -322,8 +352,8 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 		t.Fatalf("la disponibilidad expuso horarios retenidos: %v", held.Horarios)
 	}
 
-	confirm := integrationRequest(router, http.MethodPost, "/carrito/checkout", `{"idempotencyKey":"checkout-single-test-001"}`)
-	if confirm.Code != http.StatusCreated {
+	confirm := checkoutAndReturn("checkout-single-test-001")
+	if confirm.Code != http.StatusOK {
 		t.Fatalf("checkout de un elemento: status=%d body=%s", confirm.Code, confirm.Body.String())
 	}
 	var checkoutResult struct {
@@ -356,7 +386,7 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 		t.Fatalf("reintento de confirmación duplicó o falló: status=%d", duplicate.Code)
 	}
 	if preferenceCalls != 1 {
-		t.Fatalf("se esperaba una simulación única sin verificación externa: simulaciones=%d", preferenceCalls)
+		t.Fatalf("se esperaba una preferencia única de Mercado Pago: preferencias=%d", preferenceCalls)
 	}
 
 	cancellation := integrationRequest(router, http.MethodDelete, "/turnos/"+confirmed.Turno.ID, "")
@@ -550,8 +580,8 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 		t.Fatal("no se pudo preparar la comprobación de precio autoritativo")
 	}
 	checkoutBody := `{"idempotencyKey":"checkout-approved-001"}`
-	approvedCheckout := integrationRequest(router, http.MethodPost, "/carrito/checkout", checkoutBody)
-	if approvedCheckout.Code != http.StatusCreated {
+	approvedCheckout := checkoutAndReturn("checkout-approved-001")
+	if approvedCheckout.Code != http.StatusOK {
 		t.Fatalf("checkout aprobado: status=%d body=%s", approvedCheckout.Code, approvedCheckout.Body.String())
 	}
 	var approvedResult struct {
@@ -597,9 +627,9 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 	_ = checkoutHoldTwo
 
 	rejectedHold := addHold("prof-1", "facial-01", inicioLocal.Add(4*time.Hour), "")
-	simulateResult = "rejected"
-	rejectedCheckout := integrationRequest(router, http.MethodPost, "/carrito/checkout", `{"idempotencyKey":"checkout-rejected-001"}`)
-	simulateResult = "approved"
+	verifiedPaymentStatus = "rejected"
+	rejectedCheckout := checkoutAndReturn("checkout-rejected-001")
+	verifiedPaymentStatus = "approved"
 	if rejectedCheckout.Code != http.StatusOK {
 		t.Fatalf("checkout rechazado: status=%d body=%s", rejectedCheckout.Code, rejectedCheckout.Body.String())
 	}
@@ -607,7 +637,7 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 		Checkout struct{ ID, Estado, PagoID string } `json:"checkout"`
 	}
 	if json.Unmarshal(rejectedCheckout.Body.Bytes(), &rejectedResult) != nil || rejectedResult.Checkout.Estado != "rejected" {
-		t.Fatalf("rechazo de simulación no fue reflejado: %s", rejectedCheckout.Body.String())
+		t.Fatalf("rechazo de Mercado Pago no fue reflejado: %s", rejectedCheckout.Body.String())
 	}
 	noRejectedTurns, _ := turnos.CountDocuments(ctx, bson.M{"pagoId": rejectedResult.Checkout.PagoID})
 	if noRejectedTurns != 0 {
@@ -621,9 +651,9 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 	expireFirst := addHold("prof-1", "facial-01", inicioLocal.AddDate(0, 0, 14), "")
 	expireSecond := addHold("prof-2", "masaje-02", secondStart.AddDate(0, 0, 14), "")
 	expireHoldID = expireSecond
-	partialFailure := integrationRequest(router, http.MethodPost, "/carrito/checkout", `{"idempotencyKey":"checkout-expiry-001"}`)
-	if partialFailure.Code != http.StatusConflict {
-		t.Fatalf("checkout con una retención vencida debía rechazarse entero: status=%d body=%s", partialFailure.Code, partialFailure.Body.String())
+	partialFailure := checkoutAndReturn("checkout-expiry-001")
+	if partialFailure.Code != http.StatusOK {
+		t.Fatalf("checkout cuya retención venció debía terminar reembolsado: status=%d body=%s", partialFailure.Code, partialFailure.Body.String())
 	}
 	var partialOrder checkoutOperation
 	if err := checkouts.FindOne(ctx, bson.M{"clienteId": "cliente-test", "idempotencyKey": "checkout-expiry-001"}).Decode(&partialOrder); err != nil {
@@ -631,7 +661,7 @@ func TestReservasMongoIntegrationFlujoCompleto(t *testing.T) {
 	}
 	partialTurns, _ := turnos.CountDocuments(ctx, bson.M{"pagoId": partialOrder.PagoID})
 	if partialOrder.Estado != "reverted" || partialTurns != 0 {
-		t.Fatalf("quedó una compra parcialmente confirmada o no se revirtió el simulador: estado=%s turnos=%d", partialOrder.Estado, partialTurns)
+		t.Fatalf("quedó una compra parcialmente confirmada o no se reembolsó: estado=%s turnos=%d", partialOrder.Estado, partialTurns)
 	}
 	var retainedFirst bloqueoCarrito
 	if err := carritos.FindOne(ctx, bson.M{"_id": expireFirst}).Decode(&retainedFirst); err != nil || retainedFirst.Estado != "pendiente_pago" || retainedFirst.CheckoutID != "" {

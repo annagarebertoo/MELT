@@ -15,7 +15,7 @@ Los resultados dependen de categorías, perfiles, asociaciones y agenda activa e
 
 ## Cliente
 
-En «Mi cuenta» el cliente puede consultar su saldo/historial de puntos, recompensas y canjes, sus reservas, GhostKitchen (si la integración está configurada) y cerrar sesión. Un horario agregado queda retenido durante diez minutos. «Mi carrito» muestra retenciones y resumen; quitar un item libera su retención. Confirmar compra inicia checkout agrupado, cuyo resultado de pago local es simulado. Ningún cargo real se ejecuta.
+En «Mi cuenta» el cliente puede consultar su saldo/historial de puntos, recompensas y canjes, sus reservas, GhostKitchen (si la integración está configurada) y cerrar sesión. Un horario agregado queda retenido durante diez minutos. «Mi carrito» muestra retenciones y resumen; quitar un item libera su retención. Confirmar compra abre el Checkout Pro de Mercado Pago en modo de prueba y MELT confirma las reservas tras verificar el pago aprobado.
 
 Ante un rechazo, el carrito se conserva para reintentar dentro del vencimiento, sin crear reservas confirmadas. Los horarios expiran y deben seleccionarse de nuevo. Una compra confirmada genera reservas consultables en «Mis turnos».
 

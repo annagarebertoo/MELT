@@ -212,3 +212,14 @@ func TestGhostKitchenSinClaveNoLlamaAlProveedor(t *testing.T) {
 		t.Fatalf("HTTP %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestHealthExponeSoloEstadoDeConfiguracionGhostKitchen(t *testing.T) {
+	t.Setenv("GHOSTKITCHEN_API_KEY", "no-exponer-este-secreto")
+	if got := estadoConfiguracionGhostKitchen(); got != "configurada" {
+		t.Fatalf("estado de GK=%q", got)
+	}
+	t.Setenv("GHOSTKITCHEN_API_KEY", "")
+	if got := estadoConfiguracionGhostKitchen(); got != "sin_configurar" {
+		t.Fatalf("estado GK sin clave=%q", got)
+	}
+}

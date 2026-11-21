@@ -182,7 +182,7 @@ func (a *almacenMongo) canjear(ctx context.Context, userID, rewardID, requestID 
 		return nil, e
 	}, options.Transaction().SetReadConcern(readconcern.Snapshot()).SetWriteConcern(writeconcern.Majority()))
 	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
+		if esDuplicado(err) {
 			var previo Movimiento
 			if e := a.movimientos.FindOne(ctx, bson.M{"_id": ledgerID}).Decode(&previo); e == nil {
 				if previo.UsuarioID != userID || previo.Descripcion != rewardID {
@@ -613,21 +613,15 @@ func (s *Servidor) agregarRutasPrograma(r *gin.Engine) {
 }
 
 func (s *Servidor) listarMensajesFallidos(c *gin.Context) {
-	almacen, ok := s.almacen.(*almacenMongo)
+	almacen, ok := s.almacen.(almacenFallidos)
 	if !ok {
 		errorJSON(c, 503, "BENEFICIOS_NO_DISPONIBLE", "No se pudieron consultar los mensajes fallidos.")
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
 	defer cancel()
-	cur, err := almacen.fallidos.Find(ctx, bson.M{"estado": "pendiente"}, options.Find().SetSort(bson.D{{Key: "creadoEn", Value: -1}}).SetLimit(50))
+	items, err := almacen.listarMensajesFallidos(ctx)
 	if err != nil {
-		errorJSON(c, 503, "BENEFICIOS_NO_DISPONIBLE", "No se pudieron consultar los mensajes fallidos.")
-		return
-	}
-	defer cur.Close(ctx)
-	items := []mensajeFallido{}
-	if err = cur.All(ctx, &items); err != nil {
 		errorJSON(c, 503, "BENEFICIOS_NO_DISPONIBLE", "No se pudieron leer los mensajes fallidos.")
 		return
 	}
@@ -639,7 +633,7 @@ func (s *Servidor) reintentarMensajeFallido(c *gin.Context) {
 		errorJSON(c, 503, "RABBITMQ_NO_CONFIGURADO", "La mensajería no está configurada.")
 		return
 	}
-	almacen, ok := s.almacen.(*almacenMongo)
+	almacen, ok := s.almacen.(almacenFallidos)
 	if !ok {
 		errorJSON(c, 503, "BENEFICIOS_NO_DISPONIBLE", "No se pudo consultar el mensaje.")
 		return
@@ -647,8 +641,8 @@ func (s *Servidor) reintentarMensajeFallido(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
 	defer cancel()
 	id := strings.TrimSpace(c.Param("id"))
-	var item mensajeFallido
-	if err := almacen.fallidos.FindOne(ctx, bson.M{"_id": id, "estado": "pendiente"}).Decode(&item); err != nil {
+	item, err := almacen.obtenerMensajeFallido(ctx, id)
+	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			errorJSON(c, 404, "MENSAJE_NO_ENCONTRADO", "No hay un mensaje pendiente con ese identificador.")
 			return
@@ -656,18 +650,18 @@ func (s *Servidor) reintentarMensajeFallido(c *gin.Context) {
 		errorJSON(c, 503, "BENEFICIOS_NO_DISPONIBLE", "No se pudo consultar el mensaje.")
 		return
 	}
-	claim, err := almacen.fallidos.UpdateOne(ctx, bson.M{"_id": id, "estado": "pendiente"}, bson.M{"$set": bson.M{"estado": "reencolando"}})
-	if err != nil || claim.MatchedCount != 1 {
+	claim, err := almacen.cambiarEstadoFallido(ctx, id, "pendiente", "reencolando", nil)
+	if err != nil || !claim {
 		errorJSON(c, 409, "MENSAJE_EN_PROCESO", "El mensaje ya está siendo recuperado.")
 		return
 	}
 	if err = reintentarEvento(ctx, s.rabbitURL, item.Evento); err != nil {
-		_, _ = almacen.fallidos.UpdateOne(context.Background(), bson.M{"_id": id, "estado": "reencolando"}, bson.M{"$set": bson.M{"estado": "pendiente"}})
+		_, _ = almacen.cambiarEstadoFallido(context.Background(), id, "reencolando", "pendiente", nil)
 		errorJSON(c, 503, "RABBITMQ_NO_DISPONIBLE", "No se pudo reenviar el mensaje; sigue pendiente.")
 		return
 	}
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	_, err = almacen.fallidos.UpdateOne(ctx, bson.M{"_id": id, "estado": "reencolando"}, bson.M{"$set": bson.M{"estado": "reintentado", "reintentadoEn": now}})
+	_, err = almacen.cambiarEstadoFallido(ctx, id, "reencolando", "reintentado", &now)
 	if err != nil {
 		errorJSON(c, 503, "BENEFICIOS_NO_DISPONIBLE", "El mensaje se reenvío, pero no se pudo actualizar su estado.")
 		return

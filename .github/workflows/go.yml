@@ -7,6 +7,7 @@ on:
       - develop
       - docs/correcciones-reglas-negocio
       - 'feature/**'
+      - codex/supabase-postgres-migration
   pull_request:
 
 permissions:
@@ -30,6 +31,7 @@ jobs:
           - services/reservas
           - services/beneficios
           - services/auth
+          - services/pagos
     defaults:
       run:
         working-directory: ${{ matrix.service }}
@@ -58,10 +60,8 @@ jobs:
           go-version-file: ${{ matrix.service }}/go.mod
           cache: true
           cache-dependency-path: ${{ matrix.service }}/go.sum
-      - name: Normalizar y descargar dependencias
-        run: |
-          go mod tidy
-          go mod download
+      - name: Verificar dependencias sin modificar go.mod ni go.sum
+        run: go mod download
       - name: Ejecutar pruebas
         run: go test -race ./...
       - name: Compilar servicio
@@ -76,9 +76,25 @@ jobs:
       MELT_INTERNAL_KEY: ci-internal-secret-at-least-32-characters
       BENEFICIOS_PARTNER_KEY: ci-partner-key-only-for-tests
       BENEFICIOS_INVITATION_SECRET: ci-invitation-secret-at-least-32-characters-long
+      MONGODB_URI: mongodb://ci-mongo:27017/?replicaSet=melt-ci
+      RESERVAS_DATABASE_URL: postgres://postgres:ci@ci-postgres:5432/reservas?sslmode=disable
+      BENEFICIOS_DATABASE_URL: postgres://postgres:ci@ci-postgres:5432/beneficios?sslmode=disable
       MELT_PUBLIC_URL: http://localhost:8080
     steps:
       - uses: actions/checkout@v4
+      - name: Preparar bases descartables en la red de Compose
+        run: |
+          docker compose create --no-build rabbitmq
+          docker run -d --name ci-postgres --network melt_default -e POSTGRES_PASSWORD=ci postgres:16
+          docker run -d --name ci-mongo --network melt_default mongo:7 --replSet melt-ci --bind_ip_all
+          timeout 90 bash -c 'until docker exec ci-postgres pg_isready -h localhost -U postgres; do sleep 2; done'
+          for db in reservas beneficios; do
+            docker exec ci-postgres createdb -U postgres "$db"
+            docker exec -i ci-postgres psql -U postgres -d "$db" -v ON_ERROR_STOP=1 < "infra/supabase/$db.sql"
+          done
+          timeout 90 bash -c 'until docker exec ci-mongo mongosh --quiet --eval "db.adminCommand({ping:1})"; do sleep 2; done'
+          docker exec ci-mongo mongosh --quiet --eval 'rs.initiate({_id:"melt-ci",members:[{_id:0,host:"ci-mongo:27017"}]})'
+          timeout 90 bash -c 'until docker exec ci-mongo mongosh --quiet --eval "if (!db.hello().isWritablePrimary) quit(1)"; do sleep 2; done'
       - name: Levantar gateway y servicios necesarios
         run: docker compose up --build -d gateway
       - name: Probar sesión, gateway, contrato y acceso directo a Beneficios
@@ -91,10 +107,12 @@ jobs:
         run: python3 scripts/smoke-invitaciones.py
       - name: Diagnóstico si falla la integración
         if: failure()
-        run: docker compose logs --no-color gateway auth reservas beneficios mongodb
+        run: docker compose logs --no-color gateway auth reservas beneficios pagos
       - name: Detener entorno
         if: always()
-        run: docker compose down -v
+        run: |
+          docker rm -f ci-postgres ci-mongo || true
+          docker compose down -v
 
   beneficios-transactions:
     runs-on: ubuntu-latest
@@ -159,3 +177,37 @@ jobs:
       - name: Detener MongoDB temporal
         if: always()
         run: docker rm -f catalogo-mongo
+
+  contracts-and-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Comprobar reglas de seguridad y reintentos del Gateway
+        run: python scripts/test-gateway-safety.py
+      - name: Validar sintaxis del frontend
+        run: node --check infra/nginx/web/app.js
+      - name: Validar contratos OpenAPI vigentes
+        run: |
+          python -m pip install 'openapi-spec-validator==0.7.2'
+          python - <<'PY'
+          from pathlib import Path
+          from openapi_spec_validator import validate
+          from openapi_spec_validator.readers import read_from_filename
+          contracts = [
+              'acreditar-puntos-v1.openapi.yaml',
+              'autenticacion-v1.openapi.yaml',
+              'pagos-checkout-pro-v1.openapi.yaml',
+              'reservas-checkout-v1.openapi.yaml',
+          ]
+          for name in contracts:
+              path = Path('docs/contracts') / name
+              spec, base_uri = read_from_filename(str(path))
+              validate(spec, base_uri=base_uri)
+              print(f'OK: {path}')
+          PY

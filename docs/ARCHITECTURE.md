@@ -1,6 +1,6 @@
 # Arquitectura vigente de MELT
 
-**Base documental:** rama `develop`, commit de referencia `ea1ead7e85f533ba54aff85bd95958bb749897a0`. Este documento describe el código y la configuración versionados en esa referencia. No certifica el estado de un despliegue remoto.
+Este documento resume la arquitectura del código y la configuración local. No certifica que los esquemas hayan sido aplicados ni que las conexiones Supabase estén configuradas en un entorno remoto.
 
 ## Contexto y componentes
 
@@ -13,15 +13,15 @@ flowchart LR
   G --> B[Beneficios]
   R -->|HTTP interno| C
   R -->|HTTP interno| A
-  R -->|HTTP interno| P[Pagos: simulador]
+  R -->|HTTP interno| P[Pagos: Mercado Pago Checkout Pro]
   R -->|HTTP interno| B
   R -->|outbox / AMQP| Q[(RabbitMQ)]
   Q --> B
-  C --> M[(MongoDB)]
-  A --> M
-  R --> M
-  P --> M
-  B --> M
+  C -->|MONGODB_URI| M[(MongoDB Atlas compartido<br/>usuarios_db, catalogo_db, profesionales_db, pagos_db)]
+  A -->|MONGODB_URI| M
+  P -->|MONGODB_URI| M
+  R --> RDB[(PostgreSQL privado<br/>Supabase MELT-Reservas)]
+  B --> BDB[(PostgreSQL privado<br/>Supabase MELT-Beneficios)]
   C --> O[(OpenSearch)]
   C --> K[(Memcached)]
   J[Proveedor GhostKitchen] <-->|HTTP + X-API-Key| B
@@ -33,20 +33,20 @@ flowchart LR
 | Componente | Responsabilidad / datos principales | Persistencia y dependencias |
 |---|---|---|
 | Gateway (NGINX) | Frontend, routing, verificación de sesión para zonas privadas y propagación de identidad verificada a Reservas. | Sin base propia. En Compose deriva a servicios por DNS interno. |
-| Auth | Cuentas, credenciales, roles, JWT e invitaciones asociadas al alta. | MongoDB `usuarios_db` por defecto. |
-| Catálogo y Profesionales | Categorías, tratamientos, perfiles profesionales y vinculación `authUserId`. | MongoDB `catalogo_db` por defecto; OpenSearch y Memcached son proyecciones/infra auxiliares. |
-| Reservas | Agendas semanales, turnos, bloqueos, carritos, checkout y outbox. | MongoDB `reservas_db`; comunica con Auth, Catálogo, Pagos, Beneficios y RabbitMQ. |
-| Pagos | Operaciones de pago, reversas y devoluciones **simuladas**. | MongoDB `pagos_db`; endpoints internos con clave compartida. |
-| Beneficios | Puntos, movimientos, reglas, recompensas, canjes, invitaciones externas y fallidos. | MongoDB `beneficios_db`; consume eventos RabbitMQ y consulta Auth. |
-| Infraestructura | MongoDB replica set, RabbitMQ, OpenSearch, Memcached, Prometheus, Grafana y Jaeger. | Declarada en Compose. PostgreSQL también está declarado, pero no hay conexión desde los servicios de negocio del commit de referencia. |
+| Auth | Cuentas, credenciales, roles, JWT e invitaciones asociadas al alta. | MongoDB Atlas compartido, base lógica `usuarios_db`. |
+| Catálogo y Profesionales | Categorías, tratamientos, perfiles profesionales y vinculación `authUserId`. | MongoDB Atlas compartido, en bases lógicas separadas `catalogo_db` y `profesionales_db`; OpenSearch y Memcached son proyecciones/infra auxiliares. |
+| Reservas | Agendas semanales, turnos, bloqueos, carritos, checkout y outbox. | PostgreSQL privado del proyecto Supabase `MELT-Reservas`; comunica con Auth, Catálogo, Pagos, Beneficios y RabbitMQ. |
+| Pagos | Checkout Pro, verificación de pago y devoluciones en modo de prueba. | MongoDB Atlas compartido, base lógica `pagos_db`; endpoints internos con clave compartida. |
+| Beneficios | Puntos, movimientos, reglas, recompensas, canjes, invitaciones externas y fallidos. | PostgreSQL privado del proyecto Supabase `MELT-Beneficios`; consume eventos RabbitMQ y consulta Auth. |
+| Infraestructura | MongoDB Atlas compartido, PostgreSQL Supabase, RabbitMQ, OpenSearch, Memcached, Prometheus, Grafana y Jaeger. | No hay servidores MongoDB ni PostgreSQL de negocio locales en Compose. Reservas y Beneficios usan exclusivamente sus bases PostgreSQL privadas; todos los servicios Mongo se conectan a Atlas. |
 
-Los servicios usan bases separadas dentro del clúster MongoDB; compartir el servidor no implica compartir propiedad de colecciones. Reservas resuelve el perfil profesional a partir del ID autenticado consultando el endpoint interno de Catálogo; los IDs no se consideran equivalentes.
+Los servicios mantienen ownership separado y no consultan directamente tablas o colecciones ajenas. Reservas resuelve el perfil profesional a partir del ID autenticado consultando el endpoint interno de Catálogo; los IDs no se consideran equivalentes. La configuración de Supabase está en [infra/supabase](../infra/supabase/README.md); su aplicación y conectividad remotas se verifican por entorno.
 
 ## Comunicación
 
 Las lecturas, validaciones y operaciones de negocio que necesitan respuesta inmediata usan HTTP síncrono. Las rutas internas de Auth, Catálogo y Pagos no se publican como APIs de navegador. El Gateway oculta con 404 prefijos internos seleccionados y enruta Catálogo, Auth, Reservas y Beneficios según `infra/nginx/default.conf`.
 
-Para efectos posteriores, Reservas guarda cambios de turno y evento outbox en una transacción MongoDB. Un publicador entrega eventos persistentes al exchange topic `melt.dominio`; Beneficios consume `tratamiento.realizado` y `turno.cancelado`, aplica reintentos acotados y registra mensajes fallidos para reintento administrativo. No se debe describir una entrega exactamente-una-vez: el diseño permite reentrega y depende de deduplicación por `eventId`.
+Para efectos posteriores, Reservas guarda cambios de turno y evento outbox en una transacción PostgreSQL. Un publicador entrega eventos persistentes al exchange topic `melt.dominio`; Beneficios consume `tratamiento.realizado` y `turno.cancelado`, aplica reintentos acotados y registra mensajes fallidos para reintento administrativo. No se debe describir una entrega exactamente-una-vez: el diseño permite reentrega y depende de deduplicación por `eventId`.
 
 ## Flujos de negocio
 
@@ -54,15 +54,15 @@ Para efectos posteriores, Reservas guarda cambios de turno y evento outbox en un
 
 El registro público crea clientes. La creación de otras cuentas se hace con sesión administrativa; listar/modificar roles está reservado al superadministrador. Gateway verifica JWT en las rutas privadas de Reservas; Reservas vuelve a autorizar cada operación y aplica propiedad del turno/agenda. Beneficios valida nuevamente el Bearer. Catálogo valida administración contra Auth. Roles existentes: `cliente`, `profesional`, `recepcion`, `administrador` y `superadministrador`.
 
-### Reserva, checkout y pago simulado
+### Reserva, checkout y Mercado Pago en pruebas
 
 1. El cliente consulta disponibilidad para un tratamiento, profesional y fecha.
 2. Reservas valida asociación, agenda y conflictos, y crea bloqueo del carrito con vencimiento de diez minutos.
 3. El carrito es propiedad del cliente autenticado; Reservas calcula importes usando Catálogo y descuentos asociados.
 4. `POST /carrito/checkout` toma una clave idempotente, vuelve a validar los bloqueos y calcula total y seña del 30 % en el servidor.
-5. Reservas solicita el pago simulado a Pagos. Si se aprueba, confirma el conjunto de turnos; si falla la confirmación posterior, pide reversa simulada. No se confirma parcialmente el checkout.
+5. Reservas solicita a Pagos una preferencia de Checkout Pro. Tras el retorno o un Webhook con firma válida, Pagos consulta el pago al proveedor y Reservas confirma el conjunto de turnos dentro de una transacción PostgreSQL. No se confirma parcialmente el checkout.
 
-La regla de cancelación actual en código reembolsa simuladamente la seña si se cancela con al menos 24 horas; con menos anticipación no. Confirmar este detalle en las pruebas de demostración; no presentarlo como política externa/legal.
+La regla de cancelación actual solicita a Mercado Pago la devolución de la seña si se cancela con al menos 24 horas; con menos anticipación no. Confirmar este detalle en las pruebas de demostración; no presentarlo como política externa/legal.
 
 ### Turno realizado y puntos
 
@@ -70,10 +70,12 @@ El profesional vinculado marca el turno como completado. Reservas guarda el camb
 
 ## Persistencia, búsqueda y caché
 
-- MongoDB replica set soporta las transacciones multi-documento utilizadas por Reservas y otros flujos.
+- PostgreSQL protege agendas, turnos, bloqueos y checkout con transacciones; una restricción de exclusión impide turnos superpuestos por profesional y claves únicas protegen la idempotencia y los bloqueos por minuto.
+- Beneficios usa transacciones PostgreSQL para actualizar saldo, movimientos y canjes sin duplicar solicitudes.
+- Auth, Catálogo y Pagos conservan sus datos documentales en MongoDB.
 - Catálogo consulta documentos canónicos en MongoDB. OpenSearch proporciona búsqueda textual/filtros y puede reconstruir el índice desde la fuente canónica; no sustituye la persistencia.
 - Memcached se usa para lecturas cacheables de Catálogo con namespace configurable e invalidación por generación. Si falla, el servicio opera sin usar la caché cuando el camino de fallback funciona; la condición exacta está descrita en [manual del servicio](servicios/CATALOGO-PROFESIONALES.md).
-- PostgreSQL está en Compose, pero no se documenta como requisito funcional mientras no exista consumidor de negocio.
+- Los scripts de esquema son [beneficios.sql](../infra/supabase/beneficios.sql) y [reservas.sql](../infra/supabase/reservas.sql). El backend verifica las tablas al iniciar; la conectividad a los proyectos Supabase del equipo debe confirmarse con sus URLs privadas por entorno.
 
 ## Ejecución y evidencia
 
@@ -89,7 +91,7 @@ sequenceDiagram
   participant G as NGINX Gateway
   participant R as Reservas
   participant C as Catálogo
-  participant P as Pagos simulados
+  participant P as Pagos / Mercado Pago
   Cliente->>G: GET /carrito (Bearer)
   G->>R: identidad verificada
   R->>C: precio, duración y asociaciones
@@ -97,9 +99,14 @@ sequenceDiagram
   Cliente->>G: POST /carrito/checkout (idempotencyKey)
   G->>R: checkout autenticado
   R->>R: validar bloqueos y recalcular importes
-  R->>P: POST /payments/simulate (clave interna)
-  P-->>R: approved / rejected
-  alt aprobado y confirmación completa
+  R->>P: Crear preferencia Checkout Pro (clave interna)
+  P-->>R: URL de pago en entorno de prueba
+  R-->>Cliente: Redirigir a Checkout Pro
+  Cliente->>P: Volver con payment_id
+  Cliente->>R: POST /carrito/checkout/retorno
+  R->>P: Consultar estado al proveedor
+  P-->>R: estado, importe y referencia verificados
+  alt pago aprobado y confirmación completa
     R->>R: confirmar todos los turnos en transacción
   else rechazo o conflicto
     R->>R: no confirmar turnos; compensar pago si aplica

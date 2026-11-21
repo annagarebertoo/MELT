@@ -79,3 +79,13 @@ Como estimación ilustrativa posterior al apartado paramétrico, se consultó el
 Para el escenario base, los 20 GiB presupuestados caben en el disco incluido: no se suman otros 20 GiB como si fueran almacenamiento adicional. Un host base cuesta nominalmente USD 24 por mes según esa tabla; dos hosts iguales suman USD 48 antes de extras y no eliminan por sí solos los puntos únicos de falla. Un host mayor también figura en USD 48, pero no se acredita equivalencia de rendimiento entre esas alternativas.
 
 Se excluyen impuestos, dominio, backups, disco adicional, exceso de transferencia, servicios administrados y tiempo de operación; su costo debe agregarse si se utiliza. La tabla es una referencia comercial variable: reconfirmar moneda, región, condiciones y precio antes de publicar. No se convierten USD a ARS sin cotización verificada. Con esto existe una estimación monetaria explícita del escenario mínimo, pero el costo total y la elección sustentada en capacidad medida siguen pendientes.
+
+## Herramienta de medición local (agregada en la rama de migración)
+
+Se agregó `scripts/benchmark-catalogo-local.py` para generar una medición **exploratoria**, limitada al host local y a lecturas GET del catálogo. No se ejecutó una carga ni se infieren resultados de producción.
+
+1. Levantar MELT localmente y comprobar que `http://localhost:8080/api/v1/tratamientos` responda.
+2. Ejecutar `python3 scripts/benchmark-catalogo-local.py --requests 40 --concurrency 2 --output catalogo-benchmark.json`.
+3. Repetir con niveles acordados de concurrencia, registrar fecha, commit, dataset, CPU/RAM, servicios y resultados; conservar los JSON como evidencia.
+
+El script reporta p50/p95/p99, media, solicitudes por segundo, códigos HTTP y errores. Limita las solicitudes a 200, los trabajadores a 10 y solo acepta HTTP a localhost/127.0.0.1/::1. **No usar contra Render ni terceros**. No mide saturación de bases ni uso de CPU por sí mismo: esas métricas se deben recolectar aparte. Los resultados de este ensayo local no sustituyen la prueba de carga de la defensa ni validan D13 sin ejecución y análisis.
