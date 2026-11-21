@@ -24,7 +24,7 @@ paths:
               required: [checkoutId, importe, moneda, titulo]
               properties:
                 checkoutId: { type: string }
-                importe: { type: number, exclusiveMinimum: 0 }
+                importe: { type: number, minimum: 0, exclusiveMinimum: true }
                 moneda: { type: string, enum: [ARS] }
                 titulo: { type: string }
       responses:
@@ -45,7 +45,7 @@ paths:
               required: [pagoId, importe, moneda, referencia]
               properties:
                 pagoId: { type: string }
-                importe: { type: number, exclusiveMinimum: 0 }
+                importe: { type: number, minimum: 0, exclusiveMinimum: true }
                 moneda: { type: string, enum: [ARS] }
                 referencia: { type: string, description: ID del checkout MELT }
       responses:
@@ -70,7 +70,7 @@ paths:
               required: [pagoId, importe, moneda]
               properties:
                 pagoId: { type: string }
-                importe: { type: number, exclusiveMinimum: 0 }
+                importe: { type: number, minimum: 0, exclusiveMinimum: true }
                 moneda: { type: string, enum: [ARS] }
                 motivo: { type: string }
       responses:
