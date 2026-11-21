@@ -45,7 +45,7 @@ paths:
                 diferirPago: { type: boolean, enum: [true] }
       responses:
         '201': { description: Retención agregada }
-        '409': { description: Horario ocupado, incompatible o fuera de agenda }
+        '409': { description: 'Horario ocupado, incompatible o fuera de agenda' }
   /carrito/bloqueos/{id}:
     delete:
       summary: Quita un elemento propio y libera solo sus minutos
