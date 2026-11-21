@@ -37,7 +37,7 @@ jobs:
         working-directory: services/reservas
         run: go test -race ./cmd/api -run '^TestAsistenciaPostgres$' -count=1 -v
   interfaz:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
