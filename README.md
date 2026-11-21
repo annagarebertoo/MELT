@@ -51,6 +51,7 @@ Las variables opcionales, pruebas, comandos de diagnóstico, rutas locales y apa
 - [Manual de microservicios y endpoints](docs/servicios/README.md)
 - [Contratos y APIs](docs/contracts/README.md)
 - [Matriz académica y estado verificable](docs/MATRIZ-CUMPLIMIENTO.md)
+- [Estado de verificación de CI, Render y asistencia (noviembre 2026)](docs/ESTADO-VERIFICACION-2026-11-20.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Glosario](docs/GLOSARIO.md)
 - [Postmortem y evidencia de resiliencia](docs/POSTMORTEM.md)
