@@ -196,6 +196,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           from openapi_spec_validator import validate
+          from openapi_spec_validator.readers import read_from_filename
           contracts = [
               'acreditar-puntos-v1.openapi.yaml',
               'autenticacion-v1.openapi.yaml',
@@ -204,6 +205,7 @@ jobs:
           ]
           for name in contracts:
               path = Path('docs/contracts') / name
-              validate(path)
+              spec, base_uri = read_from_filename(str(path))
+              validate(spec, base_uri=base_uri)
               print(f'OK: {path}')
           PY
