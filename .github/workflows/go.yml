@@ -188,6 +188,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Comprobar reglas de seguridad y reintentos del Gateway
+        run: python scripts/test-gateway-safety.py
       - name: Validar sintaxis del frontend
         run: node --check infra/nginx/web/app.js
       - name: Validar contratos OpenAPI vigentes
