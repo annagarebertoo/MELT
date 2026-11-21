@@ -25,3 +25,7 @@
 ## Verificaciones anteriores citadas
 
 Los documentos de Catálogo, D3/D5/D8/D11 y `docs/evidence/*.json` conservan pruebas de fechas/commits anteriores. No se reejecutaron aquí. Para presentar cumplimiento, adjuntar evidencia de la versión entregada, indicar su commit y no reutilizar las marcas históricas como resultado de la revisión documental actual.
+
+## Actualización de evidencia — 20/11/2026
+
+Esta matriz conserva el alcance y las limitaciones de su revisión documental original. Para el estado más reciente de GitHub Actions, despliegues de Render, el botón «No asistió» y las comprobaciones pendientes, consultar [Estado de verificación de noviembre de 2026](ESTADO-VERIFICACION-2026-11-20.md). No extrapolar el resultado de CI a pruebas funcionales autenticadas en Render.
