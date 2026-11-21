@@ -177,3 +177,33 @@ jobs:
       - name: Detener MongoDB temporal
         if: always()
         run: docker rm -f catalogo-mongo
+
+  contracts-and-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar sintaxis del frontend
+        run: node --check infra/nginx/web/app.js
+      - name: Validar contratos OpenAPI vigentes
+        run: |
+          python -m pip install 'openapi-spec-validator==0.7.2'
+          python - <<'PY'
+          from pathlib import Path
+          from openapi_spec_validator import validate
+          contracts = [
+              'acreditar-puntos-v1.openapi.yaml',
+              'autenticacion-v1.openapi.yaml',
+              'pagos-checkout-pro-v1.openapi.yaml',
+              'reservas-checkout-v1.openapi.yaml',
+          ]
+          for name in contracts:
+              path = Path('docs/contracts') / name
+              validate(path)
+              print(f'OK: {path}')
+          PY
