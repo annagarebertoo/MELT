@@ -361,7 +361,7 @@ async function initializeInvitation() {
   const params = new URLSearchParams(window.location.hash.slice(1));
   const incoming = params.get("invitacion");
   if (incoming) {
-    history.replaceState(null, "", window.location.pathname + window.location.search);
+    history.replaceState(null, "", window.location.pathname + window.location.search + "#/cuenta");
     sessionStorage.setItem(INVITATION_KEY, incoming);
   }
   const pendingToken = sessionStorage.getItem(INVITATION_KEY);
@@ -389,7 +389,7 @@ async function confirmInvitation() {
     invitation = null;
     sessionStorage.removeItem(INVITATION_KEY);
     $("#auth-email").readOnly = false;
-    invitationMessage(`Acreditación confirmada: ${result.puntos} puntos. Tu saldo después de esa operación es ${result.saldoPuntos}.`);
+    invitationMessage(`Recibiste ${result.puntos} puntos del GYM. Tu saldo después de esta acreditación es de ${result.saldoPuntos} puntos.`);
     $("#discard-invitation").textContent = "Cerrar aviso";
   } catch (error) {
     invitationMessage(error.message + " Podés volver a intentar actualizando tu cuenta; si acabás de registrarte, MELT también recupera la acreditación automáticamente.");
@@ -427,7 +427,7 @@ async function submitAuth(event) {
       $("#auth-form").reset();
       updateAuthChrome();
       await loadAccount();
-      showToast(result.acreditacion?.estado === "pendiente_reintento" ? "Tu cuenta está lista. Si la acreditación sigue pendiente, MELT la reintentará automáticamente." : "Tu cuenta está lista y los puntos están vinculados.");
+      showToast(invitation ? "Tu cuenta está lista. Revisá el estado de la invitación." : "Tu cuenta está lista.");
       return;
     }
     if (state.mode === "register") {
