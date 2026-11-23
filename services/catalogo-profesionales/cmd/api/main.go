@@ -365,6 +365,7 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 			Key: "$or",
 			Value: bson.A{
 				bson.D{{Key: "nombre", Value: patron}},
+				bson.D{{Key: "descripcion", Value: patron}},
 				bson.D{{Key: "keywords", Value: patron}},
 			},
 		})
