@@ -114,15 +114,16 @@ function updateProfessionals() {
 }
 
 async function loadProfessionalProfiles(treatments) {
-  window.professionalsByTreatment = {};
+  const profiles = {};
   await Promise.all(treatments.map(async (item) => {
     if (!Array.isArray(item.profesionalesIds) || !item.profesionalesIds.length) return;
     try {
       const result = await request(`/profesionales?tratamientoId=${encodeURIComponent(item.id)}`);
       const assigned = new Set(item.profesionalesIds);
-      window.professionalsByTreatment[item.id] = (result.profesionales || []).filter((person) => assigned.has(person.id));
-    } catch { window.professionalsByTreatment[item.id] = []; }
+      profiles[item.id] = (result.profesionales || []).filter((person) => assigned.has(person.id));
+    } catch { profiles[item.id] = []; }
   }));
+  return profiles;
 }
 
 async function loadCategories() {
@@ -153,11 +154,8 @@ function renderCategoryNavigation() {
   if (!nav) return;
   nav.innerHTML = `<button type="button" class="category-chip" data-category="" aria-pressed="${!state.category}">Todos</button>${state.categories.map((category) => `<button type="button" class="category-chip" data-category="${escapeHTML(category.nombre)}" aria-pressed="${category.nombre === state.category}">${escapeHTML(category.nombre)}</button>`).join("")}`;
   nav.querySelectorAll("[data-category]").forEach((button) => button.addEventListener("click", () => {
-    state.category = button.dataset.category;
-    $("#search-category").value = state.category;
-    syncCategoryNavigation();
-    state.page = 1;
-    loadTreatments();
+    $("#search-category").value = button.dataset.category;
+    $("#search-form").requestSubmit();
     $("#tratamientos").scrollIntoView({ behavior: "smooth" });
   }));
 }
@@ -299,7 +297,10 @@ function treatmentCard(item) {
     </div></article>`;
 }
 
+let catalogRequestId = 0;
+
 async function loadTreatments() {
+  const requestId = ++catalogRequestId;
   const params = new URLSearchParams({ page: String(state.page), limit: String(state.pageSize), sort: state.sort, order: state.order });
   if (state.search) params.set("q", state.search);
   if (state.category) params.set("categoria", state.category);
@@ -308,7 +309,10 @@ async function loadTreatments() {
   try {
     const result = await request(`/tratamientos?${params}`);
     const treatments = result.tratamientos || [];
-    await loadProfessionalProfiles(treatments);
+    if (requestId !== catalogRequestId) return;
+    const profiles = await loadProfessionalProfiles(treatments);
+    if (requestId !== catalogRequestId) return;
+    window.professionalsByTreatment = profiles;
     window.treatments = treatments;
     const total = Number(result.pagination?.total ?? treatments.length);
     state.hasNext = state.page * state.pageSize < total;
@@ -322,7 +326,7 @@ async function loadTreatments() {
         <button class="featured-image featured-image-${index + 1} detail-treatment" type="button" data-id="${escapeHTML(item.id)}" aria-label="Ver detalles de ${escapeHTML(item.nombre)}">${Array.isArray(item.imagenes) && item.imagenes.some((image) => imageURL(image)) ? loadImageMarkup(item.imagenes.find((image) => imageURL(image)), item.nombre || "Tratamiento", "treatment-card-photo") : `<span>${escapeHTML((item.categoria || "M").slice(0, 1))}</span>`}</button>
         <div class="featured-info"><div><h3>${escapeHTML(item.nombre)}</h3><p>${formatPrice(item.precio)} <span>· ${Number(item.duracionMinutos) >= 5 ? `${Number(item.duracionMinutos)} min` : "duración a confirmar"}</span></p></div><button class="featured-link detail-treatment" type="button" data-id="${escapeHTML(item.id)}">Ver detalles ↗</button></div>
       </article>`).join("") || `<p class="featured-loading">La selección se actualizará cuando haya tratamientos disponibles.</p>`;
-    $("#treatments-list").innerHTML = treatments.map(treatmentCard).join("") || `<p class="empty-state">No encontramos tratamientos con esos filtros. Probá con otra búsqueda.</p>`;
+    $("#treatments-list").innerHTML = treatments.map(treatmentCard).join("") || `<p class="empty-state">No encontramos tratamientos${state.category ? ` en ${escapeHTML(state.category)}` : ""}${state.priceMax ? ` de hasta ${escapeHTML(formatPrice(Number(state.priceMax)))}` : ""} con los filtros elegidos.</p>`;
     document.querySelectorAll(".detail-treatment").forEach((button) => button.addEventListener("click", () => showTreatmentDetail(button.dataset.id)));
     const select = $("#booking-treatment");
     const previous = select.value;
@@ -331,6 +335,7 @@ async function loadTreatments() {
     else if (state.bookingTreatment && treatments.some((item) => item.id === state.bookingTreatment.id)) select.value = state.bookingTreatment.id;
     updateProfessionals();
   } catch (error) {
+    if (requestId !== catalogRequestId) return;
     setStatus("#catalog-status", `No pudimos cargar el catálogo: ${error.message}`, true);
     $("#featured-list").innerHTML = `<p class="empty-state">No pudimos actualizar la selección. Intentá nuevamente en unos minutos.</p>`;
     $("#treatments-list").innerHTML = `<p class="empty-state">Revisá que los servicios estén disponibles e intentá de nuevo.</p>`;
@@ -1331,6 +1336,7 @@ function initialize() {
   const updateHeaderOnScroll = () => $(".site-header").classList.toggle("site-header-scrolled", window.scrollY > 70);
   window.addEventListener("scroll", updateHeaderOnScroll, { passive: true });
   updateHeaderOnScroll();
+  $("#search-category").addEventListener("change", () => $("#search-form").requestSubmit());
   $("#search-form").addEventListener("submit", (event) => {
     event.preventDefault();
     state.search = $("#search-query").value.trim();
