@@ -477,7 +477,6 @@ async function loadAccount() {
     $("#professional-panel").classList.toggle("hidden", !visibility.professional);
     $("#admin-panel").classList.toggle("hidden", !visibility.admin);
     $("#superadmin-users-panel").classList.toggle("hidden", !visibility.superadmin);
-    $("#catalog-admin-link").classList.toggle("hidden", !visibility.admin);
     $("#cart-menu-link").classList.toggle("hidden", !visibility.client);
     $("#carrito").classList.toggle("hidden", !visibility.client);
     $("#profile-reservations").classList.toggle("hidden", !visibility.bookings);
@@ -509,7 +508,6 @@ function accountSectionVisibility(userRoles) {
 function showSignedOut() {
   state.user = null;
   $("#auth-panel").classList.add("signed-out");
-  $("#catalog-admin-link").classList.add("hidden");
   $("#cart-menu-link").classList.add("hidden");
   $("#carrito").classList.add("hidden");
   $("#cart-count").textContent = "0";
@@ -1409,14 +1407,6 @@ function initialize() {
   });
   $("#confirm-cancel").addEventListener("click", (event) => { event.preventDefault(); cancelBooking(); });
   $("#cancel-dialog").addEventListener("click", (event) => { if (event.target === $("#cancel-dialog")) $("#cancel-dialog").close(); });
-  const menu = $("#site-menu"), backdrop = $("#menu-backdrop"), menuToggle = $("#menu-toggle");
-  const closeMenu = () => { if (!menu.classList.contains("open")) return; menu.classList.remove("open"); backdrop.classList.remove("visible"); menu.setAttribute("aria-hidden", "true"); menu.inert = true; menuToggle.setAttribute("aria-expanded", "false"); document.body.classList.remove("menu-open"); menuToggle.focus(); };
-  const openMenu = () => { menu.classList.add("open"); backdrop.classList.add("visible"); menu.setAttribute("aria-hidden", "false"); menu.inert = false; menuToggle.setAttribute("aria-expanded", "true"); document.body.classList.add("menu-open"); $("#menu-close").focus(); };
-  menuToggle.addEventListener("click", openMenu);
-  $("#menu-close").addEventListener("click", closeMenu);
-  backdrop.addEventListener("click", closeMenu);
-  menu.querySelectorAll("a").forEach((link) => link.addEventListener("click", closeMenu));
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMenu(); });
   $("#featured-prev").addEventListener("click", () => $("#featured-list").scrollBy({ left: -340, behavior: "smooth" }));
   $("#featured-next").addEventListener("click", () => $("#featured-list").scrollBy({ left: 340, behavior: "smooth" }));
   const dateInput = $("#booking-date");
