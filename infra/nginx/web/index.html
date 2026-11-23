@@ -13,7 +13,6 @@
   </head>
   <body>
     <header class="site-header">
-      <button class="header-menu-button" id="menu-toggle" type="button" aria-label="Abrir menú" aria-controls="site-menu" aria-expanded="false"><span></span><span></span></button>
       <a class="brand" href="#/inicio" data-page="inicio" aria-label="MELT, inicio">MELT</a>
       <nav class="header-nav" aria-label="Secciones"><a href="#/inicio" data-page="inicio">Inicio</a><a href="#/tratamientos" data-page="tratamientos">Tratamientos</a><a href="#/profesionales" data-page="profesionales">Profesionales</a><a href="#/reservas" data-page="reservas">Reservas</a><a href="#/cuenta" data-page="cuenta">Mi cuenta</a><a id="cart-menu-link" class="header-cart-link hidden" href="#/carrito" data-page="carrito">Carrito <span id="cart-count" class="cart-count">0</span></a></nav>
       <div class="header-actions">
@@ -21,15 +20,6 @@
         <button class="header-register" id="header-register" type="button" data-scroll="cuenta" data-register>Crear cuenta</button>
       </div>
     </header>
-
-    <div class="menu-backdrop" id="menu-backdrop"></div>
-    <aside class="site-menu" id="site-menu" aria-hidden="true" aria-label="Menú principal" inert>
-      <div class="site-menu-top"><a class="brand" href="#/inicio" data-page="inicio">MELT</a><button id="menu-close" type="button" aria-label="Cerrar menú">×</button></div>
-      <nav aria-label="Navegación principal">
-        <a href="#/inicio" data-page="inicio">Inicio</a><a href="#/tratamientos" data-page="tratamientos">Tratamientos</a><a href="#/profesionales" data-page="profesionales">Profesionales</a><a href="#/reservas" data-page="reservas">Reservas</a><a href="#/cuenta" data-page="cuenta">Mi cuenta</a><a id="catalog-admin-link" class="hidden" href="#/cuenta" data-page="cuenta">Administrar catálogo</a>
-      </nav>
-      <p>Tu tiempo, tu ritual.</p>
-    </aside>
 
     <main id="inicio">
       <section class="hero">
@@ -283,7 +273,7 @@
       <div id="cart-summary" class="cart-summary" aria-live="polite"></div>
     </section>
 
-    <footer class="site-footer"><div class="footer-brand"><a class="brand" href="#inicio">MELT</a><p>Cuidarte también es hacerte un espacio.</p></div><div class="footer-links"><a href="#seleccion">Selección</a><a href="#tratamientos">Tratamientos</a><a href="#profesionales">Profesionales</a><a href="#reservas">Reservas</a><a href="#cuenta">Mi cuenta</a></div><span>© MELT · Centro de estética</span></footer>
+    <footer class="site-footer"><div class="footer-brand"><span class="brand">MELT</span><p>Cuidarte también es hacerte un espacio.</p></div><span>© MELT · Centro de estética</span></footer>
     <dialog class="treatment-dialog" id="treatment-dialog" aria-labelledby="detail-title">
       <form method="dialog" class="dialog-top"><span class="eyebrow">Un ritual MELT</span><button class="dialog-close" aria-label="Cerrar detalle">×</button></form>
       <div class="dialog-layout"><div class="dialog-visual" id="detail-visual" aria-hidden="true"><span id="detail-initial">M</span></div><div class="dialog-copy"><p class="eyebrow" id="detail-category"></p><h2 id="detail-title"></h2><p class="dialog-description" id="detail-description"></p><div class="dialog-meta"><div><span>Duración</span><strong id="detail-duration"></strong></div><div><span>Precio</span><strong id="detail-price"></strong></div></div><div class="detail-keywords" id="detail-keywords"></div><div class="detail-professionals" id="detail-professionals"></div><p id="detail-availability" class="detail-availability"></p><button class="button button-dark" id="detail-book" type="button">Elegir horario <span aria-hidden="true">↗</span></button></div></div>
