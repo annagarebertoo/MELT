@@ -1,0 +1,144 @@
+{
+  "schema": "melt-capacidad/v1",
+  "url": "http://gateway/api/v1/catalogo/tratamientos?page=2&limit=10&q=masajes&orden=precio_asc",
+  "segundos_por_escalon": 10.0,
+  "timeout_s": 5.0,
+  "escalones": [
+    {
+      "concurrencia": 1,
+      "segundos": 10.001,
+      "total": 6842,
+      "exitosas": 6842,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 6842
+      },
+      "throughput_rps": 684.12,
+      "latencia_ms": {
+        "p50": 1.27,
+        "p95": 2.19,
+        "p99": 3.93,
+        "max": 16.0
+      },
+      "inicio_utc": "2026-11-24T08:32:37+00:00"
+    },
+    {
+      "concurrencia": 2,
+      "segundos": 10.002,
+      "total": 9024,
+      "exitosas": 9024,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 9024
+      },
+      "throughput_rps": 902.25,
+      "latencia_ms": {
+        "p50": 1.98,
+        "p95": 3.58,
+        "p99": 5.88,
+        "max": 19.43
+      },
+      "inicio_utc": "2026-11-24T08:32:47+00:00"
+    },
+    {
+      "concurrencia": 4,
+      "segundos": 10.003,
+      "total": 6789,
+      "exitosas": 6789,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 6789
+      },
+      "throughput_rps": 678.69,
+      "latencia_ms": {
+        "p50": 5.19,
+        "p95": 11.03,
+        "p99": 15.91,
+        "max": 42.26
+      },
+      "inicio_utc": "2026-11-24T08:32:57+00:00"
+    },
+    {
+      "concurrencia": 8,
+      "segundos": 10.008,
+      "total": 7124,
+      "exitosas": 7124,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 7124
+      },
+      "throughput_rps": 711.83,
+      "latencia_ms": {
+        "p50": 9.9,
+        "p95": 21.66,
+        "p99": 32.96,
+        "max": 167.32
+      },
+      "inicio_utc": "2026-11-24T08:33:07+00:00"
+    },
+    {
+      "concurrencia": 16,
+      "segundos": 10.008,
+      "total": 8891,
+      "exitosas": 8891,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 8891
+      },
+      "throughput_rps": 888.36,
+      "latencia_ms": {
+        "p50": 14.77,
+        "p95": 38.9,
+        "p99": 60.88,
+        "max": 251.18
+      },
+      "inicio_utc": "2026-11-24T08:33:17+00:00"
+    },
+    {
+      "concurrencia": 32,
+      "segundos": 10.017,
+      "total": 9992,
+      "exitosas": 9992,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 9992
+      },
+      "throughput_rps": 997.46,
+      "latencia_ms": {
+        "p50": 24.76,
+        "p95": 68.47,
+        "p99": 206.34,
+        "max": 345.89
+      },
+      "inicio_utc": "2026-11-24T08:33:27+00:00"
+    },
+    {
+      "concurrencia": 64,
+      "segundos": 10.022,
+      "total": 11616,
+      "exitosas": 11616,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 11616
+      },
+      "throughput_rps": 1159.0,
+      "latencia_ms": {
+        "p50": 43.25,
+        "p95": 132.87,
+        "p99": 290.66,
+        "max": 466.92
+      },
+      "inicio_utc": "2026-11-24T08:33:37+00:00"
+    }
+  ],
+  "throughput_maximo_rps": 1159.0,
+  "concurrencia_del_maximo": 64,
+  "nota": "El generador corre en un contenedor Python con hilos; por encima de ~64 hilos el propio generador puede limitar."
+}

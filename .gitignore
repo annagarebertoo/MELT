@@ -6,3 +6,6 @@
 services/*/api
 services/*/cmd/api/api
 services/pagos/pagos
+
+# Reportes generados por scripts locales (copiar a docs/evidence lo que se quiera conservar)
+output/

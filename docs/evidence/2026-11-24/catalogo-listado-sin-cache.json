@@ -1,0 +1,87 @@
+{
+  "schema": "melt-capacidad/v1",
+  "url": "http://gateway/api/v1/catalogo/tratamientos?page=1&limit=10",
+  "segundos_por_escalon": 10.0,
+  "timeout_s": 5.0,
+  "escalones": [
+    {
+      "concurrencia": 1,
+      "segundos": 10.0,
+      "total": 2534,
+      "exitosas": 2534,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 2534
+      },
+      "throughput_rps": 253.39,
+      "latencia_ms": {
+        "p50": 3.7,
+        "p95": 5.32,
+        "p99": 7.65,
+        "max": 30.08
+      },
+      "inicio_utc": "2026-11-24T08:34:03+00:00"
+    },
+    {
+      "concurrencia": 4,
+      "segundos": 10.009,
+      "total": 5367,
+      "exitosas": 5367,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 5367
+      },
+      "throughput_rps": 536.21,
+      "latencia_ms": {
+        "p50": 6.6,
+        "p95": 13.2,
+        "p99": 19.68,
+        "max": 56.73
+      },
+      "inicio_utc": "2026-11-24T08:34:13+00:00"
+    },
+    {
+      "concurrencia": 16,
+      "segundos": 10.018,
+      "total": 7351,
+      "exitosas": 7351,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 7351
+      },
+      "throughput_rps": 733.77,
+      "latencia_ms": {
+        "p50": 19.6,
+        "p95": 42.68,
+        "p99": 57.16,
+        "max": 93.49
+      },
+      "inicio_utc": "2026-11-24T08:34:23+00:00"
+    },
+    {
+      "concurrencia": 64,
+      "segundos": 10.045,
+      "total": 7992,
+      "exitosas": 7992,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 7992
+      },
+      "throughput_rps": 795.62,
+      "latencia_ms": {
+        "p50": 69.72,
+        "p95": 175.69,
+        "p99": 245.57,
+        "max": 454.88
+      },
+      "inicio_utc": "2026-11-24T08:34:33+00:00"
+    }
+  ],
+  "throughput_maximo_rps": 795.62,
+  "concurrencia_del_maximo": 64,
+  "nota": "El generador corre en un contenedor Python con hilos; por encima de ~64 hilos el propio generador puede limitar."
+}

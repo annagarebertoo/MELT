@@ -32,6 +32,10 @@ WINDOWS_DOCKER_DESKTOP_ENDPOINTS = {
     "desktop-linux": "npipe:////./pipe/dockerDesktopLinuxEngine",
     "default": "npipe:////./pipe/docker_engine",
 }
+# En Linux (por ejemplo, CI o una VM de desarrollo) solo se acepta el socket local del daemon.
+LINUX_LOCAL_DOCKER_ENDPOINTS = {
+    "default": "unix:///var/run/docker.sock",
+}
 
 
 class SafetyError(RuntimeError):
@@ -59,8 +63,12 @@ def docker(*args: str, timeout: int = 30, check: bool = True) -> subprocess.Comp
 
 def verify_local_docker_context(expected_name: str | None = None) -> dict:
     global DOCKER_CONTEXT
-    if sys.platform != "win32":
-        raise SafetyError("S1 failover requires a verifiable local Docker Desktop context on Windows")
+    if sys.platform == "win32":
+        allowed_endpoints = WINDOWS_DOCKER_DESKTOP_ENDPOINTS
+    elif sys.platform.startswith("linux"):
+        allowed_endpoints = LINUX_LOCAL_DOCKER_ENDPOINTS
+    else:
+        raise SafetyError("S1 failover requires a verifiable local Docker context (Docker Desktop on Windows or the local Linux socket)")
     selected = subprocess.run(
         ["docker", "context", "show"], cwd=ROOT, capture_output=True, text=True,
         encoding="utf-8", errors="replace", timeout=15,
@@ -68,7 +76,7 @@ def verify_local_docker_context(expected_name: str | None = None) -> dict:
     if selected.returncode != 0:
         raise SafetyError(f"Cannot verify active Docker context: {(selected.stderr or selected.stdout).strip()}")
     context_name = selected.stdout.strip()
-    expected_endpoint = WINDOWS_DOCKER_DESKTOP_ENDPOINTS.get(context_name)
+    expected_endpoint = allowed_endpoints.get(context_name)
     if expected_endpoint is None or (expected_name is not None and context_name != expected_name):
         raise SafetyError(f"Refusing non-local or unexpected Docker context: {context_name!r}")
     inspected = subprocess.run(
@@ -83,11 +91,13 @@ def verify_local_docker_context(expected_name: str | None = None) -> dict:
     except (json.JSONDecodeError, AttributeError) as error:
         raise SafetyError("Docker context endpoint could not be parsed") from error
     if endpoint != expected_endpoint:
-        raise SafetyError(f"Docker context endpoint is not the expected local Docker Desktop pipe: {endpoint!r}")
+        raise SafetyError(f"Docker context endpoint is not the expected local Docker endpoint: {endpoint!r}")
     DOCKER_CONTEXT = context_name
     server = docker("info", "--format", "{{.OperatingSystem}}|{{.OSType}}", timeout=15).stdout.strip()
-    if server != "Docker Desktop|linux":
+    if sys.platform == "win32" and server != "Docker Desktop|linux":
         raise SafetyError(f"Docker server is not local Docker Desktop Linux: {server!r}")
+    if not server.endswith("|linux"):
+        raise SafetyError(f"Docker server is not a local Linux engine: {server!r}")
     return {"name": context_name, "endpoint": endpoint, "server": server}
 
 
