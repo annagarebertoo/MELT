@@ -358,7 +358,15 @@ func (s *servidorReservas) prepareCheckout(ctx context.Context, clientID, key st
 		if err != nil {
 			return checkoutOperation{}, err
 		}
-		return s.prepararCheckoutDesdeRetenciones(ctx, clientID, key, now, holds)
+		order, err := s.prepararCheckoutDesdeRetenciones(ctx, clientID, key, now, holds)
+		if err != nil {
+			// Una solicitud concurrente con la misma clave pudo ganar la carrera y
+			// dejar las retenciones asociadas a su checkout: se devuelve ese resultado.
+			if existing, lookupErr := s.pg.checkoutPorClienteClave(ctx, clientID, key); lookupErr == nil {
+				return existing, nil
+			}
+		}
+		return order, err
 	}
 	cur, err := s.carritos.Find(ctx, bson.M{"clienteId": clientID, "estado": "pendiente_pago", "expiraEn": bson.M{"$gt": now}}, options.Find().SetSort(bson.D{{Key: "inicio", Value: 1}}))
 	if err != nil {

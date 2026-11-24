@@ -1,0 +1,71 @@
+# Dependencias descartables para las pruebas de consistencia, eventos y búsqueda
+# (L1–L3). Nada persiste: todos los datos viven en tmpfs y el proyecto se borra
+# con `docker compose -f compose.test.yaml -p melt-test down -v`.
+# Nunca apuntar estas pruebas a Atlas, Supabase, Render ni a otro entorno compartido.
+name: melt-test
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: melt-test
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    command: ["postgres", "-c", "max_connections=200", "-c", "fsync=off", "-c", "synchronous_commit=off"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports:
+      - "127.0.0.1:55672:5672"
+      - "127.0.0.1:55673:15672"
+    tmpfs:
+      - /var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  mongo:
+    image: mongo:7
+    command: ["--replSet", "melt-test", "--bind_ip_all"]
+    ports:
+      - "127.0.0.1:55017:27017"
+    tmpfs:
+      - /data/db
+    healthcheck:
+      # Inicia el replica set la primera vez y queda sano cuando es PRIMARY.
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id:\"melt-test\",members:[{_id:0,host:\"localhost:27017\"}]}) }; if (!db.hello().isWritablePrimary) quit(1)'"]
+      interval: 3s
+      timeout: 10s
+      retries: 40
+
+  memcached:
+    image: memcached:1.6-alpine
+    command: ["memcached", "-m", "32"]
+    ports:
+      - "127.0.0.1:55211:11211"
+
+  opensearch:
+    image: opensearchproject/opensearch:2
+    environment:
+      discovery.type: single-node
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "127.0.0.1:59200:9200"
+    tmpfs:
+      - /usr/share/opensearch/data:uid=1000,gid=1000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=2s' >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 40

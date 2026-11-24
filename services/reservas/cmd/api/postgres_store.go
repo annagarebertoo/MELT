@@ -202,8 +202,10 @@ func mustJSON(value any) string {
 }
 
 func (p *postgresStore) asegurarAgendaControl(ctx context.Context, profesionalID string, dia int) error {
+	// Sin columna de conflicto: con inserciones concurrentes la colisión puede
+	// detectarse primero en la clave primaria (id), que también debe ignorarse.
 	_, err := p.runner(ctx).ExecContext(ctx, `insert into control_agendas (id,profesional_id,dia_semana)
-		values ($1,$2,$3) on conflict (profesional_id,dia_semana) do nothing`, agendaControlID(profesionalID, dia), profesionalID, dia)
+		values ($1,$2,$3) on conflict do nothing`, agendaControlID(profesionalID, dia), profesionalID, dia)
 	return err
 }
 
