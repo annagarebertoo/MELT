@@ -68,7 +68,18 @@ type almacenConsumidor interface {
 	almacenFallidos
 }
 
+// inicializarMetricasEventos publica las series en 0 desde el arranque: sin esto,
+// increase() de Prometheus ignora el primer evento de cada combinación.
+func inicializarMetricasEventos() {
+	for _, tipo := range []string{"tratamiento.realizado", "turno.cancelado"} {
+		for _, resultado := range []string{"procesado", "reintento", "dlq"} {
+			telMetricas.contar("melt_beneficios_eventos_consumidos_total", "Eventos de dominio consumidos por tipo y resultado (procesado, reintento, dlq).", 0, "tipo", tipo, "resultado", resultado)
+		}
+	}
+}
+
 func (w *consumidorPrograma) run(ctx context.Context) {
+	inicializarMetricasEventos()
 	for ctx.Err() == nil {
 		if err := w.consume(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("beneficios_rabbitmq_reconnect: %v", err)

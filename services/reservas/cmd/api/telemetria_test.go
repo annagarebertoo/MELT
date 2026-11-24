@@ -1,7 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
+	"time"
+
 	"context"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -101,5 +106,53 @@ func TestTelemetriaPropagaTraceparentYRequestIDEnLlamadasSalientes(t *testing.T)
 	telMetricas.escribir(&b)
 	if !strings.Contains(b.String(), `melt_http_client_requests_total{service="reservas"`) {
 		t.Fatalf("llamada saliente no medida:\n%s", b.String())
+	}
+}
+
+func TestOutboxConservaLaTrazaSinPublicarlaEnElCuerpo(t *testing.T) {
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	entrante := propagation.HeaderCarrier{"Traceparent": []string{"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}}
+	ctx := otel.GetTextMapPropagator().Extract(context.Background(), entrante)
+	original := bson.M{"eventId": "e1"}
+	guardado := conTrazaOutbox(ctx, original)
+	if _, ok := original[claveTrazaOutbox]; ok {
+		t.Fatal("no debe modificar el payload original")
+	}
+	// Simula el viaje por PostgreSQL (jsonb → map[string]any).
+	ida, _ := json.Marshal(guardado)
+	var leido bson.M
+	_ = json.Unmarshal(ida, &leido)
+	ctxPublicacion, cuerpo := trazaDesdeOutbox(context.Background(), leido)
+	if _, ok := cuerpo[claveTrazaOutbox]; ok || cuerpo["eventId"] != "e1" {
+		t.Fatalf("el cuerpo publicado no debe incluir la traza: %v", cuerpo)
+	}
+	cabeceras := map[string]any{}
+	telInyectarCabeceras(ctxPublicacion, cabeceras)
+	if tp, _ := cabeceras["traceparent"].(string); !strings.Contains(tp, "4bf92f3577b34da6a3ce929d0e0e4736") {
+		t.Fatalf("la publicación no continúa la traza: %v", cabeceras)
+	}
+	if _, cuerpoSinTraza := trazaDesdeOutbox(context.Background(), bson.M{"eventId": "e2"}); cuerpoSinTraza["eventId"] != "e2" {
+		t.Fatal("un evento sin traza debe quedar igual")
+	}
+}
+
+func TestProximaEsperaOutboxDrenaRetrocedeYSeAcota(t *testing.T) {
+	if got := proximaEsperaOutbox(intervaloOutbox, true, nil); got != 0 {
+		t.Fatalf("tras publicar debe drenar sin esperar, obtuvo %v", got)
+	}
+	if got := proximaEsperaOutbox(0, false, nil); got != intervaloOutbox {
+		t.Fatalf("sin pendientes debe volver al intervalo normal, obtuvo %v", got)
+	}
+	espera := time.Duration(0)
+	vistas := []time.Duration{}
+	for i := 0; i < 6; i++ {
+		espera = proximaEsperaOutbox(espera, false, errors.New("broker caído"))
+		vistas = append(vistas, espera)
+	}
+	esperado := []time.Duration{1200 * time.Millisecond, 2400 * time.Millisecond, 4800 * time.Millisecond, 9600 * time.Millisecond, 10 * time.Second, 10 * time.Second}
+	for i := range esperado {
+		if vistas[i] != esperado[i] {
+			t.Fatalf("retroceso inesperado: %v", vistas)
+		}
 	}
 }
