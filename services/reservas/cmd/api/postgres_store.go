@@ -543,3 +543,13 @@ func (p *postgresStore) publicarEvento(ctx context.Context, id string, ahora any
 	_, err := p.runner(ctx).ExecContext(ctx, `update outbox_eventos set publicado_en=$2,intentos=intentos+1 where id=$1 and publicado_en is null`, id, ahora)
 	return err
 }
+
+// registrarFalloEvento deja constancia del intento fallido sin marcarlo como
+// publicado, para que el outbox lo reintente y la falla sea observable.
+func (p *postgresStore) registrarFalloEvento(ctx context.Context, id, detalle string) error {
+	if len(detalle) > 500 {
+		detalle = detalle[:500]
+	}
+	_, err := p.runner(ctx).ExecContext(ctx, `update outbox_eventos set intentos=intentos+1, ultimo_error=$2 where id=$1 and publicado_en is null`, id, detalle)
+	return err
+}

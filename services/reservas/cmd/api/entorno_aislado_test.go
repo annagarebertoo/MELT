@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -82,4 +83,47 @@ func postgresReservasAislado(t *testing.T) *sql.DB {
 		_, _ = admin.ExecContext(ctx, "drop database if exists "+nombre+" with (force)")
 	})
 	return db
+}
+
+// rabbitMQAislado crea un vhost propio en el RabbitMQ descartable y devuelve la
+// URL AMQP hacia ese vhost; el vhost (colas, exchanges y mensajes) se borra al final.
+func rabbitMQAislado(t *testing.T) string {
+	t.Helper()
+	amqpURL := strings.TrimSpace(os.Getenv("MELT_TEST_RABBITMQ_URL"))
+	apiURL := strings.TrimRight(strings.TrimSpace(os.Getenv("MELT_TEST_RABBITMQ_API")), "/")
+	if amqpURL == "" || apiURL == "" {
+		t.Skip("definí MELT_TEST_RABBITMQ_URL y MELT_TEST_RABBITMQ_API (ver scripts/test-consistencia-integracion.sh)")
+	}
+	exigirDestinoDescartable(t, "MELT_TEST_RABBITMQ_URL", amqpURL)
+	exigirDestinoDescartable(t, "MELT_TEST_RABBITMQ_API", apiURL)
+	vhost := fmt.Sprintf("reservas-test-%d", time.Now().UnixNano())
+	api := func(method, path, body string) {
+		t.Helper()
+		req, err := http.NewRequest(method, apiURL+path, strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("API de RabbitMQ %s %s: %v", method, path, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode >= 300 && !(method == http.MethodDelete && resp.StatusCode == http.StatusNotFound) {
+			t.Fatalf("API de RabbitMQ %s %s: HTTP %d", method, path, resp.StatusCode)
+		}
+	}
+	api(http.MethodPut, "/api/vhosts/"+vhost, "")
+	user := "guest"
+	if parsed, err := url.Parse(amqpURL); err == nil && parsed.User != nil {
+		user = parsed.User.Username()
+	}
+	api(http.MethodPut, "/api/permissions/"+vhost+"/"+user, `{"configure":".*","write":".*","read":".*"}`)
+	t.Cleanup(func() { api(http.MethodDelete, "/api/vhosts/"+vhost, "") })
+	parsed, err := url.Parse(amqpURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed.Path = "/" + vhost
+	return parsed.String()
 }
