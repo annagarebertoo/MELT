@@ -187,6 +187,11 @@ func (s *Servidor) acquireIndexerLease(ctx context.Context) (bool, string, error
 	if mongo.IsDuplicateKeyError(err) {
 		return false, "", nil
 	}
+	// Sin documento previo el upsert crea el lease y no devuelve documento:
+	// esta réplica es la dueña (antes quedaba un lease huérfano por 40 s).
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return true, owner, nil
+	}
 	if err != nil {
 		return false, "", err
 	}
@@ -423,7 +428,9 @@ type searchPage struct {
 func (s *searchClient) searchTreatments(ctx context.Context, q, category string, maxPrice float64, hasMax bool, page, limit, direction int, sortField string) (searchPage, error) {
 	filters := []any{}
 	if category != "" {
-		filters = append(filters, map[string]any{"match_phrase": map[string]any{"categoria": category}})
+		// Igualdad exacta sin distinguir mayúsculas, como el filtro de MongoDB:
+		// match_phrase sobre el texto analizado también aceptaba "Facial Premium".
+		filters = append(filters, map[string]any{"term": map[string]any{"categoria.keyword": map[string]any{"value": category, "case_insensitive": true}}})
 	}
 	if hasMax {
 		filters = append(filters, map[string]any{"range": map[string]any{"precio": map[string]any{"lte": maxPrice}}})
@@ -687,31 +694,40 @@ func startMemcachedSpan(ctx context.Context, operation string) (context.Context,
 	)
 }
 
-func (m *memcacheClient) get(ctx context.Context, query catalogListQuery) ([]byte, bool) {
+// get devuelve la entrada vigente y la generación observada. Quien lea la base
+// tras un miss debe guardar el resultado con esa misma generación (ver set):
+// si una mutación invalida mientras tanto, la entrada nace vencida.
+func (m *memcacheClient) get(ctx context.Context, query catalogListQuery) ([]byte, string, bool) {
 	ctx, span := startMemcachedSpan(ctx, "get")
 	defer span.End()
 	key, e := m.key(query)
 	if e != nil {
 		m.errors.Add(1)
 		span.SetStatus(codes.Error, "Memcached key creation failed")
-		return nil, false
+		return nil, "", false
 	}
 	generationKey := m.namespace + ":generation"
 	values, e := m.getRawMany(generationKey, key)
 	if e != nil {
 		m.errors.Add(1)
 		span.SetStatus(codes.Error, "Memcached read failed")
-		return nil, false
+		return nil, "", false
 	}
 	generation, exists := values[generationKey]
 	if !exists {
-		if addErr := m.addRaw(generationKey, []byte("1"), 0); addErr != nil && !errors.Is(addErr, errExists) {
-			return nil, false
+		// Generación nueva y aleatoria: si Memcached expulsó la clave de
+		// generación, las entradas previas no deben volver a ser válidas.
+		token, tokenErr := newCacheGeneration()
+		if tokenErr != nil {
+			return nil, "", false
+		}
+		if addErr := m.addRaw(generationKey, []byte(token), 0); addErr != nil && !errors.Is(addErr, errExists) {
+			return nil, "", false
 		}
 		values, e = m.getRawMany(generationKey, key)
 		if e != nil {
 			m.errors.Add(1)
-			return nil, false
+			return nil, "", false
 		}
 		generation = values[generationKey]
 	}
@@ -721,14 +737,17 @@ func (m *memcacheClient) get(ctx context.Context, query catalogListQuery) ([]byt
 		if found && bytes.Equal(version, generation) {
 			m.hits.Add(1)
 			span.SetAttributes(attribute.Bool("cache.hit", true))
-			return payload, true
+			return payload, string(generation), true
 		}
 	}
 	m.misses.Add(1)
 	span.SetAttributes(attribute.Bool("cache.hit", false))
-	return nil, false
+	return nil, string(generation), false
 }
-func (m *memcacheClient) set(ctx context.Context, query catalogListQuery, value []byte) {
+
+// set guarda value bajo la generación observada en get. Con generation vacía
+// (get no pudo leerla) usa la vigente.
+func (m *memcacheClient) set(ctx context.Context, query catalogListQuery, generation string, value []byte) {
 	ctx, span := startMemcachedSpan(ctx, "set")
 	defer span.End()
 	key, e := m.key(query)
@@ -737,10 +756,12 @@ func (m *memcacheClient) set(ctx context.Context, query catalogListQuery, value 
 		span.SetStatus(codes.Error, "Memcached key creation failed")
 		return
 	}
-	generation, err := m.generation()
-	if err != nil {
-		span.SetStatus(codes.Error, "Memcached generation read failed")
-		return
+	if generation == "" {
+		var err error
+		if generation, err = m.generation(); err != nil {
+			span.SetStatus(codes.Error, "Memcached generation read failed")
+			return
+		}
 	}
 	envelope := append(append([]byte(generation), '\n'), value...)
 	if err := m.setRaw(key, envelope, cacheTTL); err != nil {
