@@ -1,0 +1,122 @@
+name: melt-s1
+
+# S1: entorno deliberadamente independiente del Compose de desarrollo.
+# Todos los servicios comparten solo una red interna sin salida a Internet.
+services:
+  gateway:
+    image: nginx:1.28-alpine-otel
+    ports:
+      - "127.0.0.1:18081:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      catalogo-profesionales:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    networks:
+      - s1
+    restart: unless-stopped
+
+  catalogo-profesionales:
+    build:
+      context: ./services/catalogo-profesionales
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/?replicaSet=rs0
+      CATALOGO_MONGODB_DATABASE: melt_s1_catalogo
+      PROFESIONALES_MONGODB_DATABASE: melt_s1_profesionales
+      PORT: "8081"
+      AUTH_URL: http://127.0.0.1:9
+      MELT_INTERNAL_KEY: melt-s1-placeholder-not-a-secret
+      OPENSEARCH_URL: http://opensearch:9200
+      MEMCACHED_ADDRESS: memcached:11211
+      MEMCACHED_NAMESPACE: melt:s1:catalogo
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      opensearch:
+        condition: service_healthy
+      memcached:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - s1
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  mongodb:
+    image: mongo:7
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ping:1}).ok"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    volumes:
+      - mongodb_s1:/data/db
+    networks:
+      - s1
+    restart: unless-stopped
+
+  mongo-init:
+    image: mongo:7
+    entrypoint: ["mongosh", "--host", "mongodb:27017", "--quiet", "--eval"]
+    command:
+      - 'try { rs.status(); } catch (e) { rs.initiate({_id:"rs0",members:[{_id:0,host:"mongodb:27017"}]}); }'
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - s1
+    restart: "no"
+
+  opensearch:
+    image: opensearchproject/opensearch:2
+    environment:
+      discovery.type: single-node
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - s1
+    restart: unless-stopped
+
+  memcached:
+    image: memcached:1.6-alpine
+    command: ["memcached", "-m", "64"]
+    networks:
+      - s1
+    restart: unless-stopped
+
+  # El nginx.conf de MELT configura exportación OTLP a jaeger:4317.
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.11.0
+    command: ["--config", "/etc/jaeger/config.yaml"]
+    volumes:
+      - ./infra/jaeger/config.yaml:/etc/jaeger/config.yaml:ro
+    networks:
+      - s1
+    restart: unless-stopped
+
+networks:
+  s1:
+    internal: true
+
+volumes:
+  mongodb_s1:
+    name: melt-s1-mongodb-data

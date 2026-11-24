@@ -1,0 +1,41 @@
+groups:
+  - name: melt-catalogo
+    rules:
+      - record: catalog_replica_set_available
+        expr: (count(up{job="catalogo-profesionales"} == 1) or vector(0)) == bool 2
+
+      - alert: CatalogReplicaUnavailable
+        expr: count(up{job="catalogo-profesionales"} == 1) < 2 or absent(up{job="catalogo-profesionales"})
+        for: 1m
+        labels:
+          severity: warning
+          service: catalogo-profesionales
+        annotations:
+          summary: "Una o más réplicas de Catálogo no están disponibles"
+          description: "Prometheus observa menos de dos réplicas saludables durante al menos un minuto."
+
+      - alert: CatalogHttp5xxBurst
+        expr: sum(increase(catalog_http_requests_total{job="catalogo-profesionales",status=~"5.."}[5m])) >= 3
+        for: 1m
+        labels:
+          severity: warning
+          service: catalogo-profesionales
+        annotations:
+          summary: "Catálogo registró errores HTTP 5xx"
+          description: "Se observaron al menos tres respuestas 5xx en cinco minutos, sostenidas durante un minuto."
+
+      - alert: CatalogReplicaAvailabilitySLOBreach
+        expr: |
+          (
+            100 * avg_over_time(catalog_replica_set_available[7d]) < 99
+          )
+          and on() (
+            count(count_over_time(up{job="catalogo-profesionales"}[7d]) >= 40280) == 2
+          )
+        for: 5m
+        labels:
+          severity: warning
+          service: catalogo-profesionales
+        annotations:
+          summary: "Catálogo está por debajo del objetivo de disponibilidad"
+          description: "La disponibilidad de las dos réplicas cayó por debajo del 99% en la ventana móvil de siete días."

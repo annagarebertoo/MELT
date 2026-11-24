@@ -1,6 +1,6 @@
 # ADR-011 — Observabilidad
 
-**Estado:** Implementación inicial verificada localmente para logs, correlación y trazas de Catálogo; métricas y tableros pendientes.
+**Estado:** Implementación inicial de logs y trazas verificada; S2 agrega métricas HTTP de Catálogo, dashboard Grafana y reglas de alerta locales. La visualización en ejecución queda pendiente de validación en un entorno local aislado.
 
 **Entrega:** 2 — 23 de octubre de 2026
 
@@ -60,4 +60,12 @@ El cliente no exporta un span propio y MongoDB no tiene instrumentación interna
 
 Jaeger pierde las trazas al reiniciarse y no es una configuración de producción. La exportación se realiza en lotes, por lo que una caída forzada puede perder telemetría. Los logs internos de arranque/error de NGINX conservan su formato nativo; sus accesos HTTP y los logs de aplicación de Catálogo sí son JSON.
 
-Quedan pendientes métricas de negocio, tableros, alertas, SLO y trazas de los demás flujos. La evidencia no declara completa la observabilidad del proyecto final.
+La instrumentación S2 cubre HTTP de Catálogo, no métricas de negocio de todos los servicios. El objetivo de disponibilidad es académico y local; no se define todavía un presupuesto numérico de latencia ni notificaciones externas. Las trazas y tableros no cubren todos los flujos ni equivalen a observabilidad de producción.
+
+### Implementación S2 — 24/11/2026
+
+- Catálogo expone contadores HTTP y un histograma de latencia por método, ruta normalizada, estado y hostname de réplica. El scrape de `/metrics` se excluye de los contadores.
+- Prometheus usa DNS A discovery para crear un target por réplica; el dashboard Grafana provisionado muestra RPS, p95, 5xx, estados y disponibilidad.
+- Reglas locales detectan menos de dos targets saludables durante un minuto, tres 5xx en cinco minutos y disponibilidad 2/2 menor al 99% en siete días. No se configura Alertmanager.
+- Se agregan spans cliente para solicitudes OpenSearch y operaciones Memcached, sin registrar URL ni consulta.
+- Verificación básica: pruebas Go puntuales, `promtool check config` y `docker compose config --quiet`. No se inició Compose ni se consultaron bases compartidas; la validación visual queda pendiente en un entorno aislado.

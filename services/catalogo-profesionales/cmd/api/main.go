@@ -430,7 +430,7 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 	// A stale generation must not be served from the search cache either.
 	cacheable := query.Q == "" || useSearch
 	if cacheable && s.cache != nil {
-		if cached, ok := s.cache.get(query); ok {
+		if cached, ok := s.cache.get(c.Request.Context(), query); ok {
 			c.Data(http.StatusOK, "application/json; charset=utf-8", cached)
 			return
 		}
@@ -448,7 +448,7 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 			payload := gin.H{"tratamientos": result.Treatments, "pagination": gin.H{"page": page, "limit": limit, "total": result.Total, "totalPages": totalPages(result.Total, limit)}}
 			if raw, err := json.Marshal(payload); err == nil {
 				if s.cache != nil {
-					s.cache.set(query, raw)
+					s.cache.set(c.Request.Context(), query, raw)
 				}
 				c.Data(http.StatusOK, "application/json; charset=utf-8", raw)
 				return
@@ -502,7 +502,7 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 	}
 	if raw, err := json.Marshal(payload); err == nil {
 		if query.Q == "" && s.cache != nil {
-			s.cache.set(query, raw)
+			s.cache.set(c.Request.Context(), query, raw)
 		}
 		c.Data(http.StatusOK, "application/json; charset=utf-8", raw)
 		return
