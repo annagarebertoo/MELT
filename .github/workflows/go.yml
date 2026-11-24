@@ -178,6 +178,24 @@ jobs:
         if: always()
         run: docker rm -f catalogo-mongo
 
+  consistencia-eventos-busqueda:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [l1, l2, l3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/reservas/go.mod
+          cache-dependency-path: services/*/go.sum
+      - name: Pruebas ${{ matrix.suite }} con dependencias descartables
+        run: scripts/test-consistencia-integracion.sh ${{ matrix.suite }}
+      - name: Diagnóstico de contenedores
+        if: failure()
+        run: docker compose -f compose.test.yaml -p melt-test logs --no-color --tail 200 || true
+
   contracts-and-web:
     runs-on: ubuntu-latest
     steps:
