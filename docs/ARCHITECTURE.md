@@ -79,7 +79,28 @@ El profesional vinculado marca el turno como completado. Reservas guarda el camb
 
 ## Ejecución y evidencia
 
-La configuración reproducible está en [compose.yaml](../compose.yaml), los comandos en [OPERACIONES.md](OPERACIONES.md) y las limitaciones/evidencia en [MATRIZ-CUMPLIMIENTO.md](MATRIZ-CUMPLIMIENTO.md). El repositorio conserva ensayos históricos fechados; su commit de ejecución no necesariamente coincide con el commit actual.
+La configuración reproducible está en [compose.yaml](../compose.yaml), los comandos en [OPERACIONES.md](OPERACIONES.md), las limitaciones en la sección siguiente y la evidencia por requisito en [MATRIZ-CUMPLIMIENTO.md](MATRIZ-CUMPLIMIENTO.md). El repositorio conserva ensayos históricos fechados; su commit de ejecución no necesariamente coincide con el commit actual.
+
+## Observabilidad, resiliencia y capacidad
+
+- Todos los servicios emiten logs JSON con `request_id` y `trace_id`, exponen `/metrics` a Prometheus por la red interna y exportan trazas a Jaeger. La traza del flujo principal cruza Gateway, Reservas, Catálogo, Pagos y, a través del outbox y RabbitMQ, Beneficios. Tableros **MELT · Observabilidad S2** (Catálogo y réplicas) y **MELT · Flujo principal**. Ver [OBSERVABILITY.md](OBSERVABILITY.md) y [ADR-011](adr/ADR-011-observabilidad.md).
+- Catálogo corre con dos réplicas detrás del Gateway, con detección pasiva y reintento de lecturas ([ADR-012](adr/ADR-012-balanceo-carga.md)). El comportamiento ante la caída de cada dependencia está en el [POSTMORTEM](POSTMORTEM.md).
+- Consistencia y concurrencia de reservas, checkout, puntos y canjes: [ADR-004](adr/ADR-004-consistencia-concurrencia.md).
+- Capacidad medida, límite principal y costos: [ADR-013](adr/ADR-013-capacidad-costos.md).
+
+## Limitaciones conocidas y deuda técnica aceptada
+
+| Limitación | Por qué se acepta | Qué haría falta |
+|---|---|---|
+| La mensajería entrega *al menos una vez*. | Es el modelo de RabbitMQ; Beneficios deduplica por `eventId` y está probado. | Nada mientras se mantenga la deduplicación en todo consumidor nuevo. |
+| Los puntos pueden llegar con demora si RabbitMQ cae (outbox). | Completar un turno no debe depender del broker. Medido: 8,5 s para 10 eventos tras volver el broker. | Alertar al cliente si la demora supera un umbral. |
+| Detección de réplica caída pasiva (NGINX OSS no tiene health checks activos). | Una sola solicitud por caída tarda 0,5 s; ninguna falla. | NGINX Plus, Envoy o un orquestador con health checks. |
+| Jaeger guarda trazas en memoria; no hay Alertmanager. | Suficiente para la defensa y el entorno académico. | Almacenamiento persistente de trazas y envío de notificaciones. |
+| La capacidad se midió en un host local compartido de 4 vCPU. | Permite ubicar el cuello (CPU de Catálogo) y comparar con y sin caché. | Repetir en hosts dedicados antes de dimensionar producción. |
+| Auth, Catálogo y Pagos comparten un clúster MongoDB (bases lógicas separadas). | Costo cero en el plan académico; el ownership se respeta por base y no hay consultas cruzadas. | Clústeres separados si un servicio necesita aislar carga o fallas. |
+| Mercado Pago opera sólo con credenciales de prueba. | El enunciado no exige cobros reales. | Credenciales productivas y revisión de seguridad. |
+| Las credenciales de desarrollo de Compose no son aptas para producción. | Entorno local; los secretos reales viven en Render y no en el repositorio. | Gestor de secretos. |
+| Consumo del proveedor externo (D9) y contrato publicado para el grupo consumidor (D8). | En curso en la parte A1–A3 del equipo. | Ver [GHOSTKITCHEN.md](GHOSTKITCHEN.md) e [INTEGRACION-GIMNASIO.md](INTEGRACION-GIMNASIO.md) al cerrarse. |
 
 ## Diagramas de secuencia
 

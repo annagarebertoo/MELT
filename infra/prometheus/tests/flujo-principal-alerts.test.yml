@@ -1,0 +1,72 @@
+rule_files:
+  - ../alerts.yml
+
+evaluation_interval: 15s
+
+tests:
+  - name: flujo-principal-dispara-ante-errores-y-dlq
+    interval: 15s
+    input_series:
+      - series: 'up{job="reservas", instance="reservas:8082"}'
+        values: '0x40'
+      - series: 'melt_http_requests_total{service="reservas", route="/carrito/checkout", method="POST", status="500"}'
+        values: '0+2x40'
+      - series: 'melt_http_requests_total{service="reservas", route="/carrito/checkout", method="POST", status="200"}'
+        values: '0+2x40'
+      - series: 'melt_beneficios_eventos_consumidos_total{service="beneficios", tipo="tratamiento.realizado", resultado="dlq"}'
+        values: '0 0 0 1 1 1 1 1 1 1'
+      - series: 'melt_reservas_outbox_publicaciones_total{service="reservas", tipo="tratamiento.realizado", resultado="fallido"}'
+        values: '0+1x40'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: MeltServiceDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: reservas
+              instance: reservas:8082
+            exp_annotations:
+              summary: "Un servicio del flujo principal no responde"
+              description: "Prometheus no puede leer /metrics de reservas desde hace un minuto."
+      - eval_time: 9m
+        alertname: ReservasErrorRateHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: reservas
+            exp_annotations:
+              summary: "Más del 5 % de las solicitudes de Reservas termina en 5xx"
+              description: "El objetivo de servicio del flujo de reserva es ≥ 95 % de respuestas sin error del servidor."
+      - eval_time: 2m
+        alertname: BeneficiosEventsDeadLettered
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: beneficios
+            exp_annotations:
+              summary: "Hay eventos de dominio en la cola de fallidos"
+              description: "Un evento agotó los reintentos o no cumple el esquema; revisarlo desde la administración de mensajes fallidos."
+      - eval_time: 5m
+        alertname: OutboxPublishFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: reservas
+            exp_annotations:
+              summary: "Reservas no logra publicar eventos en RabbitMQ"
+              description: "Los eventos quedan en el outbox y se reintentan; los puntos se acreditarán con demora."
+
+  - name: flujo-principal-silencioso-sin-servicios
+    interval: 15s
+    input_series:
+      - series: 'up{job="catalogo-profesionales", instance="catalogo-1"}'
+        values: '1x40'
+      - series: 'up{job="catalogo-profesionales", instance="catalogo-2"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: MeltServiceDown
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ReservasErrorRateHigh
+        exp_alerts: []

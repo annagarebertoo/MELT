@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"log"
 	"strconv"
 	"strings"
@@ -66,7 +68,18 @@ type almacenConsumidor interface {
 	almacenFallidos
 }
 
+// inicializarMetricasEventos publica las series en 0 desde el arranque: sin esto,
+// increase() de Prometheus ignora el primer evento de cada combinación.
+func inicializarMetricasEventos() {
+	for _, tipo := range []string{"tratamiento.realizado", "turno.cancelado"} {
+		for _, resultado := range []string{"procesado", "reintento", "dlq"} {
+			telMetricas.contar("melt_beneficios_eventos_consumidos_total", "Eventos de dominio consumidos por tipo y resultado (procesado, reintento, dlq).", 0, "tipo", tipo, "resultado", resultado)
+		}
+	}
+}
+
 func (w *consumidorPrograma) run(ctx context.Context) {
+	inicializarMetricasEventos()
 	for ctx.Err() == nil {
 		if err := w.consume(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("beneficios_rabbitmq_reconnect: %v", err)
@@ -131,9 +144,27 @@ func (w *consumidorPrograma) consume(ctx context.Context) error {
 	}
 }
 
+// contarEvento registra el resultado del consumo para el tablero del flujo principal.
+func contarEvento(tipo, resultado string) {
+	if tipo == "" {
+		tipo = "desconocido"
+	}
+	telMetricas.contar("melt_beneficios_eventos_consumidos_total", "Eventos de dominio consumidos por tipo y resultado (procesado, reintento, dlq).", 1, "tipo", tipo, "resultado", resultado)
+}
+
 func (w *consumidorPrograma) handle(ctx context.Context, ch *amqp091.Channel, delivery amqp091.Delivery) {
+	// Continúa la traza iniciada por Reservas al publicar el evento.
+	ctx = telExtraerCabeceras(ctx, map[string]any(delivery.Headers))
+	ctx, span := telIniciarSpan(ctx, "rabbitmq consume "+delivery.RoutingKey,
+		attribute.String("messaging.system", "rabbitmq"),
+		attribute.String("messaging.message.id", delivery.MessageId),
+	)
+	defer span.End()
+	inicio := time.Now()
 	var event EventoDominio
 	if err := json.Unmarshal(delivery.Body, &event); err != nil || strings.TrimSpace(event.EventID) == "" {
+		span.SetStatus(codes.Error, "esquema inválido")
+		contarEvento(delivery.Type, "dlq")
 		_ = w.failPermanently(ctx, ch, delivery, event, "el evento no cumple el esquema esperado", 1)
 		return
 	}
@@ -143,15 +174,20 @@ func (w *consumidorPrograma) handle(ctx context.Context, ch *amqp091.Channel, de
 	processCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	err := w.process(processCtx, event)
 	cancel()
+	telMetricas.observar("melt_beneficios_evento_procesamiento_segundos", "Duración del procesamiento de un evento de dominio.", time.Since(inicio).Seconds(), "tipo", event.Tipo)
 	if err == nil {
+		contarEvento(event.Tipo, "procesado")
 		_ = delivery.Ack(false)
 		return
 	}
+	span.SetStatus(codes.Error, "procesamiento fallido")
 	attempts := retryCount(delivery.Headers) + 1
 	if attempts >= 4 {
+		contarEvento(event.Tipo, "dlq")
 		_ = w.failPermanently(ctx, ch, delivery, event, err.Error(), attempts)
 		return
 	}
+	contarEvento(event.Tipo, "reintento")
 	retrasos := w.retrasos
 	if len(retrasos) < 3 {
 		retrasos = retrasosReintento
@@ -165,7 +201,9 @@ func (w *consumidorPrograma) handle(ctx context.Context, ch *amqp091.Channel, de
 	}
 	// El reintento vuelve sólo a la cola de Beneficios (exchange por defecto):
 	// republicarlo en el exchange de dominio lo duplicaría a otros suscriptores.
-	if err = publishConfirmed(ch, "", eventosQueue, delivery.Type, delivery.MessageId, delivery.Body, amqp091.Table{"x-melt-intentos": int32(attempts)}); err != nil {
+	cabeceras := amqp091.Table{"x-melt-intentos": int32(attempts)}
+	telInyectarCabeceras(ctx, cabeceras)
+	if err = publishConfirmed(ch, "", eventosQueue, delivery.Type, delivery.MessageId, delivery.Body, cabeceras); err != nil {
 		_ = delivery.Nack(false, true)
 		return
 	}

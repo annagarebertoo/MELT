@@ -1,6 +1,6 @@
 # ADR-011 — Observabilidad
 
-**Estado:** Implementación inicial de logs y trazas verificada; S2 agrega métricas HTTP de Catálogo, dashboard Grafana y reglas de alerta locales. La visualización en ejecución queda pendiente de validación en un entorno local aislado.
+**Estado:** Aceptado. Logs, métricas, trazas, tableros y alertas cubren Catálogo y el flujo principal (Reservas, Pagos, Auth y Beneficios) desde el 24/11/2026; ver la última sección.
 
 **Entrega:** 2 — 23 de octubre de 2026
 
@@ -69,3 +69,14 @@ La instrumentación S2 cubre HTTP de Catálogo, no métricas de negocio de todos
 - Reglas locales detectan menos de dos targets saludables durante un minuto, tres 5xx en cinco minutos y disponibilidad 2/2 menor al 99% en siete días. No se configura Alertmanager.
 - Se agregan spans cliente para solicitudes OpenSearch y operaciones Memcached, sin registrar URL ni consulta.
 - Verificación básica: pruebas Go puntuales, `promtool check config` y `docker compose config --quiet`. No se inició Compose ni se consultaron bases compartidas; la validación visual queda pendiente en un entorno aislado.
+
+### Ampliación al flujo principal — 24/11/2026
+
+- **Logs:** Reservas, Pagos, Auth y Beneficios emiten JSON (`slog`) con `service`, `instance`, `request_id` y `trace_id`, igual que Catálogo y el Gateway.
+- **Trazas:** los cuatro servicios exportan OTLP a Jaeger cuando `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` está definido (lo está en `compose.yaml`). Las llamadas HTTP salientes inyectan `traceparent` y `X-Request-ID`; el evento de outbox guarda el contexto de la traza y lo propaga en las cabeceras AMQP, así que **una misma traza** une el `POST /turnos/:id/completar`, la publicación y el consumo en Beneficios, incluso si el broker estuvo caído en el medio ([evidencia](../evidence/2026-11-24/traza-turno-realizado-a-dlq.json)). NGINX traza también las rutas de Reservas, Auth, Beneficios y Pagos.
+- **Métricas:** `/metrics` en los cuatro servicios con `melt_http_requests_total`, `melt_http_request_duration_seconds`, llamadas salientes por destino y métricas de negocio (outbox, eventos consumidos por resultado). El Gateway devuelve 404 a `/api/v1/*/metrics`: sólo Prometheus las lee por la red interna.
+- **Tablero:** **MELT · Flujo principal** (Grafana, provisionado).
+- **Alertas:** grupo `melt-flujo-principal` (servicio caído, 5xx de Reservas > 5 %, p95 de checkout > 2 s, outbox fallando, eventos a la DLQ, errores del proveedor de pagos), con pruebas `promtool test rules` en `infra/prometheus/tests/`.
+- **Objetivo de servicio del flujo principal:** 95 % de las solicitudes de Reservas sin 5xx y p95 de checkout menor a 2 s; los umbrales de alerta derivan de ese objetivo.
+
+Verificado en un stack local: la alerta `OutboxPublishFailing` y la de DLQ pasaron a *firing* durante la caída controlada de RabbitMQ ([POSTMORTEM](../POSTMORTEM.md)).

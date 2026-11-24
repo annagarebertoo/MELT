@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -33,17 +35,54 @@ func (s *servidorReservas) publicarEventos(ctx context.Context) {
 	if strings.TrimSpace(s.rabbitURL) == "" {
 		return
 	}
-	ticker := time.NewTicker(1200 * time.Millisecond)
-	defer ticker.Stop()
+	// Series en 0 desde el arranque para que increase() detecte el primer fallo.
+	for _, tipo := range []string{"tratamiento.realizado", "turno.cancelado"} {
+		for _, resultado := range []string{"publicado", "fallido"} {
+			telMetricas.contar("melt_reservas_outbox_publicaciones_total", "Eventos del outbox enviados a RabbitMQ por tipo y resultado.", 0, "tipo", tipo, "resultado", resultado)
+		}
+	}
+	espera := intervaloOutbox
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-time.After(espera):
 		}
-		if _, err := s.publicarSiguienteEvento(ctx); err != nil {
-			log.Printf("%v", err)
+		publicado, err := s.publicarSiguienteEvento(ctx)
+		espera = proximaEsperaOutbox(espera, publicado, err)
+		if err != nil {
+			slog.WarnContext(ctx, "reservas_outbox_publish_retry", "error", err.Error(), "proximo_intento_ms", espera.Milliseconds())
 		}
+	}
+}
+
+const (
+	intervaloOutbox     = 1200 * time.Millisecond
+	esperaMaximaOutbox  = 10 * time.Second
+	esperaDrenadoOutbox = 0
+)
+
+// proximaEsperaOutbox decide cuándo volver a leer el outbox:
+//   - tras publicar, sigue de inmediato para drenar la cola acumulada;
+//   - sin pendientes, vuelve al intervalo normal;
+//   - ante un error (broker caído), duplica la espera hasta 10 s para no saturar
+//     logs ni el broker al recuperarse. El peor caso de demora tras la
+//     recuperación queda acotado por esperaMaximaOutbox.
+func proximaEsperaOutbox(actual time.Duration, publicado bool, err error) time.Duration {
+	switch {
+	case err != nil:
+		siguiente := actual * 2
+		if siguiente < intervaloOutbox {
+			siguiente = intervaloOutbox
+		}
+		if siguiente > esperaMaximaOutbox {
+			siguiente = esperaMaximaOutbox
+		}
+		return siguiente
+	case publicado:
+		return esperaDrenadoOutbox
+	default:
+		return intervaloOutbox
 	}
 }
 
@@ -65,11 +104,20 @@ func (s *servidorReservas) publicarSiguienteEvento(ctx context.Context) (bool, e
 	if err != nil {
 		return false, fmt.Errorf("reservas_outbox_read_failed: %w", err)
 	}
+	ctx, item.Payload = trazaDesdeOutbox(ctx, item.Payload)
 	body, err := json.Marshal(item.Payload)
 	if err != nil {
 		return false, fmt.Errorf("reservas_outbox_encode_failed event=%s", item.ID)
 	}
-	publishCtx, stop := context.WithTimeout(ctx, 5*time.Second)
+	spanCtx, span := telIniciarSpan(ctx, "rabbitmq publish "+item.RoutingKey,
+		attribute.String("messaging.system", "rabbitmq"),
+		attribute.String("messaging.destination.name", exchangeEventos),
+		attribute.String("messaging.message.id", item.ID),
+	)
+	defer span.End()
+	cabeceras := amqp091.Table{}
+	telInyectarCabeceras(spanCtx, cabeceras)
+	publishCtx, stop := context.WithTimeout(spanCtx, 5*time.Second)
 	conn, err := amqp091.DialConfig(s.rabbitURL, amqp091.Config{Heartbeat: 10 * time.Second, Locale: "en_US"})
 	if err == nil {
 		var ch *amqp091.Channel
@@ -81,7 +129,7 @@ func (s *servidorReservas) publicarSiguienteEvento(ctx context.Context) (bool, e
 			}
 			if err == nil {
 				confirms := ch.NotifyPublish(make(chan amqp091.Confirmation, 1))
-				err = ch.PublishWithContext(publishCtx, exchangeEventos, item.RoutingKey, false, false, amqp091.Publishing{ContentType: "application/json", DeliveryMode: amqp091.Persistent, MessageId: item.ID, Type: item.Tipo, Timestamp: item.CreadoEn, Body: body})
+				err = ch.PublishWithContext(publishCtx, exchangeEventos, item.RoutingKey, false, false, amqp091.Publishing{ContentType: "application/json", DeliveryMode: amqp091.Persistent, MessageId: item.ID, Type: item.Tipo, Timestamp: item.CreadoEn, Headers: cabeceras, Body: body})
 				if err == nil {
 					select {
 					case confirm := <-confirms:
@@ -99,6 +147,8 @@ func (s *servidorReservas) publicarSiguienteEvento(ctx context.Context) (bool, e
 	}
 	stop()
 	if err != nil {
+		span.SetStatus(codes.Error, "publicación fallida")
+		telMetricas.contar("melt_reservas_outbox_publicaciones_total", "Eventos del outbox enviados a RabbitMQ por tipo y resultado.", 1, "tipo", item.Tipo, "resultado", "fallido")
 		if s.pg != nil {
 			failCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 			_ = s.pg.registrarFalloEvento(failCtx, item.ID, err.Error())
@@ -113,8 +163,50 @@ func (s *servidorReservas) publicarSiguienteEvento(ctx context.Context) (bool, e
 		_, err = s.outbox.UpdateOne(markCtx, bson.M{"_id": item.ID, "publicadoEn": bson.M{"$exists": false}}, bson.M{"$set": bson.M{"publicadoEn": time.Now().UTC()}, "$inc": bson.M{"intentos": 1}})
 	}
 	cancel()
+	telMetricas.contar("melt_reservas_outbox_publicaciones_total", "Eventos del outbox enviados a RabbitMQ por tipo y resultado.", 1, "tipo", item.Tipo, "resultado", "publicado")
+	if !item.CreadoEn.IsZero() {
+		telMetricas.observar("melt_reservas_outbox_demora_segundos", "Tiempo entre la escritura en el outbox y la confirmación del broker.", time.Since(item.CreadoEn).Seconds(), "tipo", item.Tipo)
+	}
 	if err != nil {
 		return true, fmt.Errorf("reservas_outbox_mark_failed event=%s: %w", item.ID, err)
 	}
 	return true, nil
+}
+
+// claveTrazaOutbox guarda el traceparent de la solicitud que escribió el evento,
+// para que la publicación asincrónica continúe la misma traza. No viaja en el cuerpo
+// del evento: se quita antes de publicar y se envía como encabezado AMQP.
+const claveTrazaOutbox = "_traza"
+
+func conTrazaOutbox(ctx context.Context, payload bson.M) bson.M {
+	cabeceras := map[string]any{}
+	telInyectarCabeceras(ctx, cabeceras)
+	if len(cabeceras) == 0 {
+		return payload
+	}
+	copia := make(bson.M, len(payload)+1)
+	for k, v := range payload {
+		copia[k] = v
+	}
+	copia[claveTrazaOutbox] = cabeceras
+	return copia
+}
+
+func trazaDesdeOutbox(ctx context.Context, payload bson.M) (context.Context, bson.M) {
+	crudo, ok := payload[claveTrazaOutbox]
+	if !ok {
+		return ctx, payload
+	}
+	limpio := make(bson.M, len(payload))
+	for k, v := range payload {
+		if k != claveTrazaOutbox {
+			limpio[k] = v
+		}
+	}
+	if cabeceras, ok := crudo.(map[string]any); ok {
+		ctx = telExtraerCabeceras(ctx, cabeceras)
+	} else if cabeceras, ok := crudo.(bson.M); ok {
+		ctx = telExtraerCabeceras(ctx, map[string]any(cabeceras))
+	}
+	return ctx, limpio
 }

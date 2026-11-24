@@ -55,6 +55,7 @@ services:
       context: ./services/reservas
     environment:
       PORT: "8082"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
       RESERVAS_DATABASE_URL: ${RESERVAS_DATABASE_URL:?Defini RESERVAS_DATABASE_URL con la conexión privada de Supabase}
       MELT_TIMEZONE: ${MELT_TIMEZONE:-America/Argentina/Buenos_Aires}
       PAGOS_URL: ${PAGOS_URL:-http://pagos:8085}
@@ -75,6 +76,7 @@ services:
       context: ./services/pagos
     environment:
       PORT: "8085"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
       MONGODB_URI: ${MONGODB_URI:?Defini MONGODB_URI con la URI compartida de MongoDB Atlas}
       PAGOS_MONGODB_DATABASE: ${PAGOS_MONGODB_DATABASE:-pagos_db}
       MELT_INTERNAL_KEY: ${MELT_INTERNAL_KEY:?Defini MELT_INTERNAL_KEY para la comunicación interna}
@@ -89,6 +91,7 @@ services:
       context: ./services/auth
     environment:
       PORT: "8084"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
       MONGODB_URI: ${MONGODB_URI:?Defini MONGODB_URI con la URI compartida de MongoDB Atlas}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Defini AUTH_JWT_SECRET en tu entorno}
       BENEFICIOS_URL: http://beneficios:8083
@@ -107,6 +110,7 @@ services:
       context: ./services/beneficios
     environment:
       PORT: "8083"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
       AUTH_URL: http://auth:8084
       BENEFICIOS_INVITATION_SECRET: ${BENEFICIOS_INVITATION_SECRET:-}
       MELT_PUBLIC_URL: ${MELT_PUBLIC_URL:-http://localhost:8080}

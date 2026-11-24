@@ -530,6 +530,7 @@ func (p *postgresStore) confirmarCheckoutEstado(ctx context.Context, id, pagoID 
 }
 
 func (p *postgresStore) insertarEvento(ctx context.Context, item eventoOutbox) error {
+	item.Payload = conTrazaOutbox(ctx, item.Payload)
 	_, err := p.runner(ctx).ExecContext(ctx, `insert into outbox_eventos (id,tipo,routing_key,payload,creado_en) values ($1,$2,$3,$4::jsonb,$5)`, item.ID, item.Tipo, item.RoutingKey, mustJSON(item.Payload), item.CreadoEn)
 	return err
 }

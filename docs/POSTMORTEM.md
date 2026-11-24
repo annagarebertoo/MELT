@@ -1,62 +1,121 @@
-# Postmortem — prueba de resiliencia y aprendizajes
+# Postmortem — jornada de fallas controladas
 
-> **Estado:** se ejecutó un ensayo controlado el 23/10/2026, cuyo resultado fue parcial y no aprobó el criterio estricto de cero errores. El resto de escenarios listados son procedimientos pendientes, no resultados. La evidencia original está en [fallo-replica-2026-10-23.json](evidence/fallo-replica-2026-10-23.json). La documentación corresponde al commit histórico `cc230fa`, no al HEAD actual.
+> **Alcance:** dos caídas provocadas el 24/11/2026 en un entorno local aislado (Docker, bases descartables, sin Atlas, Supabase ni Render), sobre la rama `claude/project-thread-dirwx9` derivada de `codex/supabase-postgres-migration`. Al final se conserva sin cambios el ensayo parcial del 23/10/2026, que motivó las acciones de este informe. Horarios en UTC (Argentina: UTC−3).
 
-## Escenario evaluado
+## Resumen
 
-**Escenario:** una instancia del servicio de Catálogo deja de responder mientras el gateway sigue recibiendo solicitudes.
+| Ensayo | Dependencia que cae | Impacto para el usuario | Pérdida o duplicación | Acción derivada |
+|---|---|---|---|---|
+| A | Una de dos réplicas de Catálogo | Ninguna respuesta con error; una solicitud tardó 0,5 s (antes 2 s) | No aplica (lecturas) | `proxy_connect_timeout 500ms` en las rutas de Catálogo |
+| B | RabbitMQ (60 s y 150 s) | Ninguno en línea: completar turnos siguió respondiendo 202. Los puntos llegaron con demora | 0 eventos perdidos, 0 acreditaciones duplicadas | Retroceso exponencial y drenado inmediato en el publicador del outbox; métricas y alertas del flujo |
 
-**Resultado observado:** con una réplica de Catálogo detenida, 11 de 12 GET respondieron 200 y una solicitud obtuvo 504. La recuperación de la réplica fue confirmada después de reiniciarla. No se probó caída total ni failover sin errores.
+## Ensayo A — caída de una réplica de Catálogo
 
-## Preparación
+**Escenario.** Gateway NGINX con dos réplicas de Catálogo (`compose.s1.yaml`), balanceo round-robin, detección pasiva (`max_fails=1 fail_timeout=10s`) y reintento de lecturas en la otra réplica (`proxy_next_upstream error timeout http_502 http_503 http_504`, 2 intentos). Herramientas: `scripts/verify-s1-failover.py` (30 solicitudes por fase) y `scripts/benchmark-s3-resilience.py` (200 solicitudes por fase, concurrencia 4).
 
-1. Arrancar el entorno: `docker compose up --build -d`.
-2. Verificar salud del gateway: `curl http://localhost:8080/health`.
-3. Crear al menos dos instancias del catálogo: `docker compose up --build -d --scale catalogo-profesionales=2 catalogo-profesionales gateway`.
-4. Verificar catálogo: `curl "http://localhost:8080/api/v1/catalogo/tratamientos?page=1&limit=10"`.
-5. Registrar el commit probado, la configuración Docker y la hora de inicio.
+### Línea temporal (primera corrida, timeout de conexión 2 s)
 
-## Simulación de fallo
-
-La forma exacta de detener una réplica depende del nombre que Docker Compose asigne a cada contenedor. Identificar las réplicas con:
-
-```sh
-docker compose ps
-```
-
-Detener **una sola** instancia del catálogo con `docker stop <contenedor_catalogo>`. Repetir varias solicitudes de consulta al gateway y guardar códigos HTTP, tiempos y respuestas. Luego restaurar la instancia con `docker start <contenedor_catalogo>`.
-
-Después, detener todas las instancias del catálogo, repetir las consultas y comprobar que los errores son acotados por los timeouts del gateway. Volver a levantar el servicio al finalizar.
-
-## Evidencia que debe adjuntarse
-
-| Evidencia | Resultado real |
+| Hora UTC | Hecho |
 |---|---|
-| Fecha y commit probado | Pendiente |
-| `docker compose ps` con dos réplicas | Pendiente |
-| Solicitudes antes del fallo | Pendiente |
-| Solicitudes con una réplica detenida | Pendiente |
-| Solicitudes sin réplicas disponibles | Pendiente |
-| Tiempo máximo observado y códigos HTTP | Pendiente |
-| Recuperación tras reiniciar la réplica | Pendiente |
-| Capturas/logs adjuntos | Pendiente |
+| 08:27:44 | Línea base: 30/30 HTTP 200, 15 por réplica. |
+| 08:27:48 | Se detiene `catalogo-profesionales-1`. |
+| 08:27:50 | El Gateway registra `upstream timed out while connecting` contra la réplica detenida, la marca como caída y reintenta en la réplica 2. Esa solicitud responde **200 en 2.002 ms**. |
+| 08:27:50–52 | Las 29 solicitudes siguientes van sólo a la réplica 2, en 1–2 ms. |
+| 08:27:52 | Se reinicia la réplica 1; healthy a los 5,3 s. |
+| 08:28:02 | Vuelve a recibir tráfico 9,9 s después del reinicio (vence `fail_timeout`). Recuperación: 18/12. |
 
-## Aprendizajes y acciones
+[Evidencia](evidence/2026-11-24/s1-failover-connect-timeout-2s.json).
 
-- Un upstream con dos instancias no demuestra por sí mismo failover transparente: el ensayo dio un 504 con la otra réplica disponible.
-- Se comprobó el intento hacia la instancia detenida, pero no la causa exacta de que NGINX no intentara/alcanzara la instancia sana. No atribuirlo sin una nueva prueba instrumentada.
-- La repetición posterior respondió 200 en las dos instancias; la recuperación se observó luego de esperar, no se midió su tiempo exacto.
-- Pendiente: definir política de retry/exclusión de destino, revisar proxy y repetir un fallo controlado con aprobación y evidencia. No se cambiaron configuraciones como resultado de este ensayo.
-- Pendientes separados: caída total, MongoDB, proveedor externo, timeout de lectura, carga, duplicación y recuperación transaccional.
+### Impacto
 
-## Limitaciones conocidas del entorno actual
+Ninguna solicitud falló (90/90 en S1 y 600/600 en S3 respondieron 200). El costo de la caída fue **una** solicitud lenta por cada vez que el Gateway descubre que la réplica no está: con el valor anterior, 2 s; en S3 se ve como el p99 de la fase de fallo (590 ms con el ajuste ya aplicado, frente a 148 ms en normal). El p95 no cambió (123 → 121 ms).
 
-- El gateway configura timeouts de conexión y lectura; eso no sustituye un test de resiliencia ejecutado.
-- En el ensayo documentado, los endpoints de salud de Reservas y Beneficios eran mínimos. La implementación actual verifica sus conexiones PostgreSQL; esta nota describe solo aquel ensayo histórico.
-- La configuración actual de Prometheus solo scrapea Prometheus; aún no hay instrumentación de métricas de negocio ni dashboard provisionado.
-- La autenticación de MongoDB y las credenciales de desarrollo no son aptas para despliegue público. No exponer este Compose a Internet.
+### Detección
 
-## Ensayo autorizado — 23/10/2026
+- Log de error del Gateway con el upstream y el `request_id`; el log de acceso JSON muestra `upstream` con los dos intentos.
+- En el stack completo, Prometheus descubre cada réplica por DNS, `up{job="catalogo-profesionales"}` baja a 0 y la regla `CatalogReplicaUnavailable` dispara si dura más de 1 minuto; el tablero **MELT · Observabilidad S2** muestra el RPS por réplica. El ensayo A duró menos de ese minuto y corrió sobre `compose.s1.yaml`, así que la detección registrada es la de los logs.
+
+### Causa
+
+Con la réplica detenida, Docker sigue resolviendo su IP durante unos segundos y la conexión TCP no se rechaza: queda sin respuesta hasta que vence `proxy_connect_timeout`. Ese timeout era de 2 s, demasiado para un servicio que en condiciones normales responde en 1–2 ms dentro de la misma red.
+
+### Respuesta y acción
+
+Se bajó `proxy_connect_timeout` a **500 ms** sólo en las rutas de Catálogo (`infra/nginx/default.conf`); el timeout de lectura no cambió. Se repitió el ensayo a las 08:29:02: la solicitud que detecta la caída respondió **200 en 502 ms** y las demás siguieron en 1–2 ms ([evidencia](evidence/2026-11-24/s1-failover-connect-timeout-500ms.json)). 500 ms deja margen amplio sobre la latencia de conexión observada y evita falsos positivos por pausas breves.
+
+### Lectura honesta de los verificadores
+
+Ambos scripts terminan en `overall_passed: false` por dos comprobaciones estrictas que no indican falla del usuario:
+
+- `no_relevant_errors`: el log de error del Gateway contiene la línea `upstream timed out while connecting`, que es justamente la detección pasiva esperada (el script lee el log completo del contenedor, por eso acumula las líneas de corridas anteriores).
+- `recovery_distribution_correct`: espera 15/15 en la recuperación, pero la réplica restaurada recién vuelve a recibir tráfico cuando vence `fail_timeout=10s`, así que la reparte 18/12 o 19/11.
+
+No se cambió el criterio de los scripts para volverlos verdes.
+
+## Ensayo B — caída de RabbitMQ
+
+**Escenario.** Reservas, Beneficios, PostgreSQL, RabbitMQ, Jaeger y Prometheus locales. Un profesional completa turnos mientras el broker está detenido; cada turno completado debe generar puntos en Beneficios a través del outbox.
+
+### Línea temporal (primera corrida)
+
+| Hora UTC | Hecho |
+|---|---|
+| 08:47:37 | Se detiene RabbitMQ. |
+| 08:47:39–40 | Se completan 3 turnos: **202** en 2–12 ms. Los 3 eventos quedan en `outbox_eventos` sin publicar. |
+| 08:47:40 → | El publicador reintenta cada 1,2 s; log JSON `reservas_outbox_publish_failed` con el error de conexión. |
+| 08:48:01 | `OutboxPublishFailing` pasa a *pending* (≥3 fallos en 5 min). |
+| 08:50:04 | `OutboxPublishFailing` en *firing* (sostenida 2 min). `melt_reservas_outbox_publicaciones_total{resultado="fallido"}` = 121. |
+| 08:50:11 | Se inicia RabbitMQ. |
+| 08:50:18–21 | Se publican los 3 eventos (uno por ciclo de 1,2 s). |
+| 08:50:22 | Beneficios acredita 100 puntos por evento: saldo 300, **3 movimientos, ninguno repetido**. |
+
+[Evidencia](evidence/2026-11-24/caida-rabbitmq-timeline.txt). En Jaeger, la traza de un turno completado durante la caída une el `POST /turnos/:id/completar`, 133 intentos de `rabbitmq publish` y el `rabbitmq consume` de Beneficios 159 s después, con el mismo `trace_id`.
+
+### Impacto
+
+- Para el usuario, ninguno visible: la operación de negocio (completar el turno) no depende del broker.
+- Los puntos llegaron 2 a 3 minutos tarde, el tiempo de la caída más la espera del ciclo de publicación.
+- Sin pérdida (los eventos estaban en PostgreSQL) y sin duplicados (deduplicación por `eventId`).
+
+### Causa y problemas encontrados
+
+1. **Reintento a ritmo fijo.** El publicador reintentaba cada 1,2 s sin importar el error: 133 intentos para un solo evento y un log por intento.
+2. **Drenado lento.** Al volver el broker publicaba un evento por ciclo: con N eventos pendientes, N × 1,2 s.
+3. **Alerta sin primer evento.** La alerta de DLQ no disparaba ante el primer mensaje porque la serie nacía en 1 e `increase()` la ignoraba.
+
+### Respuesta y acciones
+
+- Retroceso exponencial en el publicador (1,2 s, duplicando hasta 10 s) y drenado sin espera mientras haya eventos (`events.go`, probado en `TestProximaEsperaOutboxDrenaRetrocedeYSeAcota`).
+- Contadores inicializados en 0 para que `increase()` vea el primer evento.
+- **Repetición con el cambio (08:51:42):** 60 s de caída y 10 turnos completados (todos 202). Al iniciar RabbitMQ a las 08:52:43, los **10/10 eventos se acreditaron en 8,5 s**, con **18 intentos en total** (antes, 133 para uno solo), 10 movimientos distintos y saldo 1.000.
+
+### Detección disponible
+
+- Alertas `OutboxPublishFailing` y `BeneficiosEventsDeadLettered` ([estado firing](evidence/2026-11-24/alerta-dlq-disparada.json)).
+- Panel «Outbox» del tablero **MELT · Flujo principal**: publicaciones por resultado y p95 de demora.
+- Logs JSON con `service`, `instance`, `trace_id` y `request_id` en todos los servicios.
+
+## Comportamiento ante la caída de cada dependencia
+
+| Servicio | Dependencia | Qué pasa si falla o se pone lenta | Protección |
+|---|---|---|---|
+| Gateway | Réplica de Catálogo | El Gateway la aparta 10 s y reintenta lecturas en la otra | Detección pasiva, `proxy_next_upstream`, connect timeout 500 ms (ensayo A) |
+| Catálogo | Memcached | Lee de MongoDB; más latencia, mismo resultado | Caché opcional (`TestL3FallbackSinMemcachedYRecuperacion`) |
+| Catálogo | OpenSearch | La búsqueda cae a MongoDB y no cachea el resultado degradado | Timeout y fallback (`TestL3FallbackSinOpenSearchUsaMongoYNoCacheaResultadosDegradados`) |
+| Reservas | RabbitMQ | Completar/cancelar sigue respondiendo; eventos esperan en el outbox | Outbox + retroceso (ensayo B) |
+| Reservas | Pagos / Mercado Pago | El checkout informa que el pago no está disponible; no confirma turnos | Timeout HTTP, idempotencia, sin confirmar sin pago aprobado |
+| Reservas | Catálogo / Auth | La operación falla con error claro; no se escriben datos a medias | Timeouts HTTP, transacción |
+| Beneficios | PostgreSQL | El mensaje no se confirma y se reintenta; tras agotar intentos va a la DLQ | Reintentos acotados, DLQ, `mensajes_fallidos` |
+| Beneficios | Proveedor externo (GhostKitchen) | Ver [GHOSTKITCHEN.md](GHOSTKITCHEN.md) | A cargo de la parte A1 |
+
+## Pendiente
+
+- Repetir el ensayo con el proveedor externo caído cuando el consumo esté integrado al flujo principal (parte A1).
+- Las caídas se ensayaron en local. No se provocaron fallas en Render ni en bases compartidas.
+
+## Historial
+
+### Ensayo autorizado — 23/10/2026
 
 **Base:** `cc230fa`, rama `feature/sofia-adr-entrega-2`. **Evidencia:** [fallo-replica-2026-10-23.json](evidence/fallo-replica-2026-10-23.json). Verificador: `scripts/verify-replica-failure.py`.
 

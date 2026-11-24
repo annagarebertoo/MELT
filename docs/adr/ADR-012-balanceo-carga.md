@@ -1,6 +1,6 @@
 # ADR-012 — Balanceo de carga
 
-**Estado:** Propuesto  
+**Estado:** Aceptado — ensayado el 24/11/2026 (ver al final)  
 **Fecha:** 2026-10-21  
 **Entrega:** 2 — 23 de octubre de 2026  
 **Decisores:** Equipo MELT
@@ -57,3 +57,9 @@ Se hizo explícito en `infra/nginx/default.conf` el umbral pasivo `max_fails=1 f
 **Limitación importante:** dos intentos no garantizan éxito cuando Docker DNS devuelve una única dirección o no existe otra réplica saludable. La detección sigue siendo pasiva, no un healthcheck activo. El cambio **no está validado con una réplica caída**, no elimina por sí solo el 504 del ensayo anterior y no se desplegó a Render.
 
 Para verificar D12: levantar dos réplicas locales, validar la configuración con `nginx -t`, registrar respuestas, request IDs y upstreams, detener una réplica en un entorno de prueba autorizado, medir errores y tiempos de recuperación, restaurarla y repetir. Registrar resultados en `docs/evidence/` antes de marcar el requisito como cumplido.
+
+## Enmienda — 24/11/2026: ensayo del ajuste
+
+El ajuste anterior se ensayó con `scripts/verify-s1-failover.py` y `scripts/benchmark-s3-resilience.py` (ahora también funcionan sobre Docker en Linux). Con una réplica detenida, todas las solicitudes respondieron 200 y la distribución pasó de 15/15 a 0/30 mientras duró la caída; la réplica restaurada volvió a recibir tráfico cuando venció `fail_timeout` (≈10 s). El 504 del ensayo de octubre no se repitió.
+
+Se observó que la única solicitud afectada esperaba el `proxy_connect_timeout` completo (2 s) antes de reintentar. Se bajó a **500 ms** en las rutas de Catálogo y se repitió: esa solicitud tardó 502 ms. La distribución y el estado de cada réplica se observan en Prometheus (`up` y `catalog_http_requests_total` por `replica`) y en el tablero **MELT · Observabilidad S2**. Evidencia en [`docs/evidence/2026-11-24/`](../evidence/2026-11-24/) y análisis en el [POSTMORTEM](../POSTMORTEM.md).

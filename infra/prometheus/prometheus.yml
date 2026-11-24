@@ -18,3 +18,39 @@ scrape_configs:
         type: A
         port: 8081
         refresh_interval: 15s
+  - job_name: reservas
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 5s
+    dns_sd_configs:
+      - names: ["reservas"]
+        type: A
+        port: 8082
+        refresh_interval: 15s
+  - job_name: beneficios
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 5s
+    dns_sd_configs:
+      - names: ["beneficios"]
+        type: A
+        port: 8083
+        refresh_interval: 15s
+  - job_name: auth
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 5s
+    dns_sd_configs:
+      - names: ["auth"]
+        type: A
+        port: 8084
+        refresh_interval: 15s
+  - job_name: pagos
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 5s
+    dns_sd_configs:
+      - names: ["pagos"]
+        type: A
+        port: 8085
+        refresh_interval: 15s

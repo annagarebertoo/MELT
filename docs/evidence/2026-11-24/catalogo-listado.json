@@ -1,0 +1,144 @@
+{
+  "schema": "melt-capacidad/v1",
+  "url": "http://gateway/api/v1/catalogo/tratamientos?page=1&limit=10",
+  "segundos_por_escalon": 10.0,
+  "timeout_s": 5.0,
+  "escalones": [
+    {
+      "concurrencia": 1,
+      "segundos": 10.001,
+      "total": 6117,
+      "exitosas": 6117,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 6117
+      },
+      "throughput_rps": 611.64,
+      "latencia_ms": {
+        "p50": 1.49,
+        "p95": 2.38,
+        "p99": 3.58,
+        "max": 11.04
+      },
+      "inicio_utc": "2026-11-24T08:31:22+00:00"
+    },
+    {
+      "concurrencia": 2,
+      "segundos": 10.002,
+      "total": 9392,
+      "exitosas": 9392,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 9392
+      },
+      "throughput_rps": 939.05,
+      "latencia_ms": {
+        "p50": 1.89,
+        "p95": 3.43,
+        "p99": 5.48,
+        "max": 22.44
+      },
+      "inicio_utc": "2026-11-24T08:31:32+00:00"
+    },
+    {
+      "concurrencia": 4,
+      "segundos": 10.007,
+      "total": 11392,
+      "exitosas": 11392,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 11392
+      },
+      "throughput_rps": 1138.36,
+      "latencia_ms": {
+        "p50": 3.11,
+        "p95": 6.4,
+        "p99": 9.15,
+        "max": 32.39
+      },
+      "inicio_utc": "2026-11-24T08:31:42+00:00"
+    },
+    {
+      "concurrencia": 8,
+      "segundos": 10.005,
+      "total": 8583,
+      "exitosas": 8583,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 8583
+      },
+      "throughput_rps": 857.88,
+      "latencia_ms": {
+        "p50": 8.08,
+        "p95": 18.77,
+        "p99": 26.91,
+        "max": 53.02
+      },
+      "inicio_utc": "2026-11-24T08:31:52+00:00"
+    },
+    {
+      "concurrencia": 16,
+      "segundos": 10.013,
+      "total": 8601,
+      "exitosas": 8601,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 8601
+      },
+      "throughput_rps": 859.01,
+      "latencia_ms": {
+        "p50": 16.05,
+        "p95": 38.43,
+        "p99": 55.83,
+        "max": 205.0
+      },
+      "inicio_utc": "2026-11-24T08:32:02+00:00"
+    },
+    {
+      "concurrencia": 32,
+      "segundos": 10.013,
+      "total": 9239,
+      "exitosas": 9239,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 9239
+      },
+      "throughput_rps": 922.69,
+      "latencia_ms": {
+        "p50": 28.08,
+        "p95": 75.0,
+        "p99": 163.64,
+        "max": 298.06
+      },
+      "inicio_utc": "2026-11-24T08:32:12+00:00"
+    },
+    {
+      "concurrencia": 64,
+      "segundos": 10.016,
+      "total": 8298,
+      "exitosas": 8298,
+      "fallidas": 0,
+      "tasa_error": 0.0,
+      "estados": {
+        "200": 8298
+      },
+      "throughput_rps": 828.45,
+      "latencia_ms": {
+        "p50": 47.43,
+        "p95": 288.74,
+        "p99": 489.11,
+        "max": 885.64
+      },
+      "inicio_utc": "2026-11-24T08:32:22+00:00"
+    }
+  ],
+  "throughput_maximo_rps": 1138.36,
+  "concurrencia_del_maximo": 4,
+  "nota": "El generador corre en un contenedor Python con hilos; por encima de ~64 hilos el propio generador puede limitar."
+}
