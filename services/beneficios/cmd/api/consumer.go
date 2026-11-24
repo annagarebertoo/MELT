@@ -48,7 +48,11 @@ type mensajeFallido struct {
 type consumidorPrograma struct {
 	url     string
 	almacen almacenConsumidor
+	// retrasos entre reintentos; nil usa los valores de producción.
+	retrasos []time.Duration
 }
+
+var retrasosReintento = []time.Duration{time.Second, 3 * time.Second, 8 * time.Second}
 
 type almacenFallidos interface {
 	guardarMensajeFallido(context.Context, mensajeFallido) error
@@ -148,14 +152,20 @@ func (w *consumidorPrograma) handle(ctx context.Context, ch *amqp091.Channel, de
 		_ = w.failPermanently(ctx, ch, delivery, event, err.Error(), attempts)
 		return
 	}
-	delay := []time.Duration{time.Second, 3 * time.Second, 8 * time.Second}[attempts-1]
+	retrasos := w.retrasos
+	if len(retrasos) < 3 {
+		retrasos = retrasosReintento
+	}
+	delay := retrasos[attempts-1]
 	select {
 	case <-ctx.Done():
 		_ = delivery.Nack(false, true)
 		return
 	case <-time.After(delay):
 	}
-	if err = publishConfirmed(ch, eventosExchange, delivery.RoutingKey, delivery.Type, delivery.MessageId, delivery.Body, amqp091.Table{"x-melt-intentos": int32(attempts)}); err != nil {
+	// El reintento vuelve sólo a la cola de Beneficios (exchange por defecto):
+	// republicarlo en el exchange de dominio lo duplicaría a otros suscriptores.
+	if err = publishConfirmed(ch, "", eventosQueue, delivery.Type, delivery.MessageId, delivery.Body, amqp091.Table{"x-melt-intentos": int32(attempts)}); err != nil {
 		_ = delivery.Nack(false, true)
 		return
 	}
@@ -259,20 +269,28 @@ func (a *almacenMongo) cambiarEstadoFallido(ctx context.Context, id, desde, haci
 	return res != nil && res.MatchedCount == 1, err
 }
 
+// publishConfirmed espera la confirmación de esta publicación concreta. Usa una
+// confirmación diferida por mensaje: registrar NotifyPublish en cada llamada
+// acumulaba oyentes sobre el mismo canal y, al tercer publish, el despachador
+// de amqp091 quedaba bloqueado y el consumidor dejaba de procesar mensajes.
 func publishConfirmed(ch *amqp091.Channel, exchange, key, typ, messageID string, body []byte, headers amqp091.Table) error {
-	confirmations := ch.NotifyPublish(make(chan amqp091.Confirmation, 1))
-	if err := ch.Publish(exchange, key, false, false, amqp091.Publishing{ContentType: "application/json", DeliveryMode: amqp091.Persistent, Type: typ, MessageId: messageID, Headers: headers, Timestamp: time.Now().UTC(), Body: body}); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	confirmation, err := ch.PublishWithDeferredConfirmWithContext(ctx, exchange, key, false, false, amqp091.Publishing{ContentType: "application/json", DeliveryMode: amqp091.Persistent, Type: typ, MessageId: messageID, Headers: headers, Timestamp: time.Now().UTC(), Body: body})
+	if err != nil {
 		return err
 	}
-	select {
-	case confirm := <-confirmations:
-		if !confirm.Ack {
-			return errors.New("rabbitmq no confirmó la publicación")
-		}
-		return nil
-	case <-time.After(4 * time.Second):
+	if confirmation == nil {
+		return errors.New("el canal de rabbitmq no está en modo confirmación")
+	}
+	ack, err := confirmation.WaitContext(ctx)
+	if err != nil {
 		return errors.New("tiempo agotado esperando confirmación de rabbitmq")
 	}
+	if !ack {
+		return errors.New("rabbitmq no confirmó la publicación")
+	}
+	return nil
 }
 
 func reintentarEvento(ctx context.Context, rabbitURL string, event EventoDominio) error {
@@ -286,7 +304,9 @@ func reintentarEvento(ctx context.Context, rabbitURL string, event EventoDominio
 		return err
 	}
 	defer ch.Close()
-	if err = ch.ExchangeDeclare(eventosExchange, "topic", true, false, false, false, nil); err != nil {
+	// Igual que los reintentos automáticos, la recuperación manual se entrega
+	// sólo a la cola de Beneficios; si la cola no existe, el mensaje sigue pendiente.
+	if _, err = ch.QueueDeclarePassive(eventosQueue, true, false, false, false, amqp091.Table{"x-dead-letter-exchange": fallidosExchange, "x-dead-letter-routing-key": "event"}); err != nil {
 		return err
 	}
 	if err = ch.Confirm(false); err != nil {
@@ -296,6 +316,5 @@ func reintentarEvento(ctx context.Context, rabbitURL string, event EventoDominio
 	if err != nil {
 		return err
 	}
-	key := event.Tipo
-	return publishConfirmed(ch, eventosExchange, key, event.Tipo, event.EventID, body, amqp091.Table{})
+	return publishConfirmed(ch, "", eventosQueue, event.Tipo, event.EventID, body, amqp091.Table{})
 }

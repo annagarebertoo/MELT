@@ -202,8 +202,10 @@ func mustJSON(value any) string {
 }
 
 func (p *postgresStore) asegurarAgendaControl(ctx context.Context, profesionalID string, dia int) error {
+	// Sin columna de conflicto: con inserciones concurrentes la colisión puede
+	// detectarse primero en la clave primaria (id), que también debe ignorarse.
 	_, err := p.runner(ctx).ExecContext(ctx, `insert into control_agendas (id,profesional_id,dia_semana)
-		values ($1,$2,$3) on conflict (profesional_id,dia_semana) do nothing`, agendaControlID(profesionalID, dia), profesionalID, dia)
+		values ($1,$2,$3) on conflict do nothing`, agendaControlID(profesionalID, dia), profesionalID, dia)
 	return err
 }
 
@@ -539,5 +541,15 @@ func (p *postgresStore) eventoPendiente(ctx context.Context) (eventoOutbox, erro
 
 func (p *postgresStore) publicarEvento(ctx context.Context, id string, ahora any) error {
 	_, err := p.runner(ctx).ExecContext(ctx, `update outbox_eventos set publicado_en=$2,intentos=intentos+1 where id=$1 and publicado_en is null`, id, ahora)
+	return err
+}
+
+// registrarFalloEvento deja constancia del intento fallido sin marcarlo como
+// publicado, para que el outbox lo reintente y la falla sea observable.
+func (p *postgresStore) registrarFalloEvento(ctx context.Context, id, detalle string) error {
+	if len(detalle) > 500 {
+		detalle = detalle[:500]
+	}
+	_, err := p.runner(ctx).ExecContext(ctx, `update outbox_eventos set intentos=intentos+1, ultimo_error=$2 where id=$1 and publicado_en is null`, id, detalle)
 	return err
 }
