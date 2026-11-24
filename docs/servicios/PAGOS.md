@@ -20,6 +20,16 @@ Todas las rutas internas requieren `X-Melt-Internal-Key`, salvo el webhook firma
 
 La preferencia lleva el checkout como `external_reference`; al regresar, MELT verifica el pago en servidor. `back_urls` apuntan al Gateway HTTPS compartido. Nunca se confía en el `status` ni en el importe recibido desde la URL de retorno.
 
+## Por qué el pago usa la URL pública de Render y no `localhost`
+
+Mercado Pago tiene que poder llegar a MELT por Internet en dos momentos: cuando redirige al cliente después del pago (`back_urls` con `auto_return`) y cuando envía el Webhook firmado (`notification_url`). Los servidores de Mercado Pago no pueden alcanzar `http://localhost:8080`. Por eso `MELT_PUBLIC_URL` apunta al Gateway HTTPS publicado en Render (`.env.example`) y el pago de la seña se demuestra sobre ese despliegue.
+
+En una ejecución local, todo funciona igual (catálogo, búsqueda, agenda, carrito, puntos, observabilidad) salvo completar un pago real de prueba de punta a punta:
+
+- Sin `MP_TEST_ACCESS_TOKEN`, Pagos arranca con el proveedor deshabilitado y el checkout informa que el pago no está disponible.
+- Con token y `MELT_PUBLIC_URL=http://localhost:8080`, la preferencia se crea, pero el Webhook nunca llega. Si se quiere probar el pago en local, hay que exponer el Gateway con una URL HTTPS pública (por ejemplo, un túnel) y usarla como `MELT_PUBLIC_URL`.
+- El comportamiento del Webhook, la firma, el importe y la notificación a Reservas está cubierto sin red por `services/pagos/flujo_test.go`, que usa un Mercado Pago falso.
+
 ## Configuración
 
 Configurar en el servicio **melt-pagos** de Render:

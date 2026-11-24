@@ -37,3 +37,7 @@ La migración vigente define `carritos_bloqueos` y `checkouts` como tablas Postg
 - Pagos requiere acceso a MongoDB y su propio nombre de base (`PAGOS_MONGODB_DATABASE`); no depende de credenciales externas.
 - En modo `test`, se usan usuarios y medios de pago de prueba de Mercado Pago; el servicio sólo redirige al enlace sandbox y vuelve a consultar el recurso con las credenciales de prueba, validando referencia, importe y moneda. `live_mode` no se usa como criterio único porque algunas operaciones sandbox de Checkout Pro lo reportan como `true`.
 - La integración anterior descrita en [ADR-009](ADR-009-compatibilidad-carrito-sena.md) se conserva como historia de reglas y retenciones. Este ADR reemplaza únicamente la modalidad de pago por turno y define el checkout agrupado.
+
+## Nota — 24/11/2026: URL pública obligatoria
+
+Checkout Pro necesita URLs alcanzables desde Internet para el retorno y el Webhook, así que el flujo de pago se demuestra sobre el Gateway publicado en Render y no sobre `localhost`. Es una restricción del proveedor, no una dependencia de configuración privada: el resto del sistema arranca en local y el Webhook está probado con un proveedor falso. Detalle en [PAGOS.md](../servicios/PAGOS.md#por-qué-el-pago-usa-la-url-pública-de-render-y-no-localhost).

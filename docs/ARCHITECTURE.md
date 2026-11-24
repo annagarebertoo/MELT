@@ -99,6 +99,7 @@ La configuración reproducible está en [compose.yaml](../compose.yaml), los com
 | La capacidad se midió en un host local compartido de 4 vCPU. | Permite ubicar el cuello (CPU de Catálogo) y comparar con y sin caché. | Repetir en hosts dedicados antes de dimensionar producción. |
 | Auth, Catálogo y Pagos comparten un clúster MongoDB (bases lógicas separadas). | Costo cero en el plan académico; el ownership se respeta por base y no hay consultas cruzadas. | Clústeres separados si un servicio necesita aislar carga o fallas. |
 | Mercado Pago opera sólo con credenciales de prueba. | El enunciado no exige cobros reales. | Credenciales productivas y revisión de seguridad. |
+| El pago de punta a punta se demuestra en Render, no en `localhost`. | Mercado Pago necesita una URL pública para el retorno y el Webhook. En local todo lo demás funciona y el Webhook está probado con un proveedor falso. | Exponer el Gateway local con un túnel HTTPS y usarlo como `MELT_PUBLIC_URL`. |
 | Las credenciales de desarrollo de Compose no son aptas para producción. | Entorno local; los secretos reales viven en Render y no en el repositorio. | Gestor de secretos. |
 | Consumo del proveedor externo (D9) y contrato publicado para el grupo consumidor (D8). | En curso en la parte A1–A3 del equipo. | Ver [GHOSTKITCHEN.md](GHOSTKITCHEN.md) e [INTEGRACION-GIMNASIO.md](INTEGRACION-GIMNASIO.md) al cerrarse. |
 
