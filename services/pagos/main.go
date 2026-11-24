@@ -128,7 +128,8 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("POST /webhooks/mercadopago", s.mercadoPagoWebhook)
 	mux.Handle("GET /payments/{id}", s.internal(http.HandlerFunc(s.getPayment)))
 	mux.Handle("POST /payments/refunds", s.internal(http.HandlerFunc(s.refund)))
-	return mux
+	mux.HandleFunc("GET /metrics", telManejadorMetricas)
+	return telEnvolver(mux)
 }
 
 func (s *server) mpRequest(ctx context.Context, method, path string, payload any, out any) error {
@@ -564,6 +565,13 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 
 func main() {
+	telConfigurarLogger(os.Stdout)
+	apagarTrazas, errTrazas := telConfigurarTrazas(context.Background())
+	if errTrazas != nil {
+		log.Fatal("no se pudo configurar las trazas OpenTelemetry")
+	}
+	defer apagarTrazas(context.Background())
+	telInstrumentarClientesHTTP()
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
 		port = "8085"

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"log"
 	"strings"
 	"time"
@@ -69,7 +71,15 @@ func (s *servidorReservas) publicarSiguienteEvento(ctx context.Context) (bool, e
 	if err != nil {
 		return false, fmt.Errorf("reservas_outbox_encode_failed event=%s", item.ID)
 	}
-	publishCtx, stop := context.WithTimeout(ctx, 5*time.Second)
+	spanCtx, span := telIniciarSpan(ctx, "rabbitmq publish "+item.RoutingKey,
+		attribute.String("messaging.system", "rabbitmq"),
+		attribute.String("messaging.destination.name", exchangeEventos),
+		attribute.String("messaging.message.id", item.ID),
+	)
+	defer span.End()
+	cabeceras := amqp091.Table{}
+	telInyectarCabeceras(spanCtx, cabeceras)
+	publishCtx, stop := context.WithTimeout(spanCtx, 5*time.Second)
 	conn, err := amqp091.DialConfig(s.rabbitURL, amqp091.Config{Heartbeat: 10 * time.Second, Locale: "en_US"})
 	if err == nil {
 		var ch *amqp091.Channel
@@ -81,7 +91,7 @@ func (s *servidorReservas) publicarSiguienteEvento(ctx context.Context) (bool, e
 			}
 			if err == nil {
 				confirms := ch.NotifyPublish(make(chan amqp091.Confirmation, 1))
-				err = ch.PublishWithContext(publishCtx, exchangeEventos, item.RoutingKey, false, false, amqp091.Publishing{ContentType: "application/json", DeliveryMode: amqp091.Persistent, MessageId: item.ID, Type: item.Tipo, Timestamp: item.CreadoEn, Body: body})
+				err = ch.PublishWithContext(publishCtx, exchangeEventos, item.RoutingKey, false, false, amqp091.Publishing{ContentType: "application/json", DeliveryMode: amqp091.Persistent, MessageId: item.ID, Type: item.Tipo, Timestamp: item.CreadoEn, Headers: cabeceras, Body: body})
 				if err == nil {
 					select {
 					case confirm := <-confirms:
@@ -99,6 +109,8 @@ func (s *servidorReservas) publicarSiguienteEvento(ctx context.Context) (bool, e
 	}
 	stop()
 	if err != nil {
+		span.SetStatus(codes.Error, "publicación fallida")
+		telMetricas.contar("melt_reservas_outbox_publicaciones_total", "Eventos del outbox enviados a RabbitMQ por tipo y resultado.", 1, "tipo", item.Tipo, "resultado", "fallido")
 		if s.pg != nil {
 			failCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 			_ = s.pg.registrarFalloEvento(failCtx, item.ID, err.Error())
@@ -113,6 +125,10 @@ func (s *servidorReservas) publicarSiguienteEvento(ctx context.Context) (bool, e
 		_, err = s.outbox.UpdateOne(markCtx, bson.M{"_id": item.ID, "publicadoEn": bson.M{"$exists": false}}, bson.M{"$set": bson.M{"publicadoEn": time.Now().UTC()}, "$inc": bson.M{"intentos": 1}})
 	}
 	cancel()
+	telMetricas.contar("melt_reservas_outbox_publicaciones_total", "Eventos del outbox enviados a RabbitMQ por tipo y resultado.", 1, "tipo", item.Tipo, "resultado", "publicado")
+	if !item.CreadoEn.IsZero() {
+		telMetricas.observar("melt_reservas_outbox_demora_segundos", "Tiempo entre la escritura en el outbox y la confirmación del broker.", time.Since(item.CreadoEn).Seconds(), "tipo", item.Tipo)
+	}
 	if err != nil {
 		return true, fmt.Errorf("reservas_outbox_mark_failed event=%s: %w", item.ID, err)
 	}

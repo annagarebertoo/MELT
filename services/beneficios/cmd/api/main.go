@@ -84,6 +84,13 @@ type almacenMongo struct {
 }
 
 func main() {
+	telConfigurarLogger(os.Stdout)
+	apagarTrazas, errTrazas := telConfigurarTrazas(context.Background())
+	if errTrazas != nil {
+		log.Fatal("no se pudo configurar las trazas OpenTelemetry")
+	}
+	defer apagarTrazas(context.Background())
+	telInstrumentarClientesHTTP()
 	uri := strings.TrimSpace(os.Getenv("BENEFICIOS_DATABASE_URL"))
 	if uri == "" {
 		log.Fatal("BENEFICIOS_DATABASE_URL es obligatoria")
@@ -165,7 +172,8 @@ func (a *almacenMongo) preparar(ctx context.Context) error {
 }
 func crearRouter(s *Servidor) *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(telMiddleware(), gin.Recovery())
+	r.GET("/metrics", telMetricasGin)
 	r.GET("/health", func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()

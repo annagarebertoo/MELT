@@ -39,3 +39,72 @@ groups:
         annotations:
           summary: "Catálogo está por debajo del objetivo de disponibilidad"
           description: "La disponibilidad de las dos réplicas cayó por debajo del 99% en la ventana móvil de siete días."
+
+  # Flujo principal: reserva → checkout/pago → turno realizado → puntos (D11).
+  # Solo se evalúan series existentes (sin absent) para no disparar en entornos
+  # que levantan únicamente Catálogo, como compose.s1.yaml o el S2 local.
+  - name: melt-flujo-principal
+    rules:
+      - alert: MeltServiceDown
+        expr: up{job=~"reservas|pagos|auth|beneficios"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Un servicio del flujo principal no responde"
+          description: "Prometheus no puede leer /metrics de {{ $labels.job }} desde hace un minuto."
+
+      - alert: ReservasErrorRateHigh
+        expr: |
+          (
+            sum(rate(melt_http_requests_total{service="reservas",status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(melt_http_requests_total{service="reservas",route!="/health"}[5m])), 0.001)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: reservas
+        annotations:
+          summary: "Más del 5 % de las solicitudes de Reservas termina en 5xx"
+          description: "El objetivo de servicio del flujo de reserva es ≥ 95 % de respuestas sin error del servidor."
+
+      - alert: CheckoutLatencyP95High
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(melt_http_request_duration_seconds_bucket{service="reservas",route="/carrito/checkout"}[5m]))) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: reservas
+        annotations:
+          summary: "El p95 del checkout supera 2 segundos"
+          description: "El checkout depende de Catálogo, Pagos y Mercado Pago; revisar melt_http_client_request_duration_seconds por destino."
+
+      - alert: OutboxPublishFailing
+        expr: sum(increase(melt_reservas_outbox_publicaciones_total{resultado="fallido"}[5m])) >= 3
+        for: 2m
+        labels:
+          severity: warning
+          service: reservas
+        annotations:
+          summary: "Reservas no logra publicar eventos en RabbitMQ"
+          description: "Los eventos quedan en el outbox y se reintentan; los puntos se acreditarán con demora."
+
+      - alert: BeneficiosEventsDeadLettered
+        expr: sum(increase(melt_beneficios_eventos_consumidos_total{resultado="dlq"}[15m])) > 0
+        labels:
+          severity: warning
+          service: beneficios
+        annotations:
+          summary: "Hay eventos de dominio en la cola de fallidos"
+          description: "Un evento agotó los reintentos o no cumple el esquema; revisarlo desde la administración de mensajes fallidos."
+
+      - alert: PaymentProviderErrors
+        expr: sum(increase(melt_http_client_requests_total{service="pagos",status=~"5..|error"}[5m])) >= 3
+        for: 1m
+        labels:
+          severity: warning
+          service: pagos
+        annotations:
+          summary: "Mercado Pago responde con errores o no responde"
+          description: "El checkout informa el error al usuario y la reserva queda retenida hasta su vencimiento."

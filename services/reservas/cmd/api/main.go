@@ -165,6 +165,13 @@ var permisosPorOperacion = map[string]map[string]bool{
 }
 
 func main() {
+	telConfigurarLogger(os.Stdout)
+	apagarTrazas, errTrazas := telConfigurarTrazas(context.Background())
+	if errTrazas != nil {
+		log.Fatal("no se pudo configurar las trazas OpenTelemetry")
+	}
+	defer apagarTrazas(context.Background())
+	telInstrumentarClientesHTTP()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	pg, err := abrirReservasPostgres(ctx)
@@ -196,7 +203,8 @@ func main() {
 
 func (s *servidorReservas) router() *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(telMiddleware(), gin.Recovery())
+	r.GET("/metrics", telMetricasGin)
 	r.GET("/health", func(c *gin.Context) {
 		if s.pg == nil || s.pg.db.PingContext(c.Request.Context()) != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"servicio": "reservas", "estado": "degradado"})
