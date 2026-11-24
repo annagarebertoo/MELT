@@ -24,6 +24,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -53,8 +57,17 @@ func newSearchClient(raw string) *searchClient {
 }
 
 func (s *searchClient) request(ctx context.Context, method, path string, body []byte) ([]byte, error) {
+	ctx, span := otel.Tracer("melt/catalogo/opensearch").Start(ctx, "OpenSearch "+method,
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("db.system.name", "opensearch"),
+			attribute.String("db.operation.name", method),
+		),
+	)
+	defer span.End()
 	req, err := http.NewRequestWithContext(ctx, method, s.base+path, bytes.NewReader(body))
 	if err != nil {
+		span.SetStatus(codes.Error, "OpenSearch request construction failed")
 		return nil, err
 	}
 	if len(body) > 0 {
@@ -62,14 +75,18 @@ func (s *searchClient) request(ctx context.Context, method, path string, body []
 	}
 	resp, err := s.http.Do(req)
 	if err != nil {
+		span.SetStatus(codes.Error, "OpenSearch request failed")
 		return nil, err
 	}
 	defer resp.Body.Close()
+	span.SetAttributes(attribute.Int("http.response.status_code", resp.StatusCode))
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
+		span.SetStatus(codes.Error, "OpenSearch response read failed")
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		span.SetStatus(codes.Error, "OpenSearch returned a non-success status")
 		return nil, searchHTTPError(resp.StatusCode)
 	}
 	return data, nil
@@ -660,16 +677,30 @@ func (m *memcacheClient) bumpGeneration() error {
 	}
 	return m.setRaw(m.namespace+":generation", []byte(token), 0)
 }
-func (m *memcacheClient) get(query catalogListQuery) ([]byte, bool) {
+func startMemcachedSpan(ctx context.Context, operation string) (context.Context, trace.Span) {
+	return otel.Tracer("melt/catalogo/memcached").Start(ctx, "Memcached "+strings.ToUpper(operation),
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("db.system.name", "memcached"),
+			attribute.String("db.operation.name", strings.ToLower(operation)),
+		),
+	)
+}
+
+func (m *memcacheClient) get(ctx context.Context, query catalogListQuery) ([]byte, bool) {
+	ctx, span := startMemcachedSpan(ctx, "get")
+	defer span.End()
 	key, e := m.key(query)
 	if e != nil {
 		m.errors.Add(1)
+		span.SetStatus(codes.Error, "Memcached key creation failed")
 		return nil, false
 	}
 	generationKey := m.namespace + ":generation"
 	values, e := m.getRawMany(generationKey, key)
 	if e != nil {
 		m.errors.Add(1)
+		span.SetStatus(codes.Error, "Memcached read failed")
 		return nil, false
 	}
 	generation, exists := values[generationKey]
@@ -689,24 +720,32 @@ func (m *memcacheClient) get(query catalogListQuery) ([]byte, bool) {
 		version, payload, found := bytes.Cut(value, []byte{'\n'})
 		if found && bytes.Equal(version, generation) {
 			m.hits.Add(1)
+			span.SetAttributes(attribute.Bool("cache.hit", true))
 			return payload, true
 		}
 	}
 	m.misses.Add(1)
+	span.SetAttributes(attribute.Bool("cache.hit", false))
 	return nil, false
 }
-func (m *memcacheClient) set(query catalogListQuery, value []byte) {
+func (m *memcacheClient) set(ctx context.Context, query catalogListQuery, value []byte) {
+	ctx, span := startMemcachedSpan(ctx, "set")
+	defer span.End()
 	key, e := m.key(query)
 	if e != nil {
 		m.errors.Add(1)
+		span.SetStatus(codes.Error, "Memcached key creation failed")
 		return
 	}
 	generation, err := m.generation()
 	if err != nil {
+		span.SetStatus(codes.Error, "Memcached generation read failed")
 		return
 	}
 	envelope := append(append([]byte(generation), '\n'), value...)
-	_ = m.setRaw(key, envelope, cacheTTL)
+	if err := m.setRaw(key, envelope, cacheTTL); err != nil {
+		span.SetStatus(codes.Error, "Memcached write failed")
+	}
 }
 func (m *memcacheClient) stats() map[string]uint64 {
 	return map[string]uint64{"hits": m.hits.Load(), "misses": m.misses.Load(), "errors": m.errors.Load()}
@@ -718,6 +757,7 @@ func (s *Servidor) metrics(c *gin.Context) {
 	c.Header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	if s == nil {
 		c.String(http.StatusOK, "catalog_cache_hits_total 0\ncatalog_cache_misses_total 0\ncatalog_cache_errors_total 0\ncatalog_search_failures_total 0\ncatalog_index_rebuild_failures_total 0\ncatalog_index_last_success_timestamp_seconds 0\n")
+		catalogHTTPMetrics.writePrometheus(c.Writer)
 		return
 	}
 	var hits, misses, cacheErrors uint64
@@ -726,4 +766,5 @@ func (s *Servidor) metrics(c *gin.Context) {
 		hits, misses, cacheErrors = stats["hits"], stats["misses"], stats["errors"]
 	}
 	fmt.Fprintf(c.Writer, "catalog_cache_hits_total %d\ncatalog_cache_misses_total %d\ncatalog_cache_errors_total %d\ncatalog_search_failures_total %d\ncatalog_index_rebuild_failures_total %d\ncatalog_index_last_success_timestamp_seconds %d\ncatalog_index_freshness_target_seconds 60\n", hits, misses, cacheErrors, s.searchFailures.Load(), s.indexFailures.Load(), s.lastIndexSuccess.Load())
+	catalogHTTPMetrics.writePrometheus(c.Writer)
 }
