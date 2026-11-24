@@ -55,3 +55,7 @@ documentos y 30 lecturas por modo se repitió tres veces. La media observada fue
 4.97 ms/op sin caché y 3.13 ms/op con Memcached, con 30 hits y 1 miss de
 precalentamiento por corrida. La muestra local no justifica extrapolar ni dimensionar tráfico de
 producción. Ver el benchmark reproducible en `docs/CATALOGO-PROFESIONALES-ETAPA-1.md`.
+
+## Enmienda — 24/11/2026: impacto medido bajo carga
+
+El fallback sin Memcached ya está implementado y probado (`TestL3FallbackSinMemcachedYRecuperacion`, `TestL3MutacionInvalidaLaCacheDeListados`). Bajo carga, en el listado público con dos réplicas de Catálogo, la caché multiplicó el throughput por 2,4 con un cliente (253 → 598 RPS) y por 1,5 con 16 (734 → 1.135 RPS), y bajó el p95 entre 35 % y 54 %. Con 64 clientes la diferencia desaparece porque el límite pasa a ser la CPU del host. Detalle en [ADR-013](ADR-013-capacidad-costos.md#resultados-medidos--24112026).

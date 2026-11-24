@@ -37,7 +37,7 @@ docker compose up -d --build --no-deps catalogo-profesionales
 docker compose up -d --no-deps prometheus grafana
 ```
 
-Después de reconstruir Catálogo en un entorno local seguro, consultá `http://localhost:8080/api/v1/catalogo/metrics`, generá tráfico de lectura desde el Gateway y abrí Grafana → Dashboards → MELT. Prometheus necesita al menos dos scrapes (30 segundos con el intervalo actual) para calcular tasas. Verificá que `/targets` muestre dos targets Catálogo en estado `UP`.
+Después de reconstruir Catálogo en un entorno local seguro, consultá las métricas desde la red interna (`docker compose exec prometheus wget -qO- http://catalogo-profesionales:8081/metrics`; el Gateway responde 404 a `/api/v1/*/metrics` para no exponerlas), generá tráfico de lectura desde el Gateway y abrí Grafana → Dashboards → MELT. Prometheus necesita al menos dos scrapes (30 segundos con el intervalo actual) para calcular tasas. Verificá que `/targets` muestre dos targets Catálogo en estado `UP`.
 
 El Compose principal configura `MONGODB_URI` mediante el `.env` local y puede apuntar a Atlas. No ejecutes esos comandos contra una base compartida para esta verificación; usá un entorno local aislado. Prometheus/Grafana solo scrapean la ruta de métricas y no necesitan consultar una base de negocio.
 
@@ -69,4 +69,56 @@ go test -mod=readonly ./cmd/api
 Pop-Location
 ```
 
-Para comprobar el entorno ya iniciado, consultá el endpoint `/metrics`, confirmá dos targets `UP` en Prometheus y observá actividad en el dashboard después de solicitudes de lectura. La configuración de `compose.yaml` publica Grafana y Prometheus solo en `127.0.0.1`.
+Para comprobar el entorno ya iniciado, consultá `/metrics` desde la red interna, confirmá dos targets `UP` en Prometheus y observá actividad en el dashboard después de solicitudes de lectura. La configuración de `compose.yaml` publica Grafana y Prometheus solo en `127.0.0.1`.
+
+## Flujo principal: Reservas, Pagos, Auth y Beneficios
+
+Desde el 24/11/2026 los cuatro servicios del flujo principal tienen la misma instrumentación que Catálogo.
+
+### Logs
+
+JSON por `slog` con `timestamp`, `level`, `msg`, `service`, `instance`, `request_id` y `trace_id`. El `X-Request-ID` que pone el Gateway se propaga en las llamadas HTTP internas, así que un mismo `request_id` aparece en Gateway, Reservas, Catálogo y Pagos.
+
+### Trazas
+
+Con `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` definido (en `compose.yaml` apunta a `http://jaeger:4318/v1/traces`), cada servicio exporta spans OTLP/HTTP. Sin esa variable sólo propaga `traceparent`, sin exportar. Spans:
+
+- servidor HTTP por ruta (`POST /turnos/:id/completar`, `POST /carrito/checkout`, …);
+- cliente HTTP por destino (`HTTP GET catalogo-profesionales`, `HTTP POST pagos`, …);
+- `rabbitmq publish <routing key>` en Reservas y `rabbitmq consume <routing key>` en Beneficios.
+
+El contexto de la traza se guarda junto al evento en el outbox (`_traza`, que se quita antes de publicar) y viaja en las cabeceras AMQP. Por eso la traza de un turno completado llega hasta la acreditación de puntos aunque el broker haya estado caído entre medio.
+
+### Métricas
+
+| Métrica | Servicio | Uso |
+|---|---|---|
+| `melt_http_requests_total{service,instance,method,route,status}` | todos | RPS y tasa de 5xx por ruta |
+| `melt_http_request_duration_seconds` | todos | p95 por ruta (checkout, Webhook, completar) |
+| `melt_http_client_requests_total{destino,status}` y `melt_http_client_request_duration_seconds` | todos | Salud y latencia de dependencias (Catálogo, Auth, Pagos, Mercado Pago) |
+| `melt_reservas_outbox_publicaciones_total{tipo,resultado}` | Reservas | Eventos publicados o fallidos |
+| `melt_reservas_outbox_demora_segundos` | Reservas | Tiempo entre el commit y la publicación |
+| `melt_beneficios_eventos_consumidos_total{tipo,resultado}` | Beneficios | Eventos procesados, reintentados o enviados a la DLQ |
+| `melt_beneficios_evento_procesamiento_segundos` | Beneficios | Duración de la acreditación |
+| `melt_service_info{service,instance}` | todos | Identidad de la instancia |
+
+Los contadores de negocio arrancan en 0 para que `increase()` vea el primer evento. Prometheus descubre cada servicio por DNS (`reservas:8082`, `beneficios:8083`, `auth:8084`, `pagos:8085`).
+
+### Tablero
+
+**MELT · Flujo principal** (`infra/grafana/dashboards/flujo-principal.json`): disponibilidad por servicio, RPS, tasa de 5xx, p95 por servicio, checkout y Webhook, turnos completados/no asistió/cancelados, outbox (resultados y demora), eventos consumidos por resultado, llamadas salientes y p95 de dependencias.
+
+### Objetivo de servicio y alertas
+
+Objetivo del flujo principal: **al menos 95 % de las solicitudes de Reservas sin 5xx** y **p95 del checkout menor a 2 s**. Reglas en `infra/prometheus/alerts.yml`, grupo `melt-flujo-principal`:
+
+| Alerta | Condición | Severidad |
+|---|---|---|
+| `MeltServiceDown` | Un servicio del flujo sin scrape durante 1 min | critical |
+| `ReservasErrorRateHigh` | Más de 5 % de 5xx en Reservas durante 5 min | warning |
+| `CheckoutLatencyP95High` | p95 del checkout > 2 s durante 5 min | warning |
+| `OutboxPublishFailing` | ≥ 3 publicaciones fallidas en 5 min, sostenido 2 min | warning |
+| `BeneficiosEventsDeadLettered` | Algún evento llegó a la DLQ en los últimos 15 min | warning |
+| `PaymentProviderErrors` | ≥ 3 errores 5xx o de red de Pagos hacia Mercado Pago en 5 min | warning |
+
+Las reglas tienen pruebas unitarias: `promtool test rules infra/prometheus/tests/flujo-principal-alerts.test.yml`. Durante la caída controlada de RabbitMQ del 24/11/2026, `OutboxPublishFailing` y `BeneficiosEventsDeadLettered` pasaron a *firing* ([POSTMORTEM](POSTMORTEM.md)).

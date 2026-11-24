@@ -1,8 +1,8 @@
 # ADR-013 — Capacidad y costos
 
-> **Cierre documental de Entrega 2:** el plan final concreta hipótesis, recursos y modelo económico. D13 sigue parcial en resultados medidos y cotización; no se afirma capacidad demostrada.
+> **Actualización 24/11/2026:** la prueba de carga se ejecutó; resultados, límite principal, alternativa de escalado y costos están en [Resultados medidos](#resultados-medidos--24112026). Lo que sigue hasta esa sección es la historia de la decisión.
 
-**Estado:** Propuesto  
+**Estado:** Aceptado — resultados medidos el 24/11/2026 (ver al final)  
 **Fecha:** 2026-10-21  
 **Entrega:** 2 — 23 de octubre de 2026  
 **Decisores:** Equipo MELT
@@ -89,3 +89,63 @@ Se agregó `scripts/benchmark-catalogo-local.py` para generar una medición **ex
 3. Repetir con niveles acordados de concurrencia, registrar fecha, commit, dataset, CPU/RAM, servicios y resultados; conservar los JSON como evidencia.
 
 El script reporta p50/p95/p99, media, solicitudes por segundo, códigos HTTP y errores. Limita las solicitudes a 200, los trabajadores a 10 y solo acepta HTTP a localhost/127.0.0.1/::1. **No usar contra Render ni terceros**. No mide saturación de bases ni uso de CPU por sí mismo: esas métricas se deben recolectar aparte. Los resultados de este ensayo local no sustituyen la prueba de carga de la defensa ni validan D13 sin ejecución y análisis.
+
+## Resultados medidos — 24/11/2026
+
+Esta sección cierra los pendientes anteriores con una medición real. Las secciones previas se conservan como historia de la decisión.
+
+### Escenario
+
+- **Entorno:** host local de 4 vCPU compartidas y 15,7 GiB, `compose.s1.yaml` con Gateway NGINX, **dos réplicas de Catálogo**, MongoDB, OpenSearch, Memcached y Jaeger. Sin límites de CPU por contenedor. El generador de carga corre en el mismo host, dentro de la red Docker, así que compite por CPU.
+- **Herramienta:** `scripts/carga-capacidad.py` (sólo biblioteca estándar; acepta únicamente `gateway`, `localhost` o `127.0.0.1`). Escalones de concurrencia de 10 s cada uno, timeout 5 s.
+- **Flujos:** listado público `GET /api/v1/catalogo/tratamientos?page=1&limit=10` (cacheado en Memcached) y búsqueda `?page=2&limit=10&q=masajes&orden=precio_asc` (OpenSearch).
+- **Evidencia:** [`docs/evidence/2026-11-24/`](../evidence/2026-11-24/) (`catalogo-*.json` por escalón y `capacidad-docker-stats.csv` con CPU y memoria por contenedor cada segundo).
+
+### Resultados
+
+| Flujo | Concurrencia | RPS | p95 | Errores |
+|---|---|---|---|---|
+| Listado | 1 | 612 | 2,4 ms | 0 % |
+| Listado | **4** | **1.138 (máximo)** | 6,4 ms | 0 % |
+| Listado | 16 | 859 | 38 ms | 0 % |
+| Listado | 64 | 828 | 289 ms | 0 % |
+| Búsqueda | 1 | 684 | 2,2 ms | 0 % |
+| Búsqueda | 16 | 888 | 39 ms | 0 % |
+| Búsqueda | 64 | 1.159 (máximo) | 133 ms | 0 % |
+
+**Impacto de la caché** (mismo listado, Memcached detenido frente a activo):
+
+| Concurrencia | Sin caché | Con caché | Mejora |
+|---|---|---|---|
+| 1 | 253 RPS, p95 5,3 ms | 598 RPS, p95 2,5 ms | ×2,4 RPS, −54 % p95 |
+| 4 | 536 RPS, p95 13,2 ms | 994 RPS, p95 6,8 ms | ×1,9 RPS, −48 % p95 |
+| 16 | 734 RPS, p95 42,7 ms | 1.135 RPS, p95 27,9 ms | ×1,5 RPS, −35 % p95 |
+| 64 | 796 RPS, p95 176 ms | 760 RPS, p95 246 ms | sin mejora: el host ya está saturado |
+
+**Uso de recursos en el pico:** cada réplica de Catálogo llegó a 1,4–1,6 vCPU, MongoDB a 1,4 vCPU (con caché, mucho menos), el generador a ~0,9 vCPU, el Gateway a 0,24 vCPU y Memcached a 0,16 vCPU. La memoria nunca fue un problema (Catálogo < 25 MiB por réplica, OpenSearch ~950 MiB).
+
+### Análisis
+
+- **Capacidad:** en este host, el sistema sostiene alrededor de **1.100 lecturas por segundo sin errores**. Pasado ese punto el throughput se aplana y la latencia crece casi linealmente con la concurrencia: es encolamiento, no fallas. Ningún escalón produjo errores ni timeouts.
+- **Principal límite:** la **CPU de Catálogo** (serialización JSON y manejo HTTP en Go) compitiendo con MongoDB en el mismo host. El Gateway y Memcached quedan lejos de su límite. Con 4 vCPU repartidas entre Catálogo ×2, MongoDB y el generador, no queda CPU libre por encima de concurrencia 4–16.
+- **La caché importa más con poca carga:** duplica el throughput y reduce la latencia a la mitad porque evita el viaje a MongoDB. Cuando la CPU del host está saturada, deja de notarse: el cuello ya no es la base.
+- **Contra la hipótesis de demanda** (5 RPS sostenidas, ráfagas de 20 RPS): el margen es de más de 50 veces. El objetivo de p95 < 500 ms se cumple en todos los escalones medidos.
+- **Límites de la medición:** host compartido con el generador, dataset de semilla pequeño y una sola ruta por prueba. Los números sirven para comparar y ubicar el cuello, no como capacidad de producción.
+
+### Alternativa de escalado
+
+1. **Primero, escalar Catálogo horizontalmente en hosts separados.** Es *stateless* y ya está detrás del upstream con detección de caída ([ADR-012](ADR-012-balanceo-carga.md)); agregar réplicas no exige cambios de código. Llevar réplicas a otro host sólo tiene sentido si ese host tiene CPU propia; más réplicas en el mismo host no suman capacidad (se comprobó: el límite es la CPU total).
+2. **Después, MongoDB dedicado** cuando las lecturas no cacheadas (búsquedas filtradas, detalle) dominen, o subir el TTL de caché para listados.
+3. **No** escalar verticalmente el Gateway: usa < 0,25 vCPU al máximo medido.
+
+### Estimación de costos
+
+Con la referencia de precios ya citada (DigitalOcean Basic, consultada el 23/10/2026; precios a reconfirmar):
+
+| Escenario | Recursos | Costo mensual estimado |
+|---|---|---|
+| Base (demanda de la hipótesis, margen ×50) | 1 host 2 vCPU / 4 GiB con todo el stack de lectura | USD 24 |
+| Crecimiento ×10 o alta disponibilidad | 2 hosts 2 vCPU / 4 GiB, una réplica de Catálogo en cada uno | USD 48 |
+| Lecturas no cacheadas dominantes | 2 hosts para Catálogo + 1 host 4 vCPU / 8 GiB para MongoDB | USD 96 |
+
+Excluye impuestos, backups, dominio y transferencia por encima de lo incluido. El despliegue académico actual (Render, Supabase y Atlas) no se incluye en esta estimación.

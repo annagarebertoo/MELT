@@ -345,7 +345,9 @@ func TestWebhookDeOrdenAceptaSoloOrdenesDePruebaConImporteExacto(t *testing.T) {
 	e.mp.ordenes["ORDREAL"] = orden("ORDREAL", true, "1500.00", "1500.00")
 	e.mp.ordenes["ORDTST2"] = orden("ORDTST2", false, "1500.00", "10.00")
 
-	firmarOrden := func(id string) map[string]string { return map[string]string{"x-request-id": "r-" + id, "x-signature": firmar(id, "r-"+id)} }
+	firmarOrden := func(id string) map[string]string {
+		return map[string]string{"x-request-id": "r-" + id, "x-signature": firmar(id, "r-"+id)}
+	}
 	if status, _ := e.pedir(t, http.MethodPost, "/webhooks/mercadopago?type=order&data.id=ORDTST1", nil, firmarOrden("ORDTST1")); status != http.StatusOK {
 		t.Fatalf("orden de prueba válida debe confirmar, obtuvo %d", status)
 	}

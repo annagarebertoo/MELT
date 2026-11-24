@@ -1,10 +1,10 @@
 # S3 — Carga local y resiliencia
 
-El runner usa únicamente Python estándar y Docker Desktop. Reutiliza las comprobaciones de aislamiento, etiquetas, salud y restauración de `scripts/verify-s1-failover.py`; el endpoint es el GET de tratamientos del Gateway de `melt-s1`. No usa `.env`, bases compartidas ni rutas remotas. Las solicitudes no modifican datos.
+El runner usa únicamente Python estándar y Docker (Docker Desktop en Windows/macOS o el socket local `unix:///var/run/docker.sock` en Linux). Reutiliza las comprobaciones de aislamiento, etiquetas, salud y restauración de `scripts/verify-s1-failover.py`; el endpoint es el GET de tratamientos del Gateway de `melt-s1`. No usa `.env`, bases compartidas ni rutas remotas. Las solicitudes no modifican datos.
 
 ## Requisitos
 
-- Docker Desktop local con contexto verificable `desktop-linux`.
+- Docker Desktop local con contexto verificable `desktop-linux`, o en Linux el daemon local (el verificador exige que el servidor informe `OSType linux` y rechaza contextos remotos).
 - El entorno aislado `compose.s1.yaml` iniciado, con Gateway y exactamente dos réplicas de Catálogo saludables.
 - Python 3.10 o posterior.
 
@@ -46,3 +46,17 @@ Límites: 1–10 workers, 1–10.000 solicitudes o 1–300 segundos, timeout HTT
 Cada fase (`normal`, `failure`, `recovery`) incluye total, éxitos 2xx, fallos, códigos HTTP, tipo de error, latencias p50/p95/p99 y throughput. El JSON conserva cada solicitud, su `request_id`, latencia, estado, error y réplica asociada a los logs. La comparación informa el cambio de p95, throughput y solicitudes fallidas entre normal y fallo.
 
 La latencia medida desde el runner incluye el inicio del proceso `docker exec` más el recorrido HTTP desde el Gateway. Por eso, conviene comparar las fases del mismo informe; no interpretar estos valores como una medición pura de la latencia interna de Catálogo. Un `overall_passed: false` conserva los errores observados y no fuerza el resultado: para el escenario con fallo exige continuidad HTTP 200, uso exclusivo de la réplica sana durante el fallo, restauración saludable y tráfico posterior en ambas réplicas.
+
+## Ejecución del 24/11/2026 y prueba de capacidad
+
+Resultados y análisis en el [POSTMORTEM](POSTMORTEM.md) (ensayo A) y en [ADR-013](adr/ADR-013-capacidad-costos.md). JSON en [`docs/evidence/2026-11-24/`](evidence/2026-11-24/). Resumen: 600/600 HTTP 200 en las tres fases; p95 normal 124 ms, con fallo 121 ms y en recuperación 123 ms (la latencia incluye el arranque de `docker exec`).
+
+Este runner mide resiliencia con poca concurrencia. Para la capacidad máxima se agregó `scripts/carga-capacidad.py`, que corre dentro de la red Docker y sube la concurrencia por escalones:
+
+```sh
+docker run --rm --network melt-s1_s1 -v "$PWD/scripts:/s:ro" -v "$PWD/output:/out" python:3.13-alpine \
+  python /s/carga-capacidad.py --url "http://gateway/api/v1/catalogo/tratamientos?page=1&limit=10" \
+  --escalones 1,2,4,8,16,32,64 --segundos 10 --salida /out/capacidad/catalogo-listado.json
+```
+
+Sólo acepta los hosts `gateway`, `localhost` y `127.0.0.1`, nunca Render ni terceros, y no sobrescribe informes existentes.
