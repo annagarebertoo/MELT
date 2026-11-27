@@ -4,7 +4,21 @@ Los valores siguientes salen de `compose.yaml`, `.env.example` y los `os.Getenv`
 
 ## Requisitos y arranque local
 
-Docker Desktop con Compose v2; Go 1.26.1 y Node.js sólo para trabajo fuera de contenedor/verificaciones frontend.
+Docker Desktop con Compose v2; Go 1.26.1 y Node.js sólo para trabajo fuera de contenedor/verificaciones frontend. Para un clon limpio sin credenciales compartidas, usar el perfil aislado:
+
+```powershell
+.\scripts\dev-up.ps1
+```
+
+El script crea `.env.local` desde `.env.local.example` si no existe y combina `compose.yaml` con `compose.local.yaml`. Ese perfil usa MongoDB y PostgreSQL locales, credenciales ficticias y datos persistidos en volúmenes locales; no conecta a Atlas, Supabase ni Render. Para detenerlo sin borrar esos volúmenes:
+
+```powershell
+.\scripts\dev-down.ps1
+```
+
+Para conectarse a los servicios externos del equipo, seguir la configuración privada detallada más abajo y no reutilizar las credenciales locales de ejemplo.
+
+El arranque externo tradicional requiere preparar secretos locales y conexiones privadas:
 
 1. En PowerShell, desde la raíz, preparar secretos locales efímeros y obligatorios:
 

@@ -9,6 +9,7 @@ on:
       - main
       - develop
       - codex/supabase-postgres-migration
+      - 'codex/**'
   pull_request:
 
 permissions:

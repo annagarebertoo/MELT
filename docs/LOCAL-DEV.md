@@ -1,5 +1,27 @@
 # Entorno local MELT
 
+## Arranque reproducible desde un clon limpio
+
+Requisitos: Docker Desktop con Docker Compose v2 y PowerShell. No hacen falta credenciales de Atlas, Supabase, GhostKitchen ni Render.
+
+Desde la raíz del repositorio:
+
+```powershell
+.\scripts\dev-up.ps1
+```
+
+La primera ejecución crea `.env.local` desde `.env.local.example`, levanta MongoDB y PostgreSQL locales y construye MELT en el proyecto aislado `melt-local`. Las credenciales de ejemplo son solo locales; `.env.local` está ignorado por Git. La aplicación queda en http://localhost:8088 y crea el administrador `admin@melt.local` al iniciar. Las interfaces de monitoreo y mensajería usan puertos alternativos para coexistir con otra copia de MELT.
+
+Para detener los contenedores sin borrar las bases locales:
+
+```powershell
+.\scripts\dev-down.ps1
+```
+
+Este perfil local no usa el proveedor real de GhostKitchen: `GHOSTKITCHEN_API_KEY` queda vacío y esa integración devolverá el error de configuración esperado. Para verificarla contra el proveedor se necesita una clave autorizada y se configura por separado en un entorno local privado.
+
+El arranque tradicional de `docker compose up` usa las conexiones externas configuradas por el equipo. Para el perfil aislado desde un clon limpio, usar siempre `scripts/dev-up.ps1`.
+
 > Guía heredada con ejemplos y datos demo. Para los requisitos/variables actuales y comandos seguros, usar primero [OPERACIONES.md](OPERACIONES.md). El README y los manuales por servicio describen el estado de código de `develop`; los valores de datos demo, puertos alternativos y credenciales mostrados más abajo no son universales ni deben copiarse a un entorno compartido.
 
 ## Requisitos

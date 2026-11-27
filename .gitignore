@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!.env.local.example
 
 # Binarios compilados con `go build` dentro de cada servicio
 services/*/api
