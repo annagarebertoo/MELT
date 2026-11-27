@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"log/slog"
 	"mime"
 	"net/http"
 	"net/url"
@@ -115,6 +116,9 @@ func main() {
 	authURL := strings.TrimRight(strings.TrimSpace(os.Getenv("AUTH_URL")), "/")
 	claveInterna := strings.TrimSpace(os.Getenv("MELT_INTERNAL_KEY"))
 	rabbitURL := strings.TrimSpace(os.Getenv("RABBITMQ_URL"))
+	if authURL == "" || claveInterna == "" {
+		slog.Error("auth_integration_incomplete", "auth_url_configurada", authURL != "", "melt_internal_key_configurada", claveInterna != "")
+	}
 	s := &Servidor{database: database, almacen: a, programa: a, rabbitURL: rabbitURL, claveAPI: strings.TrimSpace(os.Getenv("BENEFICIOS_PARTNER_KEY")), verificarUsuario: verificadorAuth(authURL, claveInterna), verificarSesion: verificadorSesionAuth(authURL), resolverEmail: resolverEmailAuth(authURL, claveInterna), verificarEmail: verificadorEmailAuth(authURL, claveInterna), claveInterna: claveInterna, invitacionSecret: []byte(os.Getenv("BENEFICIOS_INVITATION_SECRET")), publicURL: strings.TrimRight(strings.TrimSpace(os.Getenv("MELT_PUBLIC_URL")), "/")}
 	if rabbitURL != "" {
 		go (&consumidorPrograma{url: rabbitURL, almacen: a}).run(context.Background())
@@ -254,6 +258,7 @@ func (s *Servidor) acreditarPuntos(c *gin.Context) {
 		if errors.Is(err, errUsuario) {
 			errorJSON(c, 404, "USUARIO_NO_EXISTE", "Usuario inexistente o inactivo.")
 		} else {
+			registrarFalloAuth(c.Request.Context(), "verificar_usuario", err)
 			errorJSON(c, 503, "AUTH_NO_DISPONIBLE", "No se pudo verificar el usuario.")
 		}
 		return
@@ -292,7 +297,7 @@ func verificadorAuth(base, clave string) func(context.Context, string) error {
 	client := &http.Client{Timeout: 3 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	return func(ctx context.Context, id string) error {
 		if base == "" || clave == "" {
-			return errors.New("Auth no configurado")
+			return errAuthNoConfigurado
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/internal/usuarios/"+url.PathEscape(id), nil)
 		if err != nil {
@@ -308,7 +313,7 @@ func verificadorAuth(base, clave string) func(context.Context, string) error {
 			return errUsuario
 		}
 		if resp.StatusCode != 204 {
-			return errors.New("Auth no disponible")
+			return errorRespuestaAuth(resp.StatusCode)
 		}
 		return nil
 	}

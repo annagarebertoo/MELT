@@ -125,6 +125,50 @@ func TestGhostKitchenErrorEnEndpointConservaCodigoYCorrelationID(t *testing.T) {
 		t.Fatalf("X-Correlation-ID=%q", w.Header().Get("X-Correlation-ID"))
 	}
 }
+
+func TestGhostKitchen503NoModificaSaldoNiMovimientos(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	var calls atomic.Int32
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		io.WriteString(w, `{"code":"PROVEEDOR_NO_DISPONIBLE"}`)
+	}))
+	defer mock.Close()
+	t.Setenv("GHOSTKITCHEN_API_KEY", "clave-mock")
+	t.Setenv("GHOSTKITCHEN_BASE_URL", mock.URL)
+
+	store := nuevaMemoria()
+	if _, _, err := store.acreditar(context.Background(), AcreditarRequest{
+		SolicitudID: "saldo-previo", UsuarioID: "u", Puntos: 25,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	beforeBalance, beforeMovements, err := store.consultar(context.Background(), "u")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/ghostkitchen/sedes", nil)
+	req.Header.Set("Authorization", "Bearer cliente-test")
+	w := httptest.NewRecorder()
+	crearRouter(servidorPrueba(store)).ServeHTTP(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("HTTP %d: %s", w.Code, w.Body.String())
+	}
+	if calls.Load() != 3 {
+		t.Fatalf("llamadas al proveedor=%d, esperadas=3", calls.Load())
+	}
+	afterBalance, afterMovements, err := store.consultar(context.Background(), "u")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterBalance != beforeBalance || len(afterMovements) != len(beforeMovements) {
+		t.Fatalf("el error externo alteró los puntos o movimientos: saldo %d→%d, movimientos %d→%d", beforeBalance, afterBalance, len(beforeMovements), len(afterMovements))
+	}
+}
+
 func TestGhostKitchenErroresYReintentosAcotados(t *testing.T) {
 	for _, tc := range []struct {
 		name             string

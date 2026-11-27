@@ -10,7 +10,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"net/mail"
@@ -33,6 +35,37 @@ var errInvitacionVencida = errors.New("invitación vencida")
 var errDestinatario = errors.New("destinatario distinto")
 var errEmailSinVerificar = errors.New("email sin verificar")
 var errCuentaInactiva = errors.New("cuenta inactiva")
+
+// Errores de la integración interna con Auth. El partner sigue recibiendo
+// 503 AUTH_NO_DISPONIBLE, pero el log dice cuál de los dos lados está mal.
+var errAuthNoConfigurado = errors.New("AUTH_URL o MELT_INTERNAL_KEY vacía en Beneficios")
+var errClaveInternaRechazada = errors.New("Auth rechazó MELT_INTERNAL_KEY de Beneficios")
+
+// errorRespuestaAuth traduce un estado inesperado de Auth a un error con causa.
+func errorRespuestaAuth(status int) error {
+	if status == http.StatusUnauthorized {
+		return errClaveInternaRechazada
+	}
+	return fmt.Errorf("Auth respondió HTTP %d", status)
+}
+
+// causaFalloAuth devuelve una etiqueta estable para el log, sin secretos.
+func causaFalloAuth(err error) string {
+	switch {
+	case errors.Is(err, errAuthNoConfigurado):
+		return "auth_no_configurado"
+	case errors.Is(err, errClaveInternaRechazada):
+		return "clave_interna_rechazada"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	default:
+		return "auth_no_disponible"
+	}
+}
+
+func registrarFalloAuth(ctx context.Context, operacion string, err error) {
+	slog.ErrorContext(ctx, "auth_dependency_failed", "operacion", operacion, "causa", causaFalloAuth(err), "detalle", err.Error(), "request_id", telRequestIDDe(ctx))
+}
 
 // Pendientes y movimientos comparten colección y _id: la referencia es global,
 // incluso entre solicitudes por ID y solicitudes por email.
@@ -130,6 +163,7 @@ func (s *Servidor) acreditarPorEmail(c *gin.Context, r entradaAcreditacion) {
 		if errors.Is(err, errCuentaInactiva) {
 			errorJSON(c, 409, "CUENTA_NO_DISPONIBLE", "La cuenta destinataria está inactiva.")
 		} else {
+			registrarFalloAuth(c.Request.Context(), "resolver_email", err)
 			errorJSON(c, 503, "AUTH_NO_DISPONIBLE", "No se pudo verificar el destinatario.")
 		}
 		return
@@ -431,7 +465,7 @@ func resolverEmailAuth(base, clave string) func(context.Context, string) (string
 	client := &http.Client{Timeout: 3 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	return func(ctx context.Context, email string) (string, error) {
 		if base == "" || clave == "" {
-			return "", errors.New("Auth no configurado")
+			return "", errAuthNoConfigurado
 		}
 		body, _ := json.Marshal(map[string]string{"email": email})
 		q, e := http.NewRequestWithContext(ctx, "POST", base+"/internal/usuarios/buscar", strings.NewReader(string(body)))
@@ -452,7 +486,7 @@ func resolverEmailAuth(base, clave string) func(context.Context, string) (string
 			return "", errCuentaInactiva
 		}
 		if resp.StatusCode != 200 {
-			return "", errors.New("Auth no disponible")
+			return "", errorRespuestaAuth(resp.StatusCode)
 		}
 		var u struct {
 			ID              string `json:"id"`
@@ -544,7 +578,7 @@ func verificadorEmailAuth(base, clave string) func(context.Context, string, stri
 	client := &http.Client{Timeout: 3 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	return func(ctx context.Context, id, email string) error {
 		if base == "" || clave == "" {
-			return errors.New("Auth no configurado")
+			return errAuthNoConfigurado
 		}
 		b, _ := json.Marshal(map[string]string{"usuarioId": id, "email": email})
 		q, e := http.NewRequestWithContext(ctx, "POST", base+"/internal/usuarios/verificar-email", strings.NewReader(string(b)))
@@ -559,7 +593,7 @@ func verificadorEmailAuth(base, clave string) func(context.Context, string, stri
 		}
 		defer r.Body.Close()
 		if r.StatusCode != 204 {
-			return errors.New("no se pudo verificar el email")
+			return fmt.Errorf("no se pudo verificar el email: %w", errorRespuestaAuth(r.StatusCode))
 		}
 		return nil
 	}

@@ -1,7 +1,9 @@
 name: Asistencia en PostgreSQL
 on:
   push:
-    branches: [codex/supabase-postgres-migration]
+    branches:
+      - codex/supabase-postgres-migration
+      - 'codex/**'
     paths:
       - 'services/reservas/**'
       - 'infra/nginx/web/**'
