@@ -79,7 +79,7 @@ jobs:
       MONGODB_URI: mongodb://ci-mongo:27017/?replicaSet=melt-ci
       RESERVAS_DATABASE_URL: postgres://postgres:ci@ci-postgres:5432/reservas?sslmode=disable
       BENEFICIOS_DATABASE_URL: postgres://postgres:ci@ci-postgres:5432/beneficios?sslmode=disable
-      MELT_PUBLIC_URL: http://localhost:8080
+      MELT_PUBLIC_URL: http://localhost:8088
     steps:
       - uses: actions/checkout@v4
       - name: Validar y levantar el entorno reproducible local
