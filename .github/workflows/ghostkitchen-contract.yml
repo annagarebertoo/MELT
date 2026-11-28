@@ -40,7 +40,7 @@ jobs:
         run: |
           docker run -d --name ghostkitchen-contract -p 4010:4010 \
             -v "$GITHUB_WORKSPACE/docs/contracts/ghostkitchen-v1.1.0.openapi.yaml:/tmp/openapi.yaml:ro" \
-            stoplight/prism:5 mock -h 0.0.0.0 -p 4010 /tmp/openapi.yaml
+            stoplight/prism:5 mock -h 0.0.0.0 -p 4010 -m false /tmp/openapi.yaml
           for attempt in {1..30}; do
             if curl -fsS -H 'X-API-Key: consumer-contract-test-key' \
               http://127.0.0.1:4010/v1/sedes >/dev/null; then
