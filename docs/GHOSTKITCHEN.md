@@ -44,6 +44,6 @@ go test ./...
 
 Cubren el envío de `X-API-Key`, filtros y operaciones, respuestas exitosas, 401, 404/SIN_COBERTURA, 429, 503, reintentos acotados, timeout y falta de configuración. La prueba `TestGhostKitchen503NoModificaSaldoNiMovimientos` simula tres respuestas 503, comprueba que Beneficios informa la indisponibilidad y que el saldo y los movimientos quedan iguales.
 
-La prueba contra el contrato publicado se ejecuta en el workflow [GhostKitchen provider contract](../.github/workflows/ghostkitchen-contract.yml). Inicia Prism con el OpenAPI oficial v1.1.0 versionado en [GHOSTKITCHEN-PROVIDER](contracts/GHOSTKITCHEN-PROVIDER.md), compara la copia con el repositorio del proveedor y llama las cinco operaciones desde Beneficios. No necesita la clave real y no llama a producción.
+La prueba contra el contrato publicado se ejecuta en el workflow [GhostKitchen provider contract](../.github/workflows/ghostkitchen-contract.yml). Inicia Prism con el [OpenAPI oficial v1.1.0 versionado](contracts/ghostkitchen-v1.1.0.openapi.yaml), compara la copia con la [especificación publicada por el Grupo 3](https://github.com/Guille270106/GhostKitchen-AS/blob/5946412f3787f53fea840294a34ac679e1b8e062/docs/contracts/v1/openapi.yaml) y llama las cinco operaciones desde Beneficios. No necesita la clave real y no llama a producción.
 
 Para ver datos reales en la interfaz se necesita una API Key válida. Para pruebas de UI se puede indicar un mock compatible mediante `GHOSTKITCHEN_BASE_URL`.

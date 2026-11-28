@@ -115,7 +115,7 @@ No se cambió el criterio de los scripts para volverlos verdes.
 
 **Impacto esperado.** La sección GhostKitchen de la interfaz informa el error recibido, elimina las sedes/platos mostrados previamente para no presentarlos como actuales y permite repetir la búsqueda. El flujo no crea reservas, pedidos ni operaciones de puntos. La prueba automatizada comprueba el estado de puntos; no ejecuta una compra ni una reserva, porque GhostKitchen no ofrece esas operaciones.
 
-**Contrato.** Los endpoints y errores se contrastan además con Prism iniciado desde la especificación oficial publicada por el Grupo 3, versión 1.1.0. La fuente, copia versionada y workflow están documentados en [GHOSTKITCHEN-PROVIDER](contracts/GHOSTKITCHEN-PROVIDER.md). Este mock se deriva del contrato; no es una caída del servidor real.
+**Contrato.** Los endpoints y errores se contrastan además con Prism iniciado desde la especificación oficial publicada por el Grupo 3, versión 1.1.0 ([copia OpenAPI](contracts/ghostkitchen-v1.1.0.openapi.yaml), [workflow de contrato](../.github/workflows/ghostkitchen-contract.yml)). Este mock se deriva del contrato; no es una caída del servidor real.
 
 **Límite de la evidencia.** Es una simulación controlada y automatizada, no se detuvo ni se sometió a carga el proveedor en la nube. Tampoco se probó la interfaz en un navegador durante la caída. No se hicieron llamadas de falla a Render ni a datos compartidos.
 

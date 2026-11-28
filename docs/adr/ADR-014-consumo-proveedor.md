@@ -10,7 +10,7 @@
 
 El cliente HTTP de GhostKitchen en `services/beneficios/cmd/api/ghostkitchen.go` ya existía antes de la rama Leti A1–A3; esa rama no agregó un adaptador nuevo. El consumo usa `GHOSTKITCHEN_API_KEY` en el backend, llama las rutas de sedes/platos/proximidad y tiene timeout de 3 segundos e intentos acotados para 429/503.
 
-El proveedor publicó OpenAPI 1.1.0 en [`GhostKitchen-AS`](https://github.com/Guille270106/GhostKitchen-AS/blob/5946412f3787f53fea840294a34ac679e1b8e062/docs/contracts/v1/openapi.yaml); MELT conserva la copia utilizada por CI en [GHOSTKITCHEN-PROVIDER](../contracts/GHOSTKITCHEN-PROVIDER.md). El workflow compara la copia con la fuente y ejecuta el cliente Beneficios contra Prism. La falla controlada 503 confirma que el endpoint informa indisponibilidad y no altera puntos; la capacidad consulta datos y no crea reservas.
+El proveedor publicó OpenAPI 1.1.0 en [`GhostKitchen-AS`](https://github.com/Guille270106/GhostKitchen-AS/blob/5946412f3787f53fea840294a34ac679e1b8e062/docs/contracts/v1/openapi.yaml); MELT conserva la copia utilizada por CI en [ghostkitchen-v1.1.0.openapi.yaml](../contracts/ghostkitchen-v1.1.0.openapi.yaml). El workflow compara la copia con la fuente y ejecuta el cliente Beneficios contra Prism. La falla controlada 503 confirma que el endpoint informa indisponibilidad y no altera puntos; la capacidad consulta datos y no crea reservas.
 
 El cliente puede buscar cocinas y platos en la interfaz. Si el proveedor falla, la interfaz muestra el error, limpia los datos anteriores y permite reintentar. Esto es un efecto visible en la consulta; el flujo no reserva ni compra platos. El contrato de GhostKitchen es de solo lectura.
 
