@@ -110,7 +110,8 @@ func main() {
 	}
 	uri := os.Getenv("MONGODB_URI")
 	if uri == "" {
-		uri = "mongodb://localhost:27017"
+		slog.Error("mongodb_uri_required")
+		os.Exit(1)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -133,7 +134,7 @@ func main() {
 	}
 
 	coleccion := cliente.Database(databaseName("CATALOGO_MONGODB_DATABASE", "catalogo_db")).Collection("tratamientos")
-	profesionales := cliente.Database(databaseName("PROFESIONALES_MONGODB_DATABASE", databaseName("CATALOGO_MONGODB_DATABASE", "catalogo_db"))).Collection("profesionales")
+	profesionales := cliente.Database(databaseName("PROFESIONALES_MONGODB_DATABASE", "profesionales_db")).Collection("profesionales")
 
 	authURL := strings.TrimRight(strings.TrimSpace(os.Getenv("AUTH_URL")), "/")
 	if authURL == "" {
@@ -338,8 +339,6 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 		catalogError(c, 503, "CATALOGO_NO_DISPONIBLE", "El catálogo no está disponible temporalmente.")
 		return
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-	defer cancel()
 
 	page, limit, err := parsePagination(c.Query("page"), c.Query("limit"))
 	if err != nil {
@@ -366,6 +365,7 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 			Key: "$or",
 			Value: bson.A{
 				bson.D{{Key: "nombre", Value: patron}},
+				bson.D{{Key: "descripcion", Value: patron}},
 				bson.D{{Key: "keywords", Value: patron}},
 			},
 		})
@@ -418,47 +418,52 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 		precioMax, _ = strconv.ParseFloat(precioMaxTexto, 64)
 		query.MaxPrice = strconv.FormatFloat(precioMax, 'g', -1, 64)
 	}
-	if query.Q != "" && s.search != nil && !s.searchIndexFresh() {
-		freshnessCtx, freshnessCancel := context.WithTimeout(c.Request.Context(), time.Second)
+	useSearch := query.Q != "" && s.search != nil
+	if useSearch && !s.searchIndexFresh() {
+		freshnessCtx, cancel := context.WithTimeout(c.Request.Context(), time.Second)
 		if err := s.refreshIndexFreshness(freshnessCtx); err != nil {
 			slog.Warn("catalog_index_freshness_read_failed", "error", err)
 		}
-		freshnessCancel()
-		if !s.searchIndexFresh() {
-			catalogError(c, http.StatusServiceUnavailable, "BUSQUEDA_NO_DISPONIBLE", "El índice de búsqueda no está actualizado; reintentá en unos segundos.")
-			return
-		}
+		cancel()
+		useSearch = s.searchIndexFresh()
 	}
-	if s.cache != nil {
-		if cached, ok := s.cache.get(query); ok {
+	// A stale generation must not be served from the search cache either.
+	cacheable := query.Q == "" || useSearch
+	generacionCache := ""
+	if cacheable && s.cache != nil {
+		cached, generacion, ok := s.cache.get(c.Request.Context(), query)
+		generacionCache = generacion
+		if ok {
 			c.Data(http.StatusOK, "application/json; charset=utf-8", cached)
 			return
 		}
 	}
-	if query.Q != "" && s.search != nil {
-		searchCtx, searchCancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-		defer searchCancel()
+	if useSearch {
+		searchCtx, cancel := context.WithTimeout(c.Request.Context(), time.Second)
 		result, err := s.search.searchTreatments(searchCtx, query.Q, query.Category, precioMax, precioMaxTexto != "", page, limit, direction, mongoSortField)
-		if err != nil {
-			s.searchFailures.Add(1)
-			slog.Warn("catalog_search_failed", "error", err)
-			catalogError(c, 503, "BUSQUEDA_NO_DISPONIBLE", "La búsqueda no está disponible temporalmente.")
-			return
+		cancel()
+		if err == nil {
+			categoryCtx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+			err = s.completarCategoriaIDs(categoryCtx, result.Treatments)
+			cancel()
 		}
-		if err := s.completarCategoriaIDs(searchCtx, result.Treatments); err != nil {
-			catalogError(c, 503, "CATEGORIAS_NO_DISPONIBLES", "No se pudieron resolver las categorías de los tratamientos.")
-			return
-		}
-		payload := gin.H{"tratamientos": result.Treatments, "pagination": gin.H{"page": page, "limit": limit, "total": result.Total, "totalPages": totalPages(result.Total, limit)}}
-		if raw, err := json.Marshal(payload); err == nil {
-			if s.cache != nil {
-				s.cache.set(query, raw)
+		if err == nil {
+			payload := gin.H{"tratamientos": result.Treatments, "pagination": gin.H{"page": page, "limit": limit, "total": result.Total, "totalPages": totalPages(result.Total, limit)}}
+			if raw, err := json.Marshal(payload); err == nil {
+				if s.cache != nil {
+					s.cache.set(c.Request.Context(), query, generacionCache, raw)
+				}
+				c.Data(http.StatusOK, "application/json; charset=utf-8", raw)
+				return
 			}
-			c.Data(http.StatusOK, "application/json; charset=utf-8", raw)
-			return
+		} else {
+			s.searchFailures.Add(1)
+			slog.Warn("catalog_search_fallback_to_mongo", "error", err)
 		}
 	}
 
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
 	total, err := s.coleccion.CountDocuments(ctx, filtro)
 	if err != nil {
 		responderErrorDB(c, err)
@@ -499,8 +504,8 @@ func (s *Servidor) listarTratamientos(c *gin.Context) {
 		},
 	}
 	if raw, err := json.Marshal(payload); err == nil {
-		if s.cache != nil {
-			s.cache.set(query, raw)
+		if query.Q == "" && s.cache != nil {
+			s.cache.set(c.Request.Context(), query, generacionCache, raw)
 		}
 		c.Data(http.StatusOK, "application/json; charset=utf-8", raw)
 		return

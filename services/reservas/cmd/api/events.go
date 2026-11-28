@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"fmt"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -17,13 +20,13 @@ import (
 const exchangeEventos = "melt.dominio"
 
 type eventoOutbox struct {
-	ID          string    `bson:"_id"`
-	Tipo        string    `bson:"tipo"`
-	RoutingKey  string    `bson:"routingKey"`
-	Payload     bson.M    `bson:"payload"`
-	CreadoEn    time.Time `bson:"creadoEn"`
-	PublicadoEn time.Time `bson:"publicadoEn,omitempty"`
-	Intentos    int       `bson:"intentos"`
+	ID          string    `bson:"_id" json:"id"`
+	Tipo        string    `bson:"tipo" json:"tipo"`
+	RoutingKey  string    `bson:"routingKey" json:"routingKey"`
+	Payload     bson.M    `bson:"payload" json:"payload"`
+	CreadoEn    time.Time `bson:"creadoEn" json:"creadoEn"`
+	PublicadoEn time.Time `bson:"publicadoEn,omitempty" json:"publicadoEn,omitempty"`
+	Intentos    int       `bson:"intentos" json:"intentos"`
 }
 
 // publicarEventos confirma el envío al broker antes de marcar el evento como
@@ -32,68 +35,178 @@ func (s *servidorReservas) publicarEventos(ctx context.Context) {
 	if strings.TrimSpace(s.rabbitURL) == "" {
 		return
 	}
-	ticker := time.NewTicker(1200 * time.Millisecond)
-	defer ticker.Stop()
+	// Series en 0 desde el arranque para que increase() detecte el primer fallo.
+	for _, tipo := range []string{"tratamiento.realizado", "turno.cancelado"} {
+		for _, resultado := range []string{"publicado", "fallido"} {
+			telMetricas.contar("melt_reservas_outbox_publicaciones_total", "Eventos del outbox enviados a RabbitMQ por tipo y resultado.", 0, "tipo", tipo, "resultado", resultado)
+		}
+	}
+	espera := intervaloOutbox
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-time.After(espera):
 		}
-		var item eventoOutbox
-		findCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		err := s.outbox.FindOne(findCtx, bson.M{"publicadoEn": bson.M{"$exists": false}}, options.FindOne().SetSort(bson.D{{Key: "creadoEn", Value: 1}})).Decode(&item)
-		cancel()
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			continue
-		}
+		publicado, err := s.publicarSiguienteEvento(ctx)
+		espera = proximaEsperaOutbox(espera, publicado, err)
 		if err != nil {
-			log.Printf("reservas_outbox_read_failed: %v", err)
-			continue
-		}
-		body, err := json.Marshal(item.Payload)
-		if err != nil {
-			log.Printf("reservas_outbox_encode_failed event=%s", item.ID)
-			continue
-		}
-		publishCtx, stop := context.WithTimeout(ctx, 5*time.Second)
-		conn, err := amqp091.DialConfig(s.rabbitURL, amqp091.Config{Heartbeat: 10 * time.Second, Locale: "en_US"})
-		if err == nil {
-			var ch *amqp091.Channel
-			ch, err = conn.Channel()
-			if err == nil {
-				err = ch.ExchangeDeclare(exchangeEventos, "topic", true, false, false, false, nil)
-				if err == nil {
-					err = ch.Confirm(false)
-				}
-				if err == nil {
-					confirms := ch.NotifyPublish(make(chan amqp091.Confirmation, 1))
-					err = ch.PublishWithContext(publishCtx, exchangeEventos, item.RoutingKey, false, false, amqp091.Publishing{ContentType: "application/json", DeliveryMode: amqp091.Persistent, MessageId: item.ID, Type: item.Tipo, Timestamp: item.CreadoEn, Body: body})
-					if err == nil {
-						select {
-						case confirm := <-confirms:
-							if !confirm.Ack {
-								err = errors.New("rabbitmq no confirmó el evento")
-							}
-						case <-publishCtx.Done():
-							err = publishCtx.Err()
-						}
-					}
-				}
-				_ = ch.Close()
-			}
-			_ = conn.Close()
-		}
-		stop()
-		if err != nil {
-			log.Printf("reservas_outbox_publish_failed event=%s: %v", item.ID, err)
-			continue
-		}
-		markCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		_, err = s.outbox.UpdateOne(markCtx, bson.M{"_id": item.ID, "publicadoEn": bson.M{"$exists": false}}, bson.M{"$set": bson.M{"publicadoEn": time.Now().UTC()}, "$inc": bson.M{"intentos": 1}})
-		cancel()
-		if err != nil {
-			log.Printf("reservas_outbox_mark_failed event=%s: %v", item.ID, err)
+			slog.WarnContext(ctx, "reservas_outbox_publish_retry", "error", err.Error(), "proximo_intento_ms", espera.Milliseconds())
 		}
 	}
+}
+
+const (
+	intervaloOutbox     = 1200 * time.Millisecond
+	esperaMaximaOutbox  = 10 * time.Second
+	esperaDrenadoOutbox = 0
+)
+
+// proximaEsperaOutbox decide cuándo volver a leer el outbox:
+//   - tras publicar, sigue de inmediato para drenar la cola acumulada;
+//   - sin pendientes, vuelve al intervalo normal;
+//   - ante un error (broker caído), duplica la espera hasta 10 s para no saturar
+//     logs ni el broker al recuperarse. El peor caso de demora tras la
+//     recuperación queda acotado por esperaMaximaOutbox.
+func proximaEsperaOutbox(actual time.Duration, publicado bool, err error) time.Duration {
+	switch {
+	case err != nil:
+		siguiente := actual * 2
+		if siguiente < intervaloOutbox {
+			siguiente = intervaloOutbox
+		}
+		if siguiente > esperaMaximaOutbox {
+			siguiente = esperaMaximaOutbox
+		}
+		return siguiente
+	case publicado:
+		return esperaDrenadoOutbox
+	default:
+		return intervaloOutbox
+	}
+}
+
+// publicarSiguienteEvento publica el evento pendiente más antiguo del outbox.
+// Devuelve false sin error cuando no hay pendientes.
+func (s *servidorReservas) publicarSiguienteEvento(ctx context.Context) (bool, error) {
+	var item eventoOutbox
+	findCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	var err error
+	if s.pg != nil {
+		item, err = s.pg.eventoPendiente(findCtx)
+	} else {
+		err = s.outbox.FindOne(findCtx, bson.M{"publicadoEn": bson.M{"$exists": false}}, options.FindOne().SetSort(bson.D{{Key: "creadoEn", Value: 1}})).Decode(&item)
+	}
+	cancel()
+	if errors.Is(err, mongo.ErrNoDocuments) || sqlNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("reservas_outbox_read_failed: %w", err)
+	}
+	ctx, item.Payload = trazaDesdeOutbox(ctx, item.Payload)
+	body, err := json.Marshal(item.Payload)
+	if err != nil {
+		return false, fmt.Errorf("reservas_outbox_encode_failed event=%s", item.ID)
+	}
+	spanCtx, span := telIniciarSpan(ctx, "rabbitmq publish "+item.RoutingKey,
+		attribute.String("messaging.system", "rabbitmq"),
+		attribute.String("messaging.destination.name", exchangeEventos),
+		attribute.String("messaging.message.id", item.ID),
+	)
+	defer span.End()
+	cabeceras := amqp091.Table{}
+	telInyectarCabeceras(spanCtx, cabeceras)
+	publishCtx, stop := context.WithTimeout(spanCtx, 5*time.Second)
+	conn, err := amqp091.DialConfig(s.rabbitURL, amqp091.Config{Heartbeat: 10 * time.Second, Locale: "en_US"})
+	if err == nil {
+		var ch *amqp091.Channel
+		ch, err = conn.Channel()
+		if err == nil {
+			err = ch.ExchangeDeclare(exchangeEventos, "topic", true, false, false, false, nil)
+			if err == nil {
+				err = ch.Confirm(false)
+			}
+			if err == nil {
+				confirms := ch.NotifyPublish(make(chan amqp091.Confirmation, 1))
+				err = ch.PublishWithContext(publishCtx, exchangeEventos, item.RoutingKey, false, false, amqp091.Publishing{ContentType: "application/json", DeliveryMode: amqp091.Persistent, MessageId: item.ID, Type: item.Tipo, Timestamp: item.CreadoEn, Headers: cabeceras, Body: body})
+				if err == nil {
+					select {
+					case confirm := <-confirms:
+						if !confirm.Ack {
+							err = errors.New("rabbitmq no confirmó el evento")
+						}
+					case <-publishCtx.Done():
+						err = publishCtx.Err()
+					}
+				}
+			}
+			_ = ch.Close()
+		}
+		_ = conn.Close()
+	}
+	stop()
+	if err != nil {
+		span.SetStatus(codes.Error, "publicación fallida")
+		telMetricas.contar("melt_reservas_outbox_publicaciones_total", "Eventos del outbox enviados a RabbitMQ por tipo y resultado.", 1, "tipo", item.Tipo, "resultado", "fallido")
+		if s.pg != nil {
+			failCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			_ = s.pg.registrarFalloEvento(failCtx, item.ID, err.Error())
+			cancel()
+		}
+		return false, fmt.Errorf("reservas_outbox_publish_failed event=%s: %w", item.ID, err)
+	}
+	markCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	if s.pg != nil {
+		err = s.pg.publicarEvento(markCtx, item.ID, time.Now().UTC())
+	} else {
+		_, err = s.outbox.UpdateOne(markCtx, bson.M{"_id": item.ID, "publicadoEn": bson.M{"$exists": false}}, bson.M{"$set": bson.M{"publicadoEn": time.Now().UTC()}, "$inc": bson.M{"intentos": 1}})
+	}
+	cancel()
+	telMetricas.contar("melt_reservas_outbox_publicaciones_total", "Eventos del outbox enviados a RabbitMQ por tipo y resultado.", 1, "tipo", item.Tipo, "resultado", "publicado")
+	if !item.CreadoEn.IsZero() {
+		telMetricas.observar("melt_reservas_outbox_demora_segundos", "Tiempo entre la escritura en el outbox y la confirmación del broker.", time.Since(item.CreadoEn).Seconds(), "tipo", item.Tipo)
+	}
+	if err != nil {
+		return true, fmt.Errorf("reservas_outbox_mark_failed event=%s: %w", item.ID, err)
+	}
+	return true, nil
+}
+
+// claveTrazaOutbox guarda el traceparent de la solicitud que escribió el evento,
+// para que la publicación asincrónica continúe la misma traza. No viaja en el cuerpo
+// del evento: se quita antes de publicar y se envía como encabezado AMQP.
+const claveTrazaOutbox = "_traza"
+
+func conTrazaOutbox(ctx context.Context, payload bson.M) bson.M {
+	cabeceras := map[string]any{}
+	telInyectarCabeceras(ctx, cabeceras)
+	if len(cabeceras) == 0 {
+		return payload
+	}
+	copia := make(bson.M, len(payload)+1)
+	for k, v := range payload {
+		copia[k] = v
+	}
+	copia[claveTrazaOutbox] = cabeceras
+	return copia
+}
+
+func trazaDesdeOutbox(ctx context.Context, payload bson.M) (context.Context, bson.M) {
+	crudo, ok := payload[claveTrazaOutbox]
+	if !ok {
+		return ctx, payload
+	}
+	limpio := make(bson.M, len(payload))
+	for k, v := range payload {
+		if k != claveTrazaOutbox {
+			limpio[k] = v
+		}
+	}
+	if cabeceras, ok := crudo.(map[string]any); ok {
+		ctx = telExtraerCabeceras(ctx, cabeceras)
+	} else if cabeceras, ok := crudo.(bson.M); ok {
+		ctx = telExtraerCabeceras(ctx, map[string]any(cabeceras))
+	}
+	return ctx, limpio
 }

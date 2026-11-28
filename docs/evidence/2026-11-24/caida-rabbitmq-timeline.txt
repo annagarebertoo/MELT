@@ -1,0 +1,46 @@
+# Caída controlada de RabbitMQ — 24/11/2026 (UTC)
+# Entorno local aislado: Reservas, Beneficios, PostgreSQL, RabbitMQ, Jaeger y Prometheus en Docker.
+
+T0 detener rabbitmq 08:47:37
+T1 rabbit detenido 08:47:39
+completar 1 202 12.4 ms
+completar 2 202 2.2 ms
+completar 3 202 1.9 ms
+ tratamiento-realizado:turno-caida-1 | f         |        0
+ tratamiento-realizado:turno-caida-2 | f         |        0
+ tratamiento-realizado:turno-caida-3 | f         |        0
+
+T2 alertas 08:50:04: OutboxPublishFailing:firing:2026-11-24T08:48:01.852234181Z BeneficiosEventsDeadLettered:firing:2026-11-24T08:47:16.852234181Z
+melt_reservas_outbox_publicaciones_total{service="reservas",instance="f5586440762e",tipo="tratamiento.realizado",resultado="fallido"} 121
+melt_reservas_outbox_publicaciones_total{service="reservas",instance="f5586440762e",tipo="tratamiento.realizado",resultado="publicado"} 1
+melt_reservas_outbox_publicaciones_total{service="reservas",instance="f5586440762e",tipo="turno.cancelado",resultado="fallido"} 0
+melt_reservas_outbox_publicaciones_total{service="reservas",instance="f5586440762e",tipo="turno.cancelado",resultado="publicado"} 0
+reservas-1  | {"timestamp":"2026-11-24T08:47:40.272358888Z","level":"INFO","msg":"reservas_outbox_publish_failed event=tratamiento-realizado:turno-caida-1: dial tcp: lookup rabbitmq on 127.0.0.11:53: no such host","service":"reservas","instance":"f5586440762e"
+reservas-1  | {"timestamp":"2026-11-24T08:47:41.473119921Z","level":"INFO","msg":"reservas_outbox_publish_failed event=tratamiento-realizado:turno-caida-1: dial tcp: lookup rabbitmq on 127.0.0.11:53: no such host","service":"reservas","instance":"f5586440762e"
+T3 iniciar rabbitmq 08:50:11
+T4 outbox publicado (3/3) 08:50:22
+T5 puntos acreditados (3 movimientos) 08:50:22
+                           solicitud_id                           | puntos | saldo_puntos |         tipo         
+------------------------------------------------------------------+--------+--------------+----------------------
+ evento:tratamiento-realizado:tratamiento-realizado:turno-caida-1 |    100 |          100 | acreditacion_externa
+ evento:tratamiento-realizado:tratamiento-realizado:turno-caida-2 |    100 |          200 | acreditacion_externa
+ evento:tratamiento-realizado:tratamiento-realizado:turno-caida-3 |    100 |          300 | acreditacion_externa
+(3 rows)
+
+ tratamiento-realizado:turno-caida-1 |      133 | 2026-11-24 08:50:18.677877+00
+ tratamiento-realizado:turno-caida-2 |        1 | 2026-11-24 08:50:19.877776+00
+ tratamiento-realizado:turno-caida-3 |        1 | 2026-11-24 08:50:21.076214+00
+
+0.0 s reservas POST /turnos/:id/completar
+0.0 s reservas HTTP GET catalogo-profesionales
+(… 133 spans 'rabbitmq publish tratamiento.realizado' de reintentos cada 1,2 s, omitidos)
+159.3 s beneficios rabbitmq consume tratamiento.realizado
+
+# Repetición con retroceso exponencial en el outbox (10 eventos, 60 s de caída)
+T0 detener rabbitmq 08:51:42
+10 turnos completados con 202 durante la caída
+T3 iniciar rabbitmq 08:52:43
+T5 10/10 acreditados 08:52:52 — 8.5 s desde que se inició RabbitMQ
+intentos total|max: 18|9
+movimientos|distintos|saldo: 10|10|1000
+logs de reintento: 8

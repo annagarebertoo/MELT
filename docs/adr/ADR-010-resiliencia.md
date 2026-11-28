@@ -1,6 +1,6 @@
 # ADR-010 — Resiliencia ante fallos
 
-**Estado:** Propuesto  
+**Estado:** Aceptado — enmendado el 24/11/2026 (ver al final)  
 **Fecha:** 2026-10-21  
 **Entrega:** 2 — 23 de octubre de 2026  
 **Decisores:** Equipo MELT
@@ -60,3 +60,12 @@ El apartado anterior registra el estado previo al ensayo. Se ejecutó una caída
 Se mantienen como protección inicial los timeouts existentes, errores observables y separación de fallas de telemetría. La lectura GET no produce un efecto de negocio duplicado; para escrituras no se habilitarán reintentos de negocio sin idempotencia. Aún no se fija ni implementa una política adicional de reintento del gateway. El detalle puede devolver 500 ante error MongoDB y el listado 503; el proxy puede responder con errores propios. No se afirma una degradación uniforme ni un fallback de negocio implementado.
 
 La documentación técnica de [NGINX](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_next_upstream) establece reintentos predeterminados ante error/timeout, pero eso no demuestra su aplicación efectiva a la solicitud fallida observada. La documentación es apoyo técnico; los requisitos del hito siguen procediendo exclusivamente del enunciado definitivo. D10 queda validada parcialmente, con la limitación visible y sin cambios de infraestructura no autorizados.
+
+## Enmienda — 24/11/2026: mecanismos aplicados y ensayados
+
+- **Gateway → Catálogo:** detección pasiva (`max_fails=1 fail_timeout=10s`), reintento de lecturas en la otra réplica y `proxy_connect_timeout 500ms` (antes 2 s). Con una réplica detenida, 90/90 y 600/600 solicitudes respondieron 200; la solicitud que detecta la caída tarda 0,5 s.
+- **Reservas → RabbitMQ:** outbox transaccional con retroceso exponencial (1,2 s a 10 s) y drenado inmediato. Con el broker caído, completar turnos sigue respondiendo; al volver, 10 eventos pendientes se acreditaron en 8,5 s sin duplicados.
+- **Beneficios ← RabbitMQ:** reintentos acotados, DLQ y registro de mensajes fallidos; alerta `BeneficiosEventsDeadLettered`.
+- **Catálogo → Memcached / OpenSearch:** degradación a MongoDB (pruebas L3).
+
+El detalle, la línea temporal y el comportamiento por dependencia están en el [POSTMORTEM](../POSTMORTEM.md). El consumo del proveedor externo queda a cargo de la parte A1.

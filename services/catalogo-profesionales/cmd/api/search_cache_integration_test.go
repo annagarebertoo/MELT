@@ -130,11 +130,26 @@ func TestOpenSearchAndMemcachedEndToEnd(t *testing.T) {
 	brokenSearch := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "offline", http.StatusServiceUnavailable) }))
 	defer brokenSearch.Close()
 	s.search = newSearchClient(brokenSearch.URL)
-	failure := catalogRequest(router, http.MethodGet, "/tratamientos?q=unique-unavailable", "")
-	if failure.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected controlled search failure, got %d: %s", failure.Code, failure.Body.String())
-	}
+	defer func() { s.search = searching }()
 	s.cache = newMemcacheClient("127.0.0.1:1")
+	for _, fresh := range []bool{true, false} {
+		if fresh {
+			s.lastIndexSuccess.Store(time.Now().Unix())
+		} else {
+			s.lastIndexSuccess.Store(0)
+			s.control = nil // No shared freshness marker available.
+		}
+		response := catalogRequest(router, http.MethodGet, "/tratamientos?q=piel&precioMax=75&sort=precio&order=asc&page=2&limit=1", "")
+		if response.Code != http.StatusOK {
+			t.Fatalf("fallback status with fresh=%t: %d %s", fresh, response.Code, response.Body.String())
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		if result.Pagination.Total != 2 || len(result.Treatments) != 1 || result.Treatments[0].ID != "search-facial-2" {
+			t.Fatalf("fallback filters or page with fresh=%t: %#v", fresh, result)
+		}
+	}
 	fallback := catalogRequest(router, http.MethodGet, "/tratamientos?sort=nombre", "")
 	if fallback.Code != http.StatusOK {
 		t.Fatalf("Mongo read failed with cache offline: %s", fallback.Body.String())

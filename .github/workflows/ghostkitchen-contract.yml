@@ -1,0 +1,60 @@
+name: GhostKitchen provider contract
+
+on:
+  push:
+    branches: ['codex/**']
+    paths:
+      - 'docs/contracts/ghostkitchen-v1.1.0.openapi.yaml'
+      - 'services/beneficios/cmd/api/**'
+      - '.github/workflows/ghostkitchen-contract.yml'
+  pull_request:
+    paths:
+      - 'docs/contracts/ghostkitchen-v1.1.0.openapi.yaml'
+      - 'services/beneficios/cmd/api/**'
+      - '.github/workflows/ghostkitchen-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/beneficios/go.mod
+          cache-dependency-path: services/beneficios/go.sum
+      - name: Detect changes in the provider's published contract
+        run: |
+          curl -fsSL \
+            https://raw.githubusercontent.com/Guille270106/GhostKitchen-AS/main/docs/contracts/v1/openapi.yaml \
+            -o /tmp/ghostkitchen-upstream-openapi.yaml
+          if ! cmp -s docs/contracts/ghostkitchen-v1.1.0.openapi.yaml /tmp/ghostkitchen-upstream-openapi.yaml; then
+            echo 'GhostKitchen published OpenAPI changed; review and update the pinned contract and consumer test.'
+            diff -u docs/contracts/ghostkitchen-v1.1.0.openapi.yaml /tmp/ghostkitchen-upstream-openapi.yaml || true
+            exit 1
+          fi
+      - name: Start Prism from the provider's published OpenAPI contract
+        run: |
+          docker run -d --name ghostkitchen-contract -p 4010:4010 \
+            -v "$GITHUB_WORKSPACE/docs/contracts/ghostkitchen-v1.1.0.openapi.yaml:/tmp/openapi.yaml:ro" \
+            stoplight/prism:5 mock -h 0.0.0.0 -p 4010 -m false /tmp/openapi.yaml
+          for attempt in {1..30}; do
+            if curl -fsS -H 'X-API-Key: consumer-contract-test-key' \
+              http://127.0.0.1:4010/v1/sedes >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs ghostkitchen-contract
+          exit 1
+      - name: Exercise Beneficios against the published provider contract
+        working-directory: services/beneficios
+        env:
+          GHOSTKITCHEN_CONTRACT_URL: http://127.0.0.1:4010/v1
+        run: go test ./cmd/api -run '^TestGhostKitchenAgainstPublishedContract$' -count=1
+      - name: Stop Prism
+        if: always()
+        run: docker rm -f ghostkitchen-contract || true

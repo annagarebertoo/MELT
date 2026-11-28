@@ -1,5 +1,7 @@
 # MELT — Entrega 2: cierre y demostración
 
+> **Nota 24/11/2026:** este documento es el cierre histórico de la Entrega 2. D4 quedó cerrada con [ADR-004](adr/ADR-004-consistencia-concurrencia.md); D10–D13 se ensayaron y midieron (ver [POSTMORTEM](POSTMORTEM.md) y [ADR-013](adr/ADR-013-capacidad-costos.md)). El estado vigente por requisito está en [MATRIZ-CUMPLIMIENTO.md](MATRIZ-CUMPLIMIENTO.md).
+
 **Hito:** 23/10/2026. **Estado:** preparado para revisión y demostración local; cumplimiento global parcial.
 
 **Rama:** `feature/sofia-adr-entrega-2`. **Base de esta etapa:** `cc230fa` (auditoría protegida). No se crearon más ramas ni se integró a otras.

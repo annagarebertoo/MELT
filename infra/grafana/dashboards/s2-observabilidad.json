@@ -1,0 +1,131 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "min": 0, "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "sum by (replica) (rate(catalog_http_requests_total{job=\"catalogo-profesionales\"}[1m]))", "legendFormat": "{{replica}}", "refId": "A" }
+      ],
+      "title": "Solicitudes por segundo y réplica",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "min": 0, "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le, replica) (rate(catalog_http_request_duration_seconds_bucket{job=\"catalogo-profesionales\"}[5m])))", "legendFormat": "{{replica}}", "refId": "A" }
+      ],
+      "title": "Latencia HTTP p95 por réplica",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "min": 0, "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 3,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "sum by (replica) (rate(catalog_http_requests_total{job=\"catalogo-profesionales\",status=~\"5..\"}[5m]))", "legendFormat": "{{replica}}", "refId": "A" }
+      ],
+      "title": "Respuestas HTTP 5xx por segundo",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "min": 0, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 4,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "sum by (replica, status) (increase(catalog_http_requests_total{job=\"catalogo-profesionales\"}[5m]))", "legendFormat": "{{replica}} · HTTP {{status}}", "refId": "A" }
+      ],
+      "title": "Solicitudes por estado HTTP (5 min)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "min": 0, "max": 2, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 2 }] }, "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 16 },
+      "id": 5,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        { "expr": "count(up{job=\"catalogo-profesionales\"} == 1) or vector(0)", "legendFormat": "Réplicas saludables", "refId": "A" }
+      ],
+      "title": "Réplicas saludables (objetivo: 2)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "min": 0, "max": 1, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }, "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 18, "x": 6, "y": 16 },
+      "id": 6,
+      "options": { "legend": { "displayMode": "list", "placement": "right" }, "tooltip": { "mode": "single" } },
+      "targets": [
+        { "expr": "up{job=\"catalogo-profesionales\"}", "legendFormat": "{{instance}}", "refId": "A" }
+      ],
+      "title": "Disponibilidad por instancia Prometheus",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 95 }, { "color": "green", "value": 99 }] },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 21 },
+      "id": 7,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        { "expr": "(100 * avg_over_time(catalog_replica_set_available[7d])) and on() (count(count_over_time(up{job=\"catalogo-profesionales\"}[7d]) >= 40280) == 2)", "legendFormat": "Disponibilidad 7d", "refId": "A" }
+      ],
+      "title": "SLO inicial: dos réplicas disponibles ≥ 99% (7 días)",
+      "type": "stat"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 41,
+  "tags": ["MELT", "S2", "observabilidad"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "MELT · Observabilidad S2",
+  "uid": "melt-s2-observability",
+  "version": 1
+}

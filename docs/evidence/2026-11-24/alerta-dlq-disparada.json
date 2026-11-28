@@ -1,0 +1,16 @@
+[
+ {
+  "labels": {
+   "alertname": "BeneficiosEventsDeadLettered",
+   "service": "beneficios",
+   "severity": "warning"
+  },
+  "annotations": {
+   "description": "Un evento agotó los reintentos o no cumple el esquema; revisarlo desde la administración de mensajes fallidos.",
+   "summary": "Hay eventos de dominio en la cola de fallidos"
+  },
+  "state": "firing",
+  "activeAt": "2026-11-24T08:47:16.852234181Z",
+  "value": "1.7386666666666666e+00"
+ }
+]

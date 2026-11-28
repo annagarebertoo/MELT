@@ -2,9 +2,9 @@
 
 Esta guía documenta el recorrido local de identidad y reservas, los datos demo disponibles y cómo preparar datos reales. Los tratamientos, nombres, precios y agendas demo no representan precios ni personal real de MELT.
 
-## Datos demo ya cargados en el entorno local
+## Datos demo de Catálogo y agendas
 
-La base MongoDB local asociada a `docker compose` tiene estos registros:
+Los tratamientos y perfiles profesionales de demostración se guardan en MongoDB Atlas (`catalogo_db` y `profesionales_db`). Las agendas de esos perfiles pertenecen a PostgreSQL de Reservas; no se guardan en MongoDB.
 
 | Tratamiento ficticio | Precio de prueba | Duración | Profesionales demo |
 | :--- | ---: | ---: | :--- |
@@ -12,13 +12,15 @@ La base MongoDB local asociada a `docker compose` tiene estos registros:
 | Masaje relajante · Demo | ARS 24.000 | 60 min | Sofía Demo y Valentina Demo |
 | Manicura clásica · Demo | ARS 12.000 | 45 min | Valentina Demo |
 
-Ambas agendas demo están habilitadas todos los días de 09:00 a 18:00. Sus IDs son `demo-prof-sofia` y `demo-prof-valentina`; los tratamientos tienen IDs con prefijo `demo-`. Son perfiles públicos de Catálogo asociados a agendas de Reservas, **no son cuentas de Auth ni personas reales**. Sirven para explorar las fichas, elegir profesional y consultar disponibilidad con una cuenta cliente.
+Sus IDs son `demo-prof-sofia` y `demo-prof-valentina`; los tratamientos tienen IDs con prefijo `demo-`. Son perfiles públicos de Catálogo, **no son cuentas de Auth ni personas reales**. Sirven para explorar las fichas y elegir profesional.
 
-Los datos fueron cargados en el volumen local de MongoDB; cada integrante debe cargarlos en su propio entorno. El script versionado solo escribe los IDs `demo-*` en las colecciones de demostración y se puede volver a ejecutar sin duplicarlos:
+Para cargar tratamientos y perfiles ficticios en Atlas, el script solo escribe IDs `demo-*` y se puede volver a ejecutar sin duplicarlos. Requiere MongoDB Shell (`mongosh`) y que `MONGODB_URI` esté disponible como variable de entorno en esa terminal (el `.env` de Compose no se carga automáticamente en PowerShell):
 
 ```powershell
-Get-Content scripts/seed-demo-reservas.js -Raw | docker compose exec -T mongodb mongosh --quiet
+mongosh $env:MONGODB_URI --quiet --file scripts/seed-demo-reservas.js
 ```
+
+Para crear agendas ficticias de 09:00 a 18:00 todos los días, ejecutá `infra/supabase/reservas_demo.sql` en el editor SQL del proyecto Supabase **MELT-Reservas**. El script solo modifica las agendas demo con IDs `demo-prof-*`.
 
 `docker compose down` conserva el volumen; `docker compose down -v` lo elimina junto con los demás datos locales. Para crear una reserva, registrá/iniciá sesión como cliente desde la interfaz. Para altas administrativas por API se necesita una cuenta administrativa de Auth configurada.
 
@@ -99,8 +101,8 @@ La relación debe quedar completa en ambos sentidos: `tratamiento.profesionalesI
 1. Abre `http://localhost:8080`, crea una cuenta cliente e inicia sesión.
 2. Abre una ficha demo, por ejemplo **Limpieza facial hidratante · Demo**, elige a **Sofía Demo** y una fecha futura.
 3. Consultá horarios y agregá uno al carrito. La retención dura 10 minutos y todavía no inicia un pago.
-4. Agregá otros tratamientos si querés. **Mi carrito** muestra subtotal, descuentos, total, seña total del 30 % y vencimiento de cada retención. Pulsá **Confirmar compra** para ejecutar una única simulación y confirmar todos los turnos en conjunto.
-5. En **Mis reservas**, cancela un turno. Con 24 horas o más de anticipación se registra la devolución simulada total; con menos de 24 horas no hay devolución. La cancelación libera la agenda.
+4. Agregá otros tratamientos si querés. **Mi carrito** muestra subtotal, descuentos, total, seña total del 30 % y vencimiento de cada retención. Pulsá **Confirmar compra** para pagar la seña en Checkout Pro de Mercado Pago. MELT confirma todos los turnos juntos sólo después de verificar el pago aprobado en servidor.
+5. En **Mis reservas**, cancela un turno. Con 24 horas o más de anticipación se solicita la devolución de la seña a Mercado Pago; con menos de 24 horas no hay devolución. La cancelación libera la agenda.
 
 ## Agenda y turnos profesionales
 
@@ -122,15 +124,16 @@ Reservas conserva sin migración destructiva la colección `carritos_bloqueos`; 
 - `GET /api/v1/reservas/carrito`: lista únicamente las retenciones propias vigentes y calcula subtotal, descuentos, total, seña y restante.
 - `POST /api/v1/reservas/carrito/bloqueos` con `diferirPago: true`: crea una retención por 10 minutos y no llama a Pagos. Omitir el campo conserva la integración antigua que inicia el pago inmediatamente.
 - `DELETE /api/v1/reservas/carrito/bloqueos/{id}`: quita el elemento, libera los minutos de manera transaccional y restituye el beneficio asociado.
-- `POST /api/v1/reservas/carrito/checkout` con `idempotencyKey`: recalcula precios vigentes y beneficios en backend, calcula una sola seña total del 30 %, registra una operación simulada y confirma todos los turnos dentro de una única transacción.
+- `POST /api/v1/reservas/carrito/checkout` con `idempotencyKey`: recalcula precios vigentes y beneficios en backend, calcula una sola seña total del 30 %, crea/recupera la preferencia y devuelve `checkout.urlPago` para redirigir a Mercado Pago.
+- `POST /api/v1/reservas/carrito/checkout/retorno` con `checkoutId` y `pagoId`: verifica el estado directamente con Mercado Pago; si está aprobado, confirma todos los turnos dentro de una única transacción PostgreSQL.
 
-Los elementos pueden corresponder a diferentes categorías, profesionales, fechas y horarios. Una falla de validación impide confirmar cualquier turno del checkout; si la simulación ya fue aprobada, Pagos la revierte. Una respuesta de rechazo conserva las retenciones vigentes para reintentar o quitar elementos. Repetir la clave de idempotencia recupera el mismo resultado. Los endpoints antiguos de pago por elemento se conservan como compatibilidad, pero la interfaz no los utiliza.
+Los elementos pueden corresponder a diferentes categorías, profesionales, fechas y horarios. Una falla de validación impide confirmar cualquier turno del checkout. Un rechazo conserva las retenciones vigentes para reintentar o quitar elementos. Repetir la clave de idempotencia recupera la misma preferencia. Una notificación Webhook firmada también permite procesar una aprobación aunque el cliente no vuelva a la página. Los endpoints antiguos de pago por elemento se conservan como compatibilidad, pero la interfaz no los utiliza.
 
-## Simulador académico de pagos
+## Mercado Pago en modo de prueba
 
-No se usa pasarela externa, preferencia ni webhook: el servicio Pagos registra una transacción simulada en su propia base MongoDB `pagos_db`. El resultado predeterminado es aprobado para que la demo funcione sin credenciales; configurar `PAYMENT_SIMULATOR_RESULT=rejected` solo en el backend permite probar rechazos. El frontend no acepta el resultado del cliente. No se efectúan cobros reales.
+Pagos usa sólo el Access Token copiado con el entorno **Prueba** seleccionado y `MP_ENV=test`. La URL de retorno y el Webhook usan el Gateway HTTPS compartido. El backend valida la firma del Webhook y vuelve a consultar el pago a Mercado Pago antes de tocar Reservas; valida identificador, referencia, importe y moneda contra el checkout pendiente. No se confía en `live_mode` del aviso para rechazar órdenes `ORDTST` ni pagos devueltos por las credenciales de prueba, porque Mercado Pago puede enviar ese indicador como `true` en algunas operaciones sandbox. Nunca se confirma un turno por el parámetro `status` del navegador.
 
-Si Reservas no puede completar una compra aprobada, el checkout transaccional evita confirmaciones parciales y solicita a Pagos revertir la operación simulada. El estado de recuperación queda persistido si esa compensación no está disponible.
+La seña se cobra mediante Checkout Pro. La devolución de seña solicitada por la política de cancelación también se envía a Mercado Pago. Una compra aprobada cuya retención haya vencido o ya no pueda confirmarse requiere revisión operativa y eventual devolución desde Mercado Pago.
 
 ## Pruebas reproducibles
 

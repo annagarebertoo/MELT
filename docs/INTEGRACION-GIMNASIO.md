@@ -1,7 +1,34 @@
-# Integración de Gimnasio con MELT
+# API de puntos del GYM en MELT
 
-URL base registrada en este documento: `https://melt-gateway-prueba.onrender.com/api/v1`.
-**URL histórica/no verificada en esta actualización:** no asumir que está activa ni que apunta a la última versión. El consumidor debe obtener del equipo la URL verificada del Gateway y probar `/health` antes de integrar. El contrato OpenAPI conserva la misma dirección como referencia de entorno cuando se escribió.
+El GYM calcula cuántos puntos otorgar. MELT recibe esa cantidad, identifica al destinatario y guarda el movimiento en Beneficios. El GYM conserva la lógica de planes y membresías.
+
+## Demostración con un socio ficticio
+
+1. Iniciar sesión en el GYM con un socio de prueba, por ejemplo `ana.demo@example.test`. Para demostrar el alta, elegir un email que todavía no tenga cuenta en MELT.
+2. Desde el **backend del GYM**, enviar la solicitud del ejemplo. La clave compartida se configura como secreto del servidor. Para cada operación nueva, generar una referencia única y guardarla antes del envío.
+3. Con **HTTP 202**, leer `registroUrl` de la respuesta. En el perfil privado de ese socio, el GYM debe mostrar **Recibir mis puntos en MELT**, enlazado a la URL completa, incluido el fragmento después de `#`. Esto permite hacer la demo sin una casilla de correo. El GYM debe asociar el enlace al socio autenticado que originó la operación.
+4. Abrir el enlace. MELT muestra los puntos pendientes y el email del destinatario. Registrarse con ese email o iniciar sesión con la cuenta correspondiente. Al confirmar la acreditación, Mi cuenta muestra **Recibiste 150 puntos del GYM** y el saldo posterior. El saldo y el movimiento se pueden consultar al volver a entrar.
+5. Reenviar la misma solicitud. Después de acreditar, debe devolver **HTTP 200** y el saldo debe seguir igual. Para sumar puntos por una operación distinta, usar otra referencia.
+
+### Solicitud de ejemplo
+
+```http
+POST /api/v1/beneficios/acreditaciones HTTP/1.1
+Host: melt-gateway-prueba.onrender.com
+Content-Type: application/json
+X-Partner-Key: <clave privada del backend del GYM>
+
+{"email":"ana.demo@example.test","puntos":150,"referencia":"gym-demo-0001"}
+```
+
+### Qué muestra el GYM según la respuesta
+
+| HTTP | Qué ocurrió en MELT | Acción en el GYM |
+|---|---|---|
+| 201 | Se acreditaron los puntos al usuario existente. | Mostrar la cantidad acreditada. |
+| 202 | La acreditación está pendiente de vinculación. | Mostrar al socio el botón con `registroUrl`. Los puntos quedan pendientes hasta confirmar. |
+| 200 | La operación ya se acreditó. | Mostrarla como completada. Conservar la referencia original. |
+| 409 | La referencia se reutilizó con otros datos o el destinatario está inactivo. | Revisar la operación antes de reintentar. |
 
 ## Responsabilidades y autenticación
 Gimnasio determina la cantidad. MELT no consulta planes ni membresías. El backend consumidor llama `POST /beneficios/acreditaciones` (alias `/beneficios/acreditar-puntos`) con `Content-Type: application/json` y `X-Partner-Key: <clave compartida por privado>`. No incluir la clave en frontend, enlaces ni repositorios.

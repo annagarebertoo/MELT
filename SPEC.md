@@ -335,7 +335,7 @@ Esta sección consolida las correcciones acordadas por el equipo. Las reglas sig
 ### 12.5. Búsqueda, datos y caché
 
 - **RN-21 — Palabras clave del tratamiento.** Cada tratamiento incluye un arreglo `keywords` con términos relacionados, sinónimos y expresiones de búsqueda. La búsqueda indexa estos términos además del nombre y los campos ya definidos; los filtros, paginación y ordenamiento del contrato público deben mantenerse consistentes con el índice.
-- **Decisión de persistencia:** se separa la persistencia documental en dos bases lógicas MongoDB: una para Catálogo y otra para Profesionales. Cada servicio conserva la propiedad de sus datos; compartir una instancia física puede evaluarse para el entorno local, pero las bases y permisos lógicos se mantienen separados.
+- **Decisión de persistencia vigente:** Catálogo y Profesionales conservan sus datos documentales en MongoDB. Auth y Pagos también usan MongoDB. Reservas y Beneficios son dueños de bases PostgreSQL privadas, separadas, en sus respectivos proyectos Supabase. La decisión completa y su estado se registran en [ADR-003](docs/adr/ADR-003-persistencia.md) y [la arquitectura actual](docs/ARCHITECTURE.md). Esta regla reemplaza las notas de persistencia de versiones anteriores de esta especificación.
 - **Decisión de caché:** se reemplaza Redis por Memcached para la caché de lecturas del catálogo. La caché no es fuente de verdad; se documentarán TTL, invalidación, métricas de hit/miss y comportamiento ante indisponibilidad.
 
 ### 12.6. Criterios de aceptación adicionales
@@ -351,7 +351,7 @@ Esta sección consolida las correcciones acordadas por el equipo. Las reglas sig
 
 ## 13. Estado de implementación y verificación
 
-**Referencia del estado de código:** `develop`, `ea1ead7e85f533ba54aff85bd95958bb749897a0`. La siguiente tabla es una revisión documental de rutas/código y no una nueva ejecución de pruebas. El registro histórico de pruebas y límites está en [MATRIZ-CUMPLIMIENTO.md](docs/MATRIZ-CUMPLIMIENTO.md) y `docs/evidence/`.
+**Referencia histórica:** `develop`, `ea1ead7e85f533ba54aff85bd95958bb749897a0`. Esa revisión es anterior a la migración de Reservas y Beneficios a PostgreSQL y no representa el estado actual. Para la persistencia vigente consultar [arquitectura](docs/ARCHITECTURE.md), [ADR-003](docs/adr/ADR-003-persistencia.md) y [configuración Supabase](infra/supabase/README.md). La tabla siguiente conserva el estado de esa revisión histórica; no es una nueva ejecución de pruebas.
 
 | Área | Estado visible en el código de referencia | Evidencia / límite |
 |---|---|---|
@@ -362,7 +362,7 @@ Esta sección consolida las correcciones acordadas por el equipo. Las reglas sig
 | Checkout/pago | Checkout agrupado y pago/devolución simulados; no existe cobro externo en esta versión. | `services/reservas/cmd/api/checkout.go`, `services/pagos/main.go`, ADR-015. |
 | Beneficios | Puntos, reglas, recompensas, canjes, integración de eventos, acreditación de partner y proxy GhostKitchen. | No confundir evento de tratamiento realizado con pago; proveedor D9 asignado oficialmente sin confirmar. |
 | Notificaciones por correo | No se encontró servicio/cliente de correo operativo en la configuración versionada. | Los requisitos de notificación de este documento permanecen pendientes; RabbitMQ de eventos de beneficios no acredita envío de correo. |
-| Persistencia | MongoDB replica set y bases por servicio. PostgreSQL está declarado en Compose, sin consumidor business localizado. | No afirmar que MELT usa PostgreSQL funcionalmente. |
+| Persistencia (estado de esa revisión) | MongoDB replica set; los servicios Reservas y Beneficios aún no usaban PostgreSQL en ese commit. | Superado por la migración documentada en ADR-003 y la configuración actual de Compose. |
 | Resiliencia y observabilidad | Logs/trazas y métricas parciales; ejercicio de réplica produjo 1 HTTP 504 de 12 solicitudes. | Failover transparente no comprobado; revisar [Postmortem](docs/POSTMORTEM.md). |
 | Despliegue | Configuración de Render histórica existe en documentación/configuración versionada. | La URL, commit y servicios públicos actuales no se verificaron en esta sesión. |
 

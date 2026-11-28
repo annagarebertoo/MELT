@@ -7,6 +7,7 @@ on:
       - develop
       - docs/correcciones-reglas-negocio
       - 'feature/**'
+      - 'codex/**'
   pull_request:
 
 permissions:
@@ -30,6 +31,7 @@ jobs:
           - services/reservas
           - services/beneficios
           - services/auth
+          - services/pagos
     defaults:
       run:
         working-directory: ${{ matrix.service }}
@@ -58,10 +60,8 @@ jobs:
           go-version-file: ${{ matrix.service }}/go.mod
           cache: true
           cache-dependency-path: ${{ matrix.service }}/go.sum
-      - name: Normalizar y descargar dependencias
-        run: |
-          go mod tidy
-          go mod download
+      - name: Verificar dependencias sin modificar go.mod ni go.sum
+        run: go mod download
       - name: Ejecutar pruebas
         run: go test -race ./...
       - name: Compilar servicio
@@ -76,25 +76,30 @@ jobs:
       MELT_INTERNAL_KEY: ci-internal-secret-at-least-32-characters
       BENEFICIOS_PARTNER_KEY: ci-partner-key-only-for-tests
       BENEFICIOS_INVITATION_SECRET: ci-invitation-secret-at-least-32-characters-long
-      MELT_PUBLIC_URL: http://localhost:8080
+      MONGODB_URI: mongodb://ci-mongo:27017/?replicaSet=melt-ci
+      RESERVAS_DATABASE_URL: postgres://postgres:ci@ci-postgres:5432/reservas?sslmode=disable
+      BENEFICIOS_DATABASE_URL: postgres://postgres:ci@ci-postgres:5432/beneficios?sslmode=disable
+      MELT_PUBLIC_URL: http://localhost:8088
     steps:
       - uses: actions/checkout@v4
-      - name: Levantar gateway y servicios necesarios
-        run: docker compose up --build -d gateway
+      - name: Validar y levantar el entorno reproducible local
+        run: |
+          docker compose --project-name melt-local --env-file .env.local.example -f compose.yaml -f compose.local.yaml config --quiet
+          docker compose --project-name melt-local --env-file .env.local.example -f compose.yaml -f compose.local.yaml up --build -d gateway
       - name: Probar sesión, gateway, contrato y acceso directo a Beneficios
         run: |
-          docker run --rm --network melt_default -v "$PWD/scripts:/scripts:ro" \
+          docker run --rm --network melt-local_default --env-file .env.local.example -v "$PWD/scripts:/scripts:ro" \
             -e BASE_URL=http://gateway -e BENEFICIOS_DIRECT_URL=http://beneficios:8083 \
             -e BENEFICIOS_PARTNER_KEY -e AUTH_ADMIN_EMAIL -e AUTH_ADMIN_PASSWORD \
             alpine:3.22 sh -c 'apk add --no-cache bash curl jq >/dev/null && bash /scripts/smoke-auth-gateway.sh'
       - name: Probar pendientes, registro con enlace y cuenta existente
-        run: python3 scripts/smoke-invitaciones.py
+        run: BASE_URL=http://localhost:8088 python3 scripts/smoke-invitaciones.py
       - name: Diagnóstico si falla la integración
         if: failure()
-        run: docker compose logs --no-color gateway auth reservas beneficios mongodb
+        run: docker compose logs --no-color gateway auth reservas beneficios pagos
       - name: Detener entorno
         if: always()
-        run: docker compose down -v
+        run: docker compose --project-name melt-local --env-file .env.local.example -f compose.yaml -f compose.local.yaml down -v
 
   beneficios-transactions:
     runs-on: ubuntu-latest
@@ -159,3 +164,57 @@ jobs:
       - name: Detener MongoDB temporal
         if: always()
         run: docker rm -f catalogo-mongo
+
+  consistencia-eventos-busqueda:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [l1, l2, l3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/reservas/go.mod
+          cache-dependency-path: services/*/go.sum
+      - name: Pruebas ${{ matrix.suite }} con dependencias descartables
+        run: scripts/test-consistencia-integracion.sh ${{ matrix.suite }}
+      - name: Diagnóstico de contenedores
+        if: failure()
+        run: docker compose -f compose.test.yaml -p melt-test logs --no-color --tail 200 || true
+
+  contracts-and-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Comprobar reglas de seguridad y reintentos del Gateway
+        run: python scripts/test-gateway-safety.py
+      - name: Validar configuración reproducible local
+        run: docker compose --project-name melt-local --env-file .env.local.example -f compose.yaml -f compose.local.yaml config --quiet
+      - name: Validar sintaxis del frontend
+        run: node --check infra/nginx/web/app.js
+      - name: Validar contratos OpenAPI vigentes
+        run: |
+          python -m pip install 'openapi-spec-validator==0.7.2'
+          python - <<'PY'
+          from pathlib import Path
+          from openapi_spec_validator import validate
+          from openapi_spec_validator.readers import read_from_filename
+          contracts = [
+              'acreditar-puntos-v1.openapi.yaml',
+              'autenticacion-v1.openapi.yaml',
+              'pagos-checkout-pro-v1.openapi.yaml',
+              'reservas-checkout-v1.openapi.yaml',
+          ]
+          for name in contracts:
+              path = Path('docs/contracts') / name
+              spec, base_uri = read_from_filename(str(path))
+              validate(spec, base_uri=base_uri)
+              print(f'OK: {path}')
+          PY

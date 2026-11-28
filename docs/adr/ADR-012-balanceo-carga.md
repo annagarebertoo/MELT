@@ -1,6 +1,6 @@
 # ADR-012 — Balanceo de carga
 
-**Estado:** Propuesto  
+**Estado:** Aceptado — ensayado el 24/11/2026 (ver al final)  
 **Fecha:** 2026-10-21  
 **Entrega:** 2 — 23 de octubre de 2026  
 **Decisores:** Equipo MELT
@@ -49,3 +49,17 @@ No se detuvieron ni reiniciaron contenedores. Para cerrar la estrategia de dispo
 Se conserva NGINX sobre dos réplicas de Catálogo. La resolución DNS existente actualiza destinos con vigencia de cinco segundos. Sin algoritmo explícito, el balanceo utiliza round-robin ponderado predeterminado; los parámetros pasivos predeterminados son `max_fails=1` y `fail_timeout=10s`, según la [documentación técnica de NGINX](https://nginx.org/en/docs/http/ngx_http_upstream_module.html#server). No hay healthcheck activo configurado. Estos valores predeterminados explican el mecanismo previsto, pero el ensayo no midió directamente sus temporizadores ni prueba una exclusión exacta de diez segundos.
 
 Con la réplica 2 detenida por autorización expresa, se observaron once respuestas 200 de la réplica 1 y un 504. Se restauró el mismo contenedor; salud volvió a ser correcta y las doce consultas siguientes respondieron 200 con las dos instancias presentes en logs. La recuperación y reincorporación se comprobaron; la tolerancia sin errores no. Se mantiene D12 parcial hasta investigar el 504 y verificar la política efectiva de intentos, exclusión y recuperación. Ver [postmortem](../POSTMORTEM.md) y [evidencia](../evidence/fallo-replica-2026-10-23.json).
+
+## Ajuste posterior en la rama Supabase (pendiente de ensayo)
+
+Se hizo explícito en `infra/nginx/default.conf` el umbral pasivo `max_fails=1 fail_timeout=10s` para Catálogo y se configuró `proxy_next_upstream error timeout http_502 http_503 http_504` con `proxy_next_upstream_tries 2` en sus rutas. NGINX no reintenta solicitudes no idempotentes ya enviadas al upstream salvo habilitar explícitamente `non_idempotent` (que **no** se habilitó). El objetivo es que una lectura pueda reintentarse en otra réplica si el destino inicial falla.
+
+**Limitación importante:** dos intentos no garantizan éxito cuando Docker DNS devuelve una única dirección o no existe otra réplica saludable. La detección sigue siendo pasiva, no un healthcheck activo. El cambio **no está validado con una réplica caída**, no elimina por sí solo el 504 del ensayo anterior y no se desplegó a Render.
+
+Para verificar D12: levantar dos réplicas locales, validar la configuración con `nginx -t`, registrar respuestas, request IDs y upstreams, detener una réplica en un entorno de prueba autorizado, medir errores y tiempos de recuperación, restaurarla y repetir. Registrar resultados en `docs/evidence/` antes de marcar el requisito como cumplido.
+
+## Enmienda — 24/11/2026: ensayo del ajuste
+
+El ajuste anterior se ensayó con `scripts/verify-s1-failover.py` y `scripts/benchmark-s3-resilience.py` (ahora también funcionan sobre Docker en Linux). Con una réplica detenida, todas las solicitudes respondieron 200 y la distribución pasó de 15/15 a 0/30 mientras duró la caída; la réplica restaurada volvió a recibir tráfico cuando venció `fail_timeout` (≈10 s). El 504 del ensayo de octubre no se repitió.
+
+Se observó que la única solicitud afectada esperaba el `proxy_connect_timeout` completo (2 s) antes de reintentar. Se bajó a **500 ms** en las rutas de Catálogo y se repitió: esa solicitud tardó 502 ms. La distribución y el estado de cada réplica se observan en Prometheus (`up` y `catalog_http_requests_total` por `replica`) y en el tablero **MELT · Observabilidad S2**. Evidencia en [`docs/evidence/2026-11-24/`](../evidence/2026-11-24/) y análisis en el [POSTMORTEM](../POSTMORTEM.md).

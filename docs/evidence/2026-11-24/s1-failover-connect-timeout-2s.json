@@ -1,0 +1,1903 @@
+{
+  "schema": "melt-s1-failover/v1",
+  "started_at": "2026-11-24T05:27:44.903-03:00",
+  "finished_at": "2026-11-24T05:28:05.641-03:00",
+  "repository": "/home/user/MELT",
+  "branch": "claude/project-thread-dirwx9",
+  "commit": "e7d75266d851b896b74f4b01899f3bef2a4a7242",
+  "working_tree_changes": [
+    "M scripts/verify-s1-failover.py",
+    "?? output/"
+  ],
+  "project": "melt-s1",
+  "compose_file": "compose.s1.yaml",
+  "network": "melt-s1_s1",
+  "endpoint_from_gateway_container": "http://127.0.0.1/api/v1/catalogo/tratamientos?page=1&limit=10",
+  "request_count_target_per_phase": 30,
+  "replicas": [
+    {
+      "id": "ae3a435cf79afdf64120a803089b543e9856e24c817fc7457a5cd48c705703b3",
+      "name": "melt-s1-catalogo-profesionales-2",
+      "project": "melt-s1",
+      "service": "catalogo-profesionales",
+      "hostname": "ae3a435cf79a",
+      "running": true,
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-11-24T08:27:30.040049399Z",
+      "networks": [
+        "melt-s1_s1"
+      ],
+      "network_ips": {
+        "melt-s1_s1": "172.18.0.7"
+      }
+    },
+    {
+      "id": "e2b0ae624c3c9c9590d1338df1081c2e565cff973aca9223949d1de5238727c2",
+      "name": "melt-s1-catalogo-profesionales-1",
+      "project": "melt-s1",
+      "service": "catalogo-profesionales",
+      "hostname": "e2b0ae624c3c",
+      "running": true,
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-11-24T08:27:29.937563772Z",
+      "networks": [
+        "melt-s1_s1"
+      ],
+      "network_ips": {
+        "melt-s1_s1": "172.18.0.6"
+      }
+    }
+  ],
+  "target_replica": {
+    "id": "e2b0ae624c3c9c9590d1338df1081c2e565cff973aca9223949d1de5238727c2",
+    "name": "melt-s1-catalogo-profesionales-1",
+    "project": "melt-s1",
+    "service": "catalogo-profesionales",
+    "hostname": "e2b0ae624c3c",
+    "running": true,
+    "status": "running",
+    "health": "healthy",
+    "started_at": "2026-11-24T08:27:29.937563772Z",
+    "networks": [
+      "melt-s1_s1"
+    ],
+    "network_ips": {
+      "melt-s1_s1": "172.18.0.6"
+    }
+  },
+  "healthy_replica_during_outage": {
+    "id": "ae3a435cf79afdf64120a803089b543e9856e24c817fc7457a5cd48c705703b3",
+    "name": "melt-s1-catalogo-profesionales-2",
+    "project": "melt-s1",
+    "service": "catalogo-profesionales",
+    "hostname": "ae3a435cf79a",
+    "running": true,
+    "status": "running",
+    "health": "healthy",
+    "started_at": "2026-11-24T08:27:30.040049399Z",
+    "networks": [
+      "melt-s1_s1"
+    ],
+    "network_ips": {
+      "melt-s1_s1": "172.18.0.7"
+    }
+  },
+  "phases": {
+    "baseline": [
+      {
+        "phase": "baseline",
+        "sequence": 1,
+        "request_id": "s1-c28fdcd822-baseline-001",
+        "http_status": 200,
+        "probe_wall_ms": 72.896,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 6.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 2,
+        "request_id": "s1-c28fdcd822-baseline-002",
+        "http_status": 200,
+        "probe_wall_ms": 74.016,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 3,
+        "request_id": "s1-c28fdcd822-baseline-003",
+        "http_status": 200,
+        "probe_wall_ms": 82.152,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 4,
+        "request_id": "s1-c28fdcd822-baseline-004",
+        "http_status": 200,
+        "probe_wall_ms": 68.892,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 3.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 5,
+        "request_id": "s1-c28fdcd822-baseline-005",
+        "http_status": 200,
+        "probe_wall_ms": 70.621,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 6,
+        "request_id": "s1-c28fdcd822-baseline-006",
+        "http_status": 200,
+        "probe_wall_ms": 68.201,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 7,
+        "request_id": "s1-c28fdcd822-baseline-007",
+        "http_status": 200,
+        "probe_wall_ms": 62.803,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 8,
+        "request_id": "s1-c28fdcd822-baseline-008",
+        "http_status": 200,
+        "probe_wall_ms": 71.557,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 9,
+        "request_id": "s1-c28fdcd822-baseline-009",
+        "http_status": 200,
+        "probe_wall_ms": 80.695,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 10,
+        "request_id": "s1-c28fdcd822-baseline-010",
+        "http_status": 200,
+        "probe_wall_ms": 62.579,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 11,
+        "request_id": "s1-c28fdcd822-baseline-011",
+        "http_status": 200,
+        "probe_wall_ms": 64.051,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 12,
+        "request_id": "s1-c28fdcd822-baseline-012",
+        "http_status": 200,
+        "probe_wall_ms": 81.428,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 13,
+        "request_id": "s1-c28fdcd822-baseline-013",
+        "http_status": 200,
+        "probe_wall_ms": 62.263,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 14,
+        "request_id": "s1-c28fdcd822-baseline-014",
+        "http_status": 200,
+        "probe_wall_ms": 61.955,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 15,
+        "request_id": "s1-c28fdcd822-baseline-015",
+        "http_status": 200,
+        "probe_wall_ms": 76.682,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 16,
+        "request_id": "s1-c28fdcd822-baseline-016",
+        "http_status": 200,
+        "probe_wall_ms": 72.658,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 17,
+        "request_id": "s1-c28fdcd822-baseline-017",
+        "http_status": 200,
+        "probe_wall_ms": 94.412,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 18,
+        "request_id": "s1-c28fdcd822-baseline-018",
+        "http_status": 200,
+        "probe_wall_ms": 64.031,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 19,
+        "request_id": "s1-c28fdcd822-baseline-019",
+        "http_status": 200,
+        "probe_wall_ms": 71.801,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 20,
+        "request_id": "s1-c28fdcd822-baseline-020",
+        "http_status": 200,
+        "probe_wall_ms": 62.235,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 21,
+        "request_id": "s1-c28fdcd822-baseline-021",
+        "http_status": 200,
+        "probe_wall_ms": 72.516,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 22,
+        "request_id": "s1-c28fdcd822-baseline-022",
+        "http_status": 200,
+        "probe_wall_ms": 64.074,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 23,
+        "request_id": "s1-c28fdcd822-baseline-023",
+        "http_status": 200,
+        "probe_wall_ms": 66.288,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 24,
+        "request_id": "s1-c28fdcd822-baseline-024",
+        "http_status": 200,
+        "probe_wall_ms": 65.854,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 25,
+        "request_id": "s1-c28fdcd822-baseline-025",
+        "http_status": 200,
+        "probe_wall_ms": 63.096,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 26,
+        "request_id": "s1-c28fdcd822-baseline-026",
+        "http_status": 200,
+        "probe_wall_ms": 59.722,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 27,
+        "request_id": "s1-c28fdcd822-baseline-027",
+        "http_status": 200,
+        "probe_wall_ms": 68.02,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 28,
+        "request_id": "s1-c28fdcd822-baseline-028",
+        "http_status": 200,
+        "probe_wall_ms": 68.643,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 29,
+        "request_id": "s1-c28fdcd822-baseline-029",
+        "http_status": 200,
+        "probe_wall_ms": 64.719,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "baseline",
+        "sequence": 30,
+        "request_id": "s1-c28fdcd822-baseline-030",
+        "http_status": 200,
+        "probe_wall_ms": 91.878,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      }
+    ],
+    "one_replica_stopped": [
+      {
+        "phase": "stopped",
+        "sequence": 1,
+        "request_id": "s1-c28fdcd822-stopped-001",
+        "http_status": 200,
+        "probe_wall_ms": 70.161,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 2,
+        "request_id": "s1-c28fdcd822-stopped-002",
+        "http_status": 200,
+        "probe_wall_ms": 2080.545,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2002.0,
+        "upstream": [
+          "172.18.0.6:8081",
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 3,
+        "request_id": "s1-c28fdcd822-stopped-003",
+        "http_status": 200,
+        "probe_wall_ms": 69.28,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 4,
+        "request_id": "s1-c28fdcd822-stopped-004",
+        "http_status": 200,
+        "probe_wall_ms": 72.209,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 5,
+        "request_id": "s1-c28fdcd822-stopped-005",
+        "http_status": 200,
+        "probe_wall_ms": 64.671,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 6,
+        "request_id": "s1-c28fdcd822-stopped-006",
+        "http_status": 200,
+        "probe_wall_ms": 79.507,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 7,
+        "request_id": "s1-c28fdcd822-stopped-007",
+        "http_status": 200,
+        "probe_wall_ms": 77.586,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 8,
+        "request_id": "s1-c28fdcd822-stopped-008",
+        "http_status": 200,
+        "probe_wall_ms": 82.858,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 9,
+        "request_id": "s1-c28fdcd822-stopped-009",
+        "http_status": 200,
+        "probe_wall_ms": 75.293,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 10,
+        "request_id": "s1-c28fdcd822-stopped-010",
+        "http_status": 200,
+        "probe_wall_ms": 71.882,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 11,
+        "request_id": "s1-c28fdcd822-stopped-011",
+        "http_status": 200,
+        "probe_wall_ms": 63.983,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 12,
+        "request_id": "s1-c28fdcd822-stopped-012",
+        "http_status": 200,
+        "probe_wall_ms": 75.158,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 13,
+        "request_id": "s1-c28fdcd822-stopped-013",
+        "http_status": 200,
+        "probe_wall_ms": 65.363,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 14,
+        "request_id": "s1-c28fdcd822-stopped-014",
+        "http_status": 200,
+        "probe_wall_ms": 48.594,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 15,
+        "request_id": "s1-c28fdcd822-stopped-015",
+        "http_status": 200,
+        "probe_wall_ms": 56.594,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 16,
+        "request_id": "s1-c28fdcd822-stopped-016",
+        "http_status": 200,
+        "probe_wall_ms": 68.841,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 17,
+        "request_id": "s1-c28fdcd822-stopped-017",
+        "http_status": 200,
+        "probe_wall_ms": 66.517,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 18,
+        "request_id": "s1-c28fdcd822-stopped-018",
+        "http_status": 200,
+        "probe_wall_ms": 76.872,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 19,
+        "request_id": "s1-c28fdcd822-stopped-019",
+        "http_status": 200,
+        "probe_wall_ms": 71.908,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 20,
+        "request_id": "s1-c28fdcd822-stopped-020",
+        "http_status": 200,
+        "probe_wall_ms": 65.657,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 21,
+        "request_id": "s1-c28fdcd822-stopped-021",
+        "http_status": 200,
+        "probe_wall_ms": 67.736,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 22,
+        "request_id": "s1-c28fdcd822-stopped-022",
+        "http_status": 200,
+        "probe_wall_ms": 65.019,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 23,
+        "request_id": "s1-c28fdcd822-stopped-023",
+        "http_status": 200,
+        "probe_wall_ms": 63.935,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 24,
+        "request_id": "s1-c28fdcd822-stopped-024",
+        "http_status": 200,
+        "probe_wall_ms": 63.076,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 25,
+        "request_id": "s1-c28fdcd822-stopped-025",
+        "http_status": 200,
+        "probe_wall_ms": 65.673,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 26,
+        "request_id": "s1-c28fdcd822-stopped-026",
+        "http_status": 200,
+        "probe_wall_ms": 74.884,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 27,
+        "request_id": "s1-c28fdcd822-stopped-027",
+        "http_status": 200,
+        "probe_wall_ms": 71.888,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 28,
+        "request_id": "s1-c28fdcd822-stopped-028",
+        "http_status": 200,
+        "probe_wall_ms": 54.464,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 29,
+        "request_id": "s1-c28fdcd822-stopped-029",
+        "http_status": 200,
+        "probe_wall_ms": 56.529,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "stopped",
+        "sequence": 30,
+        "request_id": "s1-c28fdcd822-stopped-030",
+        "http_status": 200,
+        "probe_wall_ms": 60.729,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      }
+    ],
+    "recovery": [
+      {
+        "phase": "recovery",
+        "sequence": 1,
+        "request_id": "s1-c28fdcd822-recovery-001",
+        "http_status": 200,
+        "probe_wall_ms": 73.263,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 5.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 2,
+        "request_id": "s1-c28fdcd822-recovery-002",
+        "http_status": 200,
+        "probe_wall_ms": 70.762,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 3,
+        "request_id": "s1-c28fdcd822-recovery-003",
+        "http_status": 200,
+        "probe_wall_ms": 69.567,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 4,
+        "request_id": "s1-c28fdcd822-recovery-004",
+        "http_status": 200,
+        "probe_wall_ms": 68.893,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 5,
+        "request_id": "s1-c28fdcd822-recovery-005",
+        "http_status": 200,
+        "probe_wall_ms": 69.591,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 3.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 6,
+        "request_id": "s1-c28fdcd822-recovery-006",
+        "http_status": 200,
+        "probe_wall_ms": 73.686,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 7,
+        "request_id": "s1-c28fdcd822-recovery-007",
+        "http_status": 200,
+        "probe_wall_ms": 53.408,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 8,
+        "request_id": "s1-c28fdcd822-recovery-008",
+        "http_status": 200,
+        "probe_wall_ms": 86.304,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 9,
+        "request_id": "s1-c28fdcd822-recovery-009",
+        "http_status": 200,
+        "probe_wall_ms": 71.315,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 10,
+        "request_id": "s1-c28fdcd822-recovery-010",
+        "http_status": 200,
+        "probe_wall_ms": 64.137,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 11,
+        "request_id": "s1-c28fdcd822-recovery-011",
+        "http_status": 200,
+        "probe_wall_ms": 59.213,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 12,
+        "request_id": "s1-c28fdcd822-recovery-012",
+        "http_status": 200,
+        "probe_wall_ms": 64.19,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 13,
+        "request_id": "s1-c28fdcd822-recovery-013",
+        "http_status": 200,
+        "probe_wall_ms": 69.387,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 14,
+        "request_id": "s1-c28fdcd822-recovery-014",
+        "http_status": 200,
+        "probe_wall_ms": 84.384,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 15,
+        "request_id": "s1-c28fdcd822-recovery-015",
+        "http_status": 200,
+        "probe_wall_ms": 75.903,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 16,
+        "request_id": "s1-c28fdcd822-recovery-016",
+        "http_status": 200,
+        "probe_wall_ms": 78.744,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 17,
+        "request_id": "s1-c28fdcd822-recovery-017",
+        "http_status": 200,
+        "probe_wall_ms": 77.141,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 18,
+        "request_id": "s1-c28fdcd822-recovery-018",
+        "http_status": 200,
+        "probe_wall_ms": 69.193,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 19,
+        "request_id": "s1-c28fdcd822-recovery-019",
+        "http_status": 200,
+        "probe_wall_ms": 70.201,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 20,
+        "request_id": "s1-c28fdcd822-recovery-020",
+        "http_status": 200,
+        "probe_wall_ms": 62.671,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 21,
+        "request_id": "s1-c28fdcd822-recovery-021",
+        "http_status": 200,
+        "probe_wall_ms": 73.774,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 22,
+        "request_id": "s1-c28fdcd822-recovery-022",
+        "http_status": 200,
+        "probe_wall_ms": 74.19,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 23,
+        "request_id": "s1-c28fdcd822-recovery-023",
+        "http_status": 200,
+        "probe_wall_ms": 71.156,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 24,
+        "request_id": "s1-c28fdcd822-recovery-024",
+        "http_status": 200,
+        "probe_wall_ms": 66.103,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 25,
+        "request_id": "s1-c28fdcd822-recovery-025",
+        "http_status": 200,
+        "probe_wall_ms": 85.574,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 26,
+        "request_id": "s1-c28fdcd822-recovery-026",
+        "http_status": 200,
+        "probe_wall_ms": 89.035,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 27,
+        "request_id": "s1-c28fdcd822-recovery-027",
+        "http_status": 200,
+        "probe_wall_ms": 77.125,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 28,
+        "request_id": "s1-c28fdcd822-recovery-028",
+        "http_status": 200,
+        "probe_wall_ms": 64.667,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 2.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 29,
+        "request_id": "s1-c28fdcd822-recovery-029",
+        "http_status": 200,
+        "probe_wall_ms": 64.296,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 1.0,
+        "upstream": [
+          "172.18.0.7:8081"
+        ],
+        "catalog_instances": [
+          "ae3a435cf79a"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-2",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      },
+      {
+        "phase": "recovery",
+        "sequence": 30,
+        "request_id": "s1-c28fdcd822-recovery-030",
+        "http_status": 200,
+        "probe_wall_ms": 79.554,
+        "wget_exit_code": 0,
+        "probe_error": null,
+        "gateway_duration_ms": 9.0,
+        "upstream": [
+          "172.18.0.6:8081"
+        ],
+        "catalog_instances": [
+          "e2b0ae624c3c"
+        ],
+        "replica_that_handled": "melt-s1-catalogo-profesionales-1",
+        "gateway_log_found": true,
+        "catalog_log_found": true
+      }
+    ]
+  },
+  "recovery": {
+    "restart_requested_at": "2026-11-24T05:27:52.458-03:00",
+    "container_healthy_at": "2026-11-24T05:27:57.793-03:00",
+    "container_health_seconds_from_restart": 5.335,
+    "container_health_seconds_from_stop": 9.681,
+    "first_target_request_at": "2026-11-24T05:28:02.376-03:00",
+    "first_target_request_seconds_from_restart": 9.918,
+    "target_seen_serving": true,
+    "both_replicas_received_requests": {
+      "melt-s1-catalogo-profesionales-2": true,
+      "melt-s1-catalogo-profesionales-1": true
+    }
+  },
+  "continuity_passed": true,
+  "recovery_passed": false,
+  "overall_passed": false,
+  "errors": [
+    {
+      "at": "2026-11-24T05:28:05.641-03:00",
+      "phase": "gateway-log",
+      "message": "2026/11/24 08:27:50 [error] 20#20: *39 upstream timed out (110: Operation timed out) while connecting to upstream, client: 127.0.0.1, server: _, request: \"GET /api/v1/catalogo/tratamientos?page=1&limit=10 HTTP/1.1\", upstream: \"http://172.18.0.6:8081/tratamientos?page=1&limit=10\", host: \"127.0.0.1\""
+    }
+  ],
+  "gateway_error_log_lines": [
+    "2026/11/24 08:27:50 [error] 20#20: *39 upstream timed out (110: Operation timed out) while connecting to upstream, client: 127.0.0.1, server: _, request: \"GET /api/v1/catalogo/tratamientos?page=1&limit=10 HTTP/1.1\", upstream: \"http://172.18.0.6:8081/tratamientos?page=1&limit=10\", host: \"127.0.0.1\""
+  ],
+  "gateway_warnings": [
+    "2026/11/24 08:27:35 [error] 20#20: reservas could not be resolved (2: Server failure)",
+    "2026/11/24 08:27:35 [error] 20#20: auth could not be resolved (2: Server failure)",
+    "2026/11/24 08:27:35 [error] 20#20: beneficios could not be resolved (2: Server failure)",
+    "2026/11/24 08:27:35 [error] 20#20: pagos could not be resolved (2: Server failure)"
+  ],
+  "safety_checks": {
+    "docker_daemon": "reachable",
+    "docker_context": "verified local Docker Desktop",
+    "branch_and_commit": "recorded only",
+    "compose_config": "isolated melt-s1 only",
+    "runtime_network_internal": true,
+    "no_env_file_or_variable_interpolation": true,
+    "catalog_mongo_uri_local": true,
+    "all_project_containers_on_s1_network": true,
+    "exactly_two_catalog_replicas_healthy": true,
+    "gateway_running": true
+  },
+  "post_recovery_replica_health": {
+    "melt-s1-catalogo-profesionales-2": true,
+    "melt-s1-catalogo-profesionales-1": true
+  },
+  "cleanup": {
+    "attempted": true,
+    "restored": true,
+    "error": null,
+    "wait_seconds": 5.212,
+    "last_state": "running / healthy",
+    "non_target_containers_unchanged": true
+  },
+  "report_path": "/home/user/MELT/output/s1/failover-20261124-052744-902401.json",
+  "limitations": [
+    "All HTTP probes run inside the isolated Gateway container because the internal network does not publish port 18081 to the Windows host.",
+    "The test stops and starts only one labelled Catálogo container; MongoDB, OpenSearch, Memcached, Jaeger, and Gateway remain running.",
+    "This is a sequential read-only failover check, not a load test or a test of database/provider failure."
+  ],
+  "docker_context": {
+    "name": "default",
+    "endpoint": "unix:///var/run/docker.sock",
+    "server": "Ubuntu 24.04.5 LTS|linux"
+  },
+  "phase_elapsed_seconds": {
+    "baseline": 2.181,
+    "one_replica_stopped": 4.106
+  },
+  "target_stopped_at": "2026-11-24T05:27:48.111-03:00",
+  "distributions": {
+    "baseline": {
+      "melt-s1-catalogo-profesionales-2": 15,
+      "melt-s1-catalogo-profesionales-1": 15
+    },
+    "one_replica_stopped": {
+      "melt-s1-catalogo-profesionales-2": 30
+    },
+    "recovery": {
+      "melt-s1-catalogo-profesionales-2": 18,
+      "melt-s1-catalogo-profesionales-1": 12
+    }
+  },
+  "checks": {
+    "three_phases_complete": true,
+    "all_responses_http_200": true,
+    "baseline_distribution_correct": true,
+    "outage_continuity": true,
+    "recovery_distribution_correct": false,
+    "request_log_correlation_complete": true,
+    "replica_restored": true,
+    "both_replicas_healthy_after_recovery": true,
+    "no_relevant_errors": false
+  },
+  "conclusion": "FAIL/PARTIAL: inspect phase HTTP codes, upstreams, correlation logs, recovery state, and gateway error lines. No automatic configuration changes were made."
+}

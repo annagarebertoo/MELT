@@ -1,0 +1,61 @@
+{
+ "trace_id": "aaaabbbbccccddddeeeeffff00002222",
+ "spans": [
+  {
+   "offset_ms": 0.0,
+   "duracion_ms": 4.1,
+   "servicio": "reservas",
+   "operacion": "POST /turnos/:id/completar",
+   "status": 202,
+   "error": null
+  },
+  {
+   "offset_ms": 0.1,
+   "duracion_ms": 0.8,
+   "servicio": "reservas",
+   "operacion": "HTTP GET catalogo-profesionales",
+   "status": 200,
+   "error": null
+  },
+  {
+   "offset_ms": 1163.2,
+   "duracion_ms": 6.4,
+   "servicio": "reservas",
+   "operacion": "rabbitmq publish tratamiento.realizado",
+   "status": null,
+   "error": null
+  },
+  {
+   "offset_ms": 1167.9,
+   "duracion_ms": 1004.2,
+   "servicio": "beneficios",
+   "operacion": "rabbitmq consume tratamiento.realizado",
+   "status": null,
+   "error": "ERROR"
+  },
+  {
+   "offset_ms": 2172.5,
+   "duracion_ms": 3003.4,
+   "servicio": "beneficios",
+   "operacion": "rabbitmq consume melt.beneficios.eventos",
+   "status": null,
+   "error": "ERROR"
+  },
+  {
+   "offset_ms": 5176.2,
+   "duracion_ms": 8003.4,
+   "servicio": "beneficios",
+   "operacion": "rabbitmq consume melt.beneficios.eventos",
+   "status": null,
+   "error": "ERROR"
+  },
+  {
+   "offset_ms": 13179.9,
+   "duracion_ms": 2.5,
+   "servicio": "beneficios",
+   "operacion": "rabbitmq consume melt.beneficios.eventos",
+   "status": null,
+   "error": "ERROR"
+  }
+ ]
+}

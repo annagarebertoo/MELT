@@ -1,0 +1,41 @@
+name: Cobertura
+
+# Ejecuta todas las pruebas Go (unitarias e integración contra PostgreSQL,
+# RabbitMQ, MongoDB, Memcached y OpenSearch descartables) y exige un mínimo de
+# cobertura por servicio. El resumen queda en la pestaña "Summary" del run.
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - codex/supabase-postgres-migration
+      - 'codex/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cobertura:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/reservas/go.mod
+          cache: true
+          cache-dependency-path: services/*/go.sum
+      - name: Pruebas con cobertura (umbral 60 % por servicio)
+        run: scripts/cobertura.sh --umbral 60
+      - name: Perfiles de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura
+          path: output/cobertura/
+          if-no-files-found: ignore

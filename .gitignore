@@ -1,3 +1,12 @@
 .env
 .env.*
 !.env.example
+!.env.local.example
+
+# Binarios compilados con `go build` dentro de cada servicio
+services/*/api
+services/*/cmd/api/api
+services/pagos/pagos
+
+# Reportes generados por scripts locales (copiar a docs/evidence lo que se quiera conservar)
+output/

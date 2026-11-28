@@ -2,7 +2,7 @@
 
 ## Responsabilidad y datos
 
-Auth es dueño de las cuentas y sus credenciales, estados, roles y JWT. Usa MongoDB (`AUTH_MONGODB_DATABASE`, predeterminada `usuarios_db`) y colecciones de usuarios/control de roles/invitaciones. Ningún otro servicio consulta sus colecciones directamente: las validaciones se hacen por API interna.
+Auth es dueño de las cuentas y sus credenciales, estados, roles y JWT. Usa MongoDB Atlas compartido (`MONGODB_URI`, `AUTH_MONGODB_DATABASE`, predeterminada `usuarios_db`) y colecciones de usuarios/control de roles/invitaciones. Ningún otro servicio consulta sus colecciones directamente: las validaciones se hacen por API interna. Sin `MONGODB_URI`, Auth no inicia; no usa una base local alternativa.
 
 ## Rutas
 

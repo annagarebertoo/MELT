@@ -7,7 +7,7 @@ Las rutas de cada manual son relativas al router del servicio, salvo donde se es
 | Auth | Cuentas, credenciales, roles | [AUTH](AUTH.md) |
 | Catálogo y Profesionales | Categorías, tratamientos, perfiles y vinculación | [CATALOGO-PROFESIONALES](CATALOGO-PROFESIONALES.md) |
 | Reservas | Agenda, turnos, bloqueos, carritos, checkout y outbox | [RESERVAS](RESERVAS.md) |
-| Pagos | Pagos y devoluciones simulados | [PAGOS](PAGOS.md) |
+| Pagos | Checkout Pro, verificación y devoluciones de Mercado Pago en modo de prueba | [PAGOS](PAGOS.md) |
 | Beneficios | Puntos, recompensas, canjes, invitaciones y mensajes fallidos | [BENEFICIOS](BENEFICIOS.md) |
 
 Los contratos OpenAPI cubren capacidades seleccionadas, no todas las rutas listadas aquí. Ver [contratos y cobertura](../contracts/README.md).

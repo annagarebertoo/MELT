@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"log"
 	"strconv"
 	"strings"
@@ -47,10 +49,37 @@ type mensajeFallido struct {
 
 type consumidorPrograma struct {
 	url     string
-	almacen *almacenMongo
+	almacen almacenConsumidor
+	// retrasos entre reintentos; nil usa los valores de producción.
+	retrasos []time.Duration
+}
+
+var retrasosReintento = []time.Duration{time.Second, 3 * time.Second, 8 * time.Second}
+
+type almacenFallidos interface {
+	guardarMensajeFallido(context.Context, mensajeFallido) error
+	listarMensajesFallidos(context.Context) ([]mensajeFallido, error)
+	obtenerMensajeFallido(context.Context, string) (mensajeFallido, error)
+	cambiarEstadoFallido(context.Context, string, string, string, *time.Time) (bool, error)
+}
+
+type almacenConsumidor interface {
+	programaStore
+	almacenFallidos
+}
+
+// inicializarMetricasEventos publica las series en 0 desde el arranque: sin esto,
+// increase() de Prometheus ignora el primer evento de cada combinación.
+func inicializarMetricasEventos() {
+	for _, tipo := range []string{"tratamiento.realizado", "turno.cancelado"} {
+		for _, resultado := range []string{"procesado", "reintento", "dlq"} {
+			telMetricas.contar("melt_beneficios_eventos_consumidos_total", "Eventos de dominio consumidos por tipo y resultado (procesado, reintento, dlq).", 0, "tipo", tipo, "resultado", resultado)
+		}
+	}
 }
 
 func (w *consumidorPrograma) run(ctx context.Context) {
+	inicializarMetricasEventos()
 	for ctx.Err() == nil {
 		if err := w.consume(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("beneficios_rabbitmq_reconnect: %v", err)
@@ -115,9 +144,27 @@ func (w *consumidorPrograma) consume(ctx context.Context) error {
 	}
 }
 
+// contarEvento registra el resultado del consumo para el tablero del flujo principal.
+func contarEvento(tipo, resultado string) {
+	if tipo == "" {
+		tipo = "desconocido"
+	}
+	telMetricas.contar("melt_beneficios_eventos_consumidos_total", "Eventos de dominio consumidos por tipo y resultado (procesado, reintento, dlq).", 1, "tipo", tipo, "resultado", resultado)
+}
+
 func (w *consumidorPrograma) handle(ctx context.Context, ch *amqp091.Channel, delivery amqp091.Delivery) {
+	// Continúa la traza iniciada por Reservas al publicar el evento.
+	ctx = telExtraerCabeceras(ctx, map[string]any(delivery.Headers))
+	ctx, span := telIniciarSpan(ctx, "rabbitmq consume "+delivery.RoutingKey,
+		attribute.String("messaging.system", "rabbitmq"),
+		attribute.String("messaging.message.id", delivery.MessageId),
+	)
+	defer span.End()
+	inicio := time.Now()
 	var event EventoDominio
 	if err := json.Unmarshal(delivery.Body, &event); err != nil || strings.TrimSpace(event.EventID) == "" {
+		span.SetStatus(codes.Error, "esquema inválido")
+		contarEvento(delivery.Type, "dlq")
 		_ = w.failPermanently(ctx, ch, delivery, event, "el evento no cumple el esquema esperado", 1)
 		return
 	}
@@ -127,23 +174,36 @@ func (w *consumidorPrograma) handle(ctx context.Context, ch *amqp091.Channel, de
 	processCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	err := w.process(processCtx, event)
 	cancel()
+	telMetricas.observar("melt_beneficios_evento_procesamiento_segundos", "Duración del procesamiento de un evento de dominio.", time.Since(inicio).Seconds(), "tipo", event.Tipo)
 	if err == nil {
+		contarEvento(event.Tipo, "procesado")
 		_ = delivery.Ack(false)
 		return
 	}
+	span.SetStatus(codes.Error, "procesamiento fallido")
 	attempts := retryCount(delivery.Headers) + 1
 	if attempts >= 4 {
+		contarEvento(event.Tipo, "dlq")
 		_ = w.failPermanently(ctx, ch, delivery, event, err.Error(), attempts)
 		return
 	}
-	delay := []time.Duration{time.Second, 3 * time.Second, 8 * time.Second}[attempts-1]
+	contarEvento(event.Tipo, "reintento")
+	retrasos := w.retrasos
+	if len(retrasos) < 3 {
+		retrasos = retrasosReintento
+	}
+	delay := retrasos[attempts-1]
 	select {
 	case <-ctx.Done():
 		_ = delivery.Nack(false, true)
 		return
 	case <-time.After(delay):
 	}
-	if err = publishConfirmed(ch, eventosExchange, delivery.RoutingKey, delivery.Type, delivery.MessageId, delivery.Body, amqp091.Table{"x-melt-intentos": int32(attempts)}); err != nil {
+	// El reintento vuelve sólo a la cola de Beneficios (exchange por defecto):
+	// republicarlo en el exchange de dominio lo duplicaría a otros suscriptores.
+	cabeceras := amqp091.Table{"x-melt-intentos": int32(attempts)}
+	telInyectarCabeceras(ctx, cabeceras)
+	if err = publishConfirmed(ch, "", eventosQueue, delivery.Type, delivery.MessageId, delivery.Body, cabeceras); err != nil {
 		_ = delivery.Nack(false, true)
 		return
 	}
@@ -199,8 +259,7 @@ func (w *consumidorPrograma) failPermanently(ctx context.Context, ch *amqp091.Ch
 		event.Tipo = delivery.Type
 	}
 	failure := mensajeFallido{ID: event.EventID, Evento: event, Error: reason, Intentos: attempts, Estado: "pendiente", CreadoEn: time.Now().UTC().Truncate(time.Millisecond)}
-	_, err := w.almacen.fallidos.UpdateOne(ctx, bson.M{"_id": failure.ID}, bson.M{"$set": bson.M{"evento": failure.Evento, "error": failure.Error, "intentos": failure.Intentos, "estado": failure.Estado}, "$setOnInsert": bson.M{"creadoEn": failure.CreadoEn}}, options.UpdateOne().SetUpsert(true))
-	if err != nil {
+	if err := w.almacen.guardarMensajeFallido(ctx, failure); err != nil {
 		_ = delivery.Nack(false, true)
 		return err
 	}
@@ -217,20 +276,59 @@ func (w *consumidorPrograma) failPermanently(ctx context.Context, ch *amqp091.Ch
 	return nil
 }
 
+func (a *almacenMongo) guardarMensajeFallido(ctx context.Context, failure mensajeFallido) error {
+	_, err := a.fallidos.UpdateOne(ctx, bson.M{"_id": failure.ID}, bson.M{"$set": bson.M{"evento": failure.Evento, "error": failure.Error, "intentos": failure.Intentos, "estado": failure.Estado}, "$setOnInsert": bson.M{"creadoEn": failure.CreadoEn}}, options.UpdateOne().SetUpsert(true))
+	return err
+}
+
+func (a *almacenMongo) listarMensajesFallidos(ctx context.Context) ([]mensajeFallido, error) {
+	cur, err := a.fallidos.Find(ctx, bson.M{"estado": "pendiente"}, options.Find().SetSort(bson.D{{Key: "creadoEn", Value: -1}}).SetLimit(50))
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	items := []mensajeFallido{}
+	err = cur.All(ctx, &items)
+	return items, err
+}
+
+func (a *almacenMongo) obtenerMensajeFallido(ctx context.Context, id string) (mensajeFallido, error) {
+	var item mensajeFallido
+	err := a.fallidos.FindOne(ctx, bson.M{"_id": id, "estado": "pendiente"}).Decode(&item)
+	return item, err
+}
+
+func (a *almacenMongo) cambiarEstadoFallido(ctx context.Context, id, desde, hacia string, cuando *time.Time) (bool, error) {
+	set := bson.M{"estado": hacia}
+	if cuando != nil {
+		set["reintentadoEn"] = *cuando
+	}
+	res, err := a.fallidos.UpdateOne(ctx, bson.M{"_id": id, "estado": desde}, bson.M{"$set": set})
+	return res != nil && res.MatchedCount == 1, err
+}
+
+// publishConfirmed espera la confirmación de esta publicación concreta. Usa una
+// confirmación diferida por mensaje: registrar NotifyPublish en cada llamada
+// acumulaba oyentes sobre el mismo canal y, al tercer publish, el despachador
+// de amqp091 quedaba bloqueado y el consumidor dejaba de procesar mensajes.
 func publishConfirmed(ch *amqp091.Channel, exchange, key, typ, messageID string, body []byte, headers amqp091.Table) error {
-	confirmations := ch.NotifyPublish(make(chan amqp091.Confirmation, 1))
-	if err := ch.Publish(exchange, key, false, false, amqp091.Publishing{ContentType: "application/json", DeliveryMode: amqp091.Persistent, Type: typ, MessageId: messageID, Headers: headers, Timestamp: time.Now().UTC(), Body: body}); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	confirmation, err := ch.PublishWithDeferredConfirmWithContext(ctx, exchange, key, false, false, amqp091.Publishing{ContentType: "application/json", DeliveryMode: amqp091.Persistent, Type: typ, MessageId: messageID, Headers: headers, Timestamp: time.Now().UTC(), Body: body})
+	if err != nil {
 		return err
 	}
-	select {
-	case confirm := <-confirmations:
-		if !confirm.Ack {
-			return errors.New("rabbitmq no confirmó la publicación")
-		}
-		return nil
-	case <-time.After(4 * time.Second):
+	if confirmation == nil {
+		return errors.New("el canal de rabbitmq no está en modo confirmación")
+	}
+	ack, err := confirmation.WaitContext(ctx)
+	if err != nil {
 		return errors.New("tiempo agotado esperando confirmación de rabbitmq")
 	}
+	if !ack {
+		return errors.New("rabbitmq no confirmó la publicación")
+	}
+	return nil
 }
 
 func reintentarEvento(ctx context.Context, rabbitURL string, event EventoDominio) error {
@@ -244,7 +342,9 @@ func reintentarEvento(ctx context.Context, rabbitURL string, event EventoDominio
 		return err
 	}
 	defer ch.Close()
-	if err = ch.ExchangeDeclare(eventosExchange, "topic", true, false, false, false, nil); err != nil {
+	// Igual que los reintentos automáticos, la recuperación manual se entrega
+	// sólo a la cola de Beneficios; si la cola no existe, el mensaje sigue pendiente.
+	if _, err = ch.QueueDeclarePassive(eventosQueue, true, false, false, false, amqp091.Table{"x-dead-letter-exchange": fallidosExchange, "x-dead-letter-routing-key": "event"}); err != nil {
 		return err
 	}
 	if err = ch.Confirm(false); err != nil {
@@ -254,6 +354,5 @@ func reintentarEvento(ctx context.Context, rabbitURL string, event EventoDominio
 	if err != nil {
 		return err
 	}
-	key := event.Tipo
-	return publishConfirmed(ch, eventosExchange, key, event.Tipo, event.EventID, body, amqp091.Table{})
+	return publishConfirmed(ch, "", eventosQueue, event.Tipo, event.EventID, body, amqp091.Table{})
 }

@@ -139,6 +139,9 @@ func observabilityMiddleware(logger *slog.Logger) gin.HandlerFunc {
 				span.SetStatus(codes.Error, "request panic recovered")
 			}
 			status := c.Writer.Status()
+			if route != "/metrics" {
+				catalogHTTPMetrics.record(c.Request.Method, route, status, time.Since(started))
+			}
 			span.SetAttributes(attribute.Int("http.response.status_code", status))
 			level := slog.LevelInfo
 			if status >= 500 {

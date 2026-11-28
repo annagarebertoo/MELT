@@ -2,7 +2,7 @@
 
 ## Responsabilidad, datos y dependencias
 
-Dueño de saldo, movimientos, reglas de puntos por tratamiento, recompensas, canjes, invitaciones de acreditación externa y registro de mensajes fallidos. MongoDB `beneficios_db` por defecto. Consulta Auth para sesión/identidad y cuenta; RabbitMQ recibe eventos de Reservas. Reenvía requests de GhostKitchen desde backend; la credencial no se expone al cliente.
+Dueño de saldo, movimientos, reglas de puntos por tratamiento, recompensas, canjes, invitaciones de acreditación externa y registro de mensajes fallidos. Usa PostgreSQL privado en el proyecto Supabase **MELT-Beneficios**. Consulta Auth para sesión/identidad y cuenta; RabbitMQ recibe eventos de Reservas. Reenvía requests de GhostKitchen desde backend; la credencial no se expone al cliente.
 
 ## Rutas públicas
 
@@ -10,7 +10,7 @@ Prefijo Gateway `/api/v1/beneficios`; el Gateway requiere sesión para este pref
 
 | Método/ruta | Acceso | Función |
 |---|---|---|
-| `GET /health` | Público | Verifica MongoDB. |
+| `GET /health` | Público | Verifica PostgreSQL. |
 | `GET /mis-puntos` | cliente autenticado | Saldo e historial propios. |
 | `GET /recompensas` | Público | Catálogo de recompensas. |
 | `GET /mis-canjes`, `POST /canjes` | cliente | Consultar/canjear recompensas propias. |
@@ -25,7 +25,7 @@ Beneficios también contiene rutas protegidas de GhostKitchen: `GET /ghostkitche
 
 ## Puntos, eventos y prevención de duplicados
 
-Una compra/pago simulado no acredita puntos automáticamente. Al recibir `tratamiento.realizado`, Beneficios consulta regla activa y registra movimiento idempotente por `eventId`. Reservas no publica ese evento para `no_asistio`. Evento `turno.cancelado` permite restituir un canje asociado. RabbitMQ aplica reintentos limitados; después de cuatro intentos, mensaje se registra en fallidos y queda disponible para reintento administrativo. Los endpoints internos de canjes/invitaciones requieren clave interna y no son rutas públicas.
+Una compra o pago aprobado no acredita puntos automáticamente. Al recibir `tratamiento.realizado`, Beneficios consulta regla activa y registra movimiento idempotente por `eventId`. Reservas no publica ese evento para `no_asistio`. Evento `turno.cancelado` permite restituir un canje asociado. RabbitMQ aplica reintentos limitados; después de cuatro intentos, mensaje se registra en fallidos y queda disponible para reintento administrativo. Los endpoints internos de canjes/invitaciones requieren clave interna y no son rutas públicas.
 
 Beneficios consume mensajes, pero no publica eventos de dominio de Reservas. Las operaciones síncronas con Auth verifican token/usuario y las llamadas internas usan clave de servicio. Errores comunes: 400 validación, 401 sesión/partner inválido, 403 rol/destinatario no autorizado, 404 recurso ausente, 409 idempotencia/estado incompatible, 410 invitación vencida, 422 límite de saldo y 503 dependencia/configuración no disponible. No todos los endpoints comparten el mismo esquema de error; revisar el contrato específico.
 
@@ -37,11 +37,11 @@ El cliente de salida usa `X-API-Key`, timeout de 3 s y hasta tres intentos en re
 
 ## Configuración y pruebas
 
-`MONGODB_URI`, `BENEFICIOS_MONGODB_DATABASE`, `AUTH_URL`, `MELT_INTERNAL_KEY`, `RABBITMQ_URL`, `BENEFICIOS_PARTNER_KEY`, `BENEFICIOS_INVITATION_SECRET`, `MELT_PUBLIC_URL`, `GHOSTKITCHEN_API_KEY`, `GHOSTKITCHEN_BASE_URL`.
+`BENEFICIOS_DATABASE_URL`, `AUTH_URL`, `MELT_INTERNAL_KEY`, `RABBITMQ_URL`, `BENEFICIOS_PARTNER_KEY`, `BENEFICIOS_INVITATION_SECRET`, `MELT_PUBLIC_URL`, `GHOSTKITCHEN_API_KEY`, `GHOSTKITCHEN_BASE_URL`.
 
 ```sh
 cd services/beneficios
 go test ./...
 ```
 
-Pruebas de integración usan `BENEFICIOS_TEST_MONGODB_URI`; pruebas del proxy GhostKitchen usan HTTP mock. El comando no inicia servicios/dependencias por sí solo.
+La configuración de Supabase y el esquema SQL están en [infra/supabase](../../infra/supabase/README.md). Las pruebas históricas que usan `BENEFICIOS_TEST_MONGODB_URI` no verifican la conexión PostgreSQL de producción; el proxy GhostKitchen usa HTTP mock.

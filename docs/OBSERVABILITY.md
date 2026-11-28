@@ -1,164 +1,124 @@
-# MELT — Observabilidad D11
+# MELT — Observabilidad
 
-**Responsable:** Sofía.  
-**Rama:** `feature/sofia-entrega-2`.  
-**Base:** `0096f25`.  
-**Alcance:** logs estructurados y correlacionados y primera traza del recorrido HTTP del Catálogo para la Entrega 2 del 23/10/2026.
+## Arquitectura
 
-## 1. Componentes instrumentados
+Prometheus recolecta `/metrics` de cada réplica de Catálogo mediante DNS service discovery del nombre `catalogo-profesionales`. Grafana usa Prometheus como fuente provisionada y carga el tablero **MELT · Observabilidad S2** al iniciar. Jaeger recibe las trazas OTLP ya emitidas por el módulo OpenTelemetry de NGINX y el SDK de Catálogo.
 
-El recorrido instrumentado es:
+El Gateway mantiene logs JSON de acceso con `request_id`, `trace_id`, ruta, estado, duración y upstream. Catálogo registra logs JSON con esos identificadores, `instance`, estado y duración. `request_id` correlaciona logs; `trace_id` permite seguir los spans distribuidos. Catálogo instrumenta spans HTTP y spans cliente para comandos MongoDB, solicitudes OpenSearch y operaciones Memcached, sin exportar URLs de búsqueda ni consultas. Jaeger conserva trazas en memoria; la configuración actual es local y no ofrece persistencia ni autenticación.
 
-```mermaid
-sequenceDiagram
-    participant C as Cliente HTTP
-    participant G as NGINX
-    participant A as Catálogo
-    participant M as MongoDB
-    participant J as Jaeger local
-    C->>G: GET /api/v1/catalogo/tratamientos
-    Note over G: Span de gateway y X-Request-ID validado
-    G->>A: GET /tratamientos con traceparent y X-Request-ID
-    Note over A: Span HTTP hijo y log JSON
-    A->>M: CountDocuments y Find
-    Note over A,M: Spans cliente del driver MongoDB
-    M-->>A: Resultado de las consultas
-    A-->>G: JSON y cabeceras de correlación
-    G-->>C: Respuesta original con X-Request-ID y X-Trace-ID
-    G->>J: Spans OTLP/gRPC
-    A->>J: Spans OTLP/HTTP
-```
+## Métricas
 
-NGINX utiliza su módulo nativo OpenTelemetry; Catálogo utiliza el SDK OpenTelemetry de Go, middleware HTTP e instrumentación del driver MongoDB v2. Jaeger 2 recibe, almacena en memoria y permite consultar los spans. No se agrega un Collector separado: el receptor OTLP de Jaeger es suficiente para esta primera implementación local.
+El endpoint `GET /metrics` de Catálogo conserva las métricas existentes de caché, búsqueda e indexación y expone:
 
-Una traza real relaciona spans con `trace_id`, `span_id` y referencias padre/hijo. `request_id` sirve para correlacionar logs y no reemplaza esa traza.
+| Métrica | Uso |
+| --- | --- |
+| `catalog_http_requests_total` | Contador HTTP por método, ruta normalizada, estado y réplica. |
+| `catalog_http_request_duration_seconds` | Histograma para calcular p95 y otros percentiles. |
+| `catalog_replica_info` | Identidad del contenedor Catálogo que expone las métricas. |
+| `up{job="catalogo-profesionales"}` | Disponibilidad individual observada por Prometheus. |
 
-El cliente inicia las solicitudes y puede proporcionar un contexto W3C, pero no exporta un span propio. MongoDB no tiene instrumentación interna del servidor: los spans de base de datos miden comandos reales desde el driver de Catálogo, incluyendo espera de la respuesta. No se presentan como spans internos de ejecución del servidor MongoDB.
+El endpoint `/metrics` no cuenta sus propias solicitudes. Las rutas se toman del patrón de Gin y los métodos desconocidos se agrupan como `OTHER`, para evitar etiquetas de alta cardinalidad.
 
-## 2. Iniciar D11
+Prometheus descubre las direcciones A del servicio y crea un target por réplica. El label `replica` identifica el hostname de cada contenedor; `instance` identifica la dirección scrapeada. La tasa se calcula con `rate(...)`; el p95, con `histogram_quantile(0.95, ...)` sobre el histograma.
 
-Requisitos: Docker Desktop operativo, servicios base de MELT iniciados y MongoDB saludable. Desde la raíz del repositorio:
+## Dashboard y acceso local
+
+El dashboard incluye RPS por réplica, latencia p95, tasa de 5xx, solicitudes por estado HTTP y disponibilidad por instancia.
+
+- Grafana: <http://localhost:3000> — usuario `admin`; contraseña `GRAFANA_PASSWORD` del entorno o `admin_dev_only` si no se configuró.
+- Prometheus targets: <http://localhost:9090/targets>.
+- Alertas Prometheus: <http://localhost:9090/alerts>.
+- Jaeger: <http://localhost:16686>.
+
+En un entorno local seguro, con las dependencias de Catálogo ya iniciadas:
 
 ```powershell
-docker compose config --quiet
-docker compose up -d jaeger
 docker compose up -d --build --no-deps catalogo-profesionales
-docker compose up -d --no-deps gateway
-docker compose ps
+docker compose up -d --no-deps prometheus grafana
 ```
 
-El orden inicia el receptor antes de reiniciar las aplicaciones afectadas. Se mantienen las dos réplicas declaradas de Catálogo. Los comandos no eliminan volúmenes ni recrean MongoDB. Para un entorno nuevo, primero deben estar disponibles MongoDB, Reservas y Beneficios según la configuración base existente.
+Después de reconstruir Catálogo en un entorno local seguro, consultá las métricas desde la red interna (`docker compose exec prometheus wget -qO- http://catalogo-profesionales:8081/metrics`; el Gateway responde 404 a `/api/v1/*/metrics` para no exponerlas), generá tráfico de lectura desde el Gateway y abrí Grafana → Dashboards → MELT. Prometheus necesita al menos dos scrapes (30 segundos con el intervalo actual) para calcular tasas. Verificá que `/targets` muestre dos targets Catálogo en estado `UP`.
 
-El gateway usa `nginx:1.28-alpine-otel`, en la misma familia 1.28 que la imagen anterior, con el módulo cargado mediante `infra/nginx/nginx.conf`. Jaeger usa `cr.jaegertracing.io/jaegertracing/jaeger:2.11.0` y `infra/jaeger/config.yaml`.
+El Compose principal configura `MONGODB_URI` mediante el `.env` local y puede apuntar a Atlas. No ejecutes esos comandos contra una base compartida para esta verificación; usá un entorno local aislado. Prometheus/Grafana solo scrapean la ruta de métricas y no necesitan consultar una base de negocio.
 
-Catálogo exporta a `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://jaeger:4318/v1/traces`. Sin esa variable, el servicio puede ejecutarse sin exportador local. Los fallos de exportación no forman parte de las transacciones del negocio y se registran mediante un evento seguro, sin volcar la URL del exportador.
+## Trazas y correlación
 
-El cierre normal de Catálogo intenta drenar las solicitudes HTTP y vaciar el exportador con tiempos acotados. No se garantiza entrega de telemetría ante una terminación forzada o pérdida del receptor.
+Para inspeccionar una solicitud, consultá el `X-Trace-ID` devuelto por el Gateway en Jaeger y buscá el mismo `request_id` en los logs de Gateway y Catálogo. La traza muestra el span NGINX, el span HTTP hijo de Catálogo y spans cliente de MongoDB, OpenSearch y Memcached según el camino ejecutado. La evidencia previa de D11 está en [`docs/evidence/d11-2026-10-23.json`](evidence/d11-2026-10-23.json); la decisión está en [ADR-011](adr/ADR-011-observabilidad.md).
 
-## 3. Logs JSON y correlación
+NGINX puede conservar diagnósticos nativos de arranque en su log de error. Los logs de acceso HTTP y los de Catálogo son JSON. El procesador de Jaeger elimina atributos sensibles como URL sin normalizar, user-agent y texto de consulta antes de guardar spans.
 
-```powershell
-docker compose logs --no-color --tail 30 gateway catalogo-profesionales
-```
+## Alertas y criterios
 
-Los accesos HTTP de NGINX y Catálogo incluyen:
+El SLI de disponibilidad es la fracción de muestras Prometheus en que ambas réplicas están `UP`. El objetivo inicial para la entrega es **≥ 99% durante los últimos 7 días**. Es un objetivo local/académico, no un SLO de producción; el panel y la alerta necesitan acumular muestras para tener ventana suficiente. No se fija un SLO numérico de latencia antes de medir una carga representativa; el dashboard muestra el p95 observado.
 
-| Campo | Significado |
-| :--- | :--- |
-| `timestamp` | Instante del registro en formato ISO/RFC 3339. |
-| `level` | INFO para respuestas normales, WARN para 4xx y ERROR para 5xx. |
-| `service` | `melt-gateway` o `catalogo-profesionales`. |
-| `method`, `route`, `status` | Método, ruta normalizada y estado HTTP. |
-| `duration_ms` | Duración del procesamiento de Catálogo en milisegundos. |
-| `duration_seconds` | Duración observada por NGINX en segundos. |
-| `request_id` | Identificador compartido entre gateway y Catálogo. |
-| `trace_id`, `span_id` | Identificadores del span de ese componente. El `trace_id` coincide; los `span_id` son distintos. |
-| `instance` | Contenedor de Catálogo que atendió la solicitud. |
-| `upstream` | Instancia destino observada por NGINX. |
+Las reglas de `infra/prometheus/alerts.yml` generan:
 
-Un `X-Request-ID` es válido si tiene entre 1 y 64 caracteres ASCII, empieza por una letra o dígito y el resto contiene únicamente letras, dígitos, guiones o guiones bajos. Se conserva si es válido; en otro caso se genera un identificador. No se utiliza como credencial ni como autorización.
+- `CatalogReplicaUnavailable`: menos de dos targets saludables durante 1 minuto, incluso si DNS deja de publicar todos los targets.
+- `CatalogHttp5xxBurst`: tres o más respuestas 5xx en una ventana de 5 minutos, sostenidas durante 1 minuto.
+- `CatalogReplicaAvailabilitySLOBreach`: disponibilidad de réplicas menor al 99% en una ventana móvil de 7 días, sostenida durante 5 minutos.
 
-El gateway devuelve `X-Request-ID` y `X-Trace-ID` y propaga el identificador a Catálogo. Para evitar cabeceras duplicadas, devuelve su propia copia de estas cabeceras. Si Catálogo se consulta directamente, aplica la misma validación y devuelve sus propios identificadores.
+Las alertas quedan visibles en Prometheus. No hay Alertmanager configurado para enviar notificaciones externas.
 
-Los errores de MongoDB se registran con operación e identificadores de correlación, sin copiar mensajes crudos que puedan contener valores de consulta. Los panics se convierten en el mismo estado HTTP 500 que el middleware anterior, pero sin volcar cabeceras, cuerpo ni valor del panic. Esto no corrige el test preexistente que acepta un 500 al comprobar la existencia de una ruta.
+## Comprobación
 
-NGINX conserva diagnósticos internos de arranque/error en su formato nativo: los registros JSON aquí descritos son los accesos HTTP. Catálogo registra sus accesos y eventos de aplicación con `slog` JSON.
-
-## 4. Generar y visualizar una traza
-
-En PowerShell se utiliza `curl.exe` para evitar el alias de otros comandos:
-
-```powershell
-curl.exe -i -H "X-Request-ID: sofia-d11-demo" http://localhost:8080/api/v1/catalogo/tratamientos
-curl.exe -i http://localhost:8080/api/v1/catalogo/tratamientos
-curl.exe -i -H "X-Request-ID: id invalido" http://localhost:8080/api/v1/catalogo/tratamientos
-```
-
-1. Copiar el `X-Trace-ID` devuelto.
-2. Abrir `http://localhost:16686/trace/EL_TRACE_ID` o buscar en Jaeger por servicio `melt-gateway` o `catalogo-profesionales`.
-3. Esperar unos segundos por la exportación en lotes.
-4. Comprobar un span de NGINX, un span HTTP hijo de Catálogo y los spans cliente de MongoDB, por ejemplo `tratamientos.aggregate` y `tratamientos.find` en el listado.
-5. Buscar el mismo `request_id` en los logs de gateway y Catálogo. El `trace_id` debe coincidir con la traza consultada.
-
-El endpoint público probado conserva el prefijo real `/api/v1/catalogo/`. La discrepancia anterior con el OpenAPI no se corrige como parte de D11.
-
-## 5. Verificación automática
-
-Compilación y tests de Catálogo:
+Verificá la sintaxis de la aplicación sin iniciar servicios ni consultar bases compartidas:
 
 ```powershell
 Push-Location services/catalogo-profesionales
-go test -mod=readonly -count=1 -v ./...
-go vet -mod=readonly ./...
-go build -mod=readonly -o "$env:TEMP\melt-sofia-d11-catalogo.exe" ./cmd/api
+go test -mod=readonly ./cmd/api
 Pop-Location
 ```
 
-Los tests añadidos verifican validación de IDs, logs JSON, propagación de un padre remoto W3C, manejo seguro de panics y la relación padre/hijo del monitor MongoDB. Los tests de monitor son locales y no escriben en una base real.
+Para comprobar el entorno ya iniciado, consultá `/metrics` desde la red interna, confirmá dos targets `UP` en Prometheus y observá actividad en el dashboard después de solicitudes de lectura. La configuración de `compose.yaml` publica Grafana y Prometheus solo en `127.0.0.1`.
 
-Verificación del sistema en ejecución:
+## Flujo principal: Reservas, Pagos, Auth y Beneficios
 
-```powershell
-python -X utf8 scripts/verify-observability.py
-```
+Desde el 24/11/2026 los cuatro servicios del flujo principal tienen la misma instrumentación que Catálogo.
 
-El script realiza GET y consultas de solo lectura a Docker y Jaeger. Verifica IDs suministrados, generados e inválidos; propagación W3C; logs coincidentes; spans de los dos servicios con relaciones padre/hijo; operaciones reales `aggregate` y `find`; dos réplicas saludables y ausencia de un marcador de prueba sensible en la telemetría registrada.
+### Logs
 
-Opcionalmente, `--output ruta.json` guarda evidencia saneada con fecha, rama, commit base, logs y relaciones de spans. El archivo indica que la implementación tiene cambios sin commit. Las trazas en memoria pueden desaparecer; una evidencia guardada no garantiza que la URL de Jaeger siga disponible después de reiniciarlo.
+JSON por `slog` con `timestamp`, `level`, `msg`, `service`, `instance`, `request_id` y `trace_id`. El `X-Request-ID` que pone el Gateway se propaga en las llamadas HTTP internas, así que un mismo `request_id` aparece en Gateway, Reservas, Catálogo y Pagos.
 
-## 6. Privacidad y límites
+### Trazas
 
-- Catálogo no registra cuerpos, consultas, Authorization, cookies, URI de MongoDB ni valores de panic. Las rutas usan plantillas, no identificadores de tratamientos o clientes.
-- La instrumentación MongoDB deshabilita el atributo de comando y reemplaza el texto de errores del servidor por un estado genérico.
-- El módulo NGINX agrega URL y user agent por defecto. El procesador de privacidad de Jaeger elimina `http.target`, `http.user_agent`, dirección del cliente y posibles textos de consultas antes de almacenarlos. Esos atributos viajan al receptor local, pero no quedan expuestos en su almacenamiento/UI. No se debe enviar información sensible en URLs.
-- La UI solo se publica en `127.0.0.1:16686`; OTLP queda en la red interna de Compose. No hay autenticación de la UI: esta configuración es exclusivamente local.
-- Jaeger conserva hasta 10 000 trazas en memoria, sin persistencia. El muestreo es completo en el gateway para esta demostración; Catálogo sigue la decisión del padre. No es una política de producción.
-- Se prueba el recorrido de consulta del Catálogo. Reservas, Beneficios, frontend, eventos asíncronos y un cliente con span exportado quedan fuera de esta implementación.
-- Prometheus y Grafana no se modifican: métricas, tableros, alertas y SLO siguen pendientes. D11 inicial y la evidencia de logs/traza no equivalen a completar toda la observabilidad del sistema final.
+Con `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` definido (en `compose.yaml` apunta a `http://jaeger:4318/v1/traces`), cada servicio exporta spans OTLP/HTTP. Sin esa variable sólo propaga `traceparent`, sin exportar. Spans:
 
-## 7. Evidencia de ejecución
+- servidor HTTP por ruta (`POST /turnos/:id/completar`, `POST /carrito/checkout`, …);
+- cliente HTTP por destino (`HTTP GET catalogo-profesionales`, `HTTP POST pagos`, …);
+- `rabbitmq publish <routing key>` en Reservas y `rabbitmq consume <routing key>` en Beneficios.
 
-Ejecución real del 23/10/2026 sobre los servicios reconstruidos desde `feature/sofia-entrega-2`, base `0096f25` y cambios de D11 todavía sin commit. Resultado guardado: [evidencia D11](evidence/d11-2026-10-23.json).
+El contexto de la traza se guarda junto al evento en el outbox (`_traza`, que se quita antes de publicar) y viaja en las cabeceras AMQP. Por eso la traza de un turno completado llega hasta la acreditación de puntos aunque el broker haya estado caído entre medio.
 
-| Comprobación | Resultado observado |
-| :--- | :--- |
-| Compilación de Go en Windows e imagen Linux | APROBADO. |
-| Tests existentes y cuatro tests nuevos | APROBADO. Se mantiene sin corregir el test preexistente de ruta por ID que admite un 500. |
-| `go vet` | APROBADO. |
-| ID válido, ausente e inválido | APROBADO: conservación o generación según corresponda. |
-| Contexto W3C externo | APROBADO: mismo trace ID y padre remoto preservado en NGINX. |
-| Logs JSON correlacionados | APROBADO: un acceso de gateway y otro de Catálogo por solicitud, con mismo request ID y trace ID. |
-| Consulta real de trazas | APROBADO: span de NGINX, HTTP hijo y spans cliente de MongoDB `aggregate` y `find`. |
-| Privacidad de telemetría registrada | APROBADO para el marcador de prueba en query y Authorization. |
-| Dos réplicas y MongoDB | APROBADO: las dos réplicas responden salud OK. |
-| Error de validación real | APROBADO: `limit=0` conserva HTTP 400 y genera logs JSON WARN correlacionados. |
+### Métricas
 
-Ejemplo real:
+| Métrica | Servicio | Uso |
+|---|---|---|
+| `melt_http_requests_total{service,instance,method,route,status}` | todos | RPS y tasa de 5xx por ruta |
+| `melt_http_request_duration_seconds` | todos | p95 por ruta (checkout, Webhook, completar) |
+| `melt_http_client_requests_total{destino,status}` y `melt_http_client_request_duration_seconds` | todos | Salud y latencia de dependencias (Catálogo, Auth, Pagos, Mercado Pago) |
+| `melt_reservas_outbox_publicaciones_total{tipo,resultado}` | Reservas | Eventos publicados o fallidos |
+| `melt_reservas_outbox_demora_segundos` | Reservas | Tiempo entre el commit y la publicación |
+| `melt_beneficios_eventos_consumidos_total{tipo,resultado}` | Beneficios | Eventos procesados, reintentados o enviados a la DLQ |
+| `melt_beneficios_evento_procesamiento_segundos` | Beneficios | Duración de la acreditación |
+| `melt_service_info{service,instance}` | todos | Identidad de la instancia |
 
-- Request ID: `sofia-d11-40b682c36947`.
-- Trace ID: `5bbab6dab3e06927b6e9d0352f5af69b`.
-- Consulta local: `http://localhost:16686/trace/5bbab6dab3e06927b6e9d0352f5af69b`.
+Los contadores de negocio arrancan en 0 para que `increase()` vea el primer evento. Prometheus descubre cada servicio por DNS (`reservas:8082`, `beneficios:8083`, `auth:8084`, `pagos:8085`).
 
-La evidencia JSON contiene los identificadores de cada span, sus padres, los logs completos saneados y hashes de los archivos ejecutados. Una nueva ejecución generará otros identificadores. La evidencia guardada conserva el resultado aunque la traza deje de estar en memoria tras un reinicio.
+### Tablero
 
-No se hicieron escrituras de datos ni pruebas de caída de MongoDB. Los fallos y panics de los tests de observabilidad son locales/simulados; no prueban resiliencia productiva ni sustituyen el postmortem.
+**MELT · Flujo principal** (`infra/grafana/dashboards/flujo-principal.json`): disponibilidad por servicio, RPS, tasa de 5xx, p95 por servicio, checkout y Webhook, turnos completados/no asistió/cancelados, outbox (resultados y demora), eventos consumidos por resultado, llamadas salientes y p95 de dependencias.
+
+### Objetivo de servicio y alertas
+
+Objetivo del flujo principal: **al menos 95 % de las solicitudes de Reservas sin 5xx** y **p95 del checkout menor a 2 s**. Reglas en `infra/prometheus/alerts.yml`, grupo `melt-flujo-principal`:
+
+| Alerta | Condición | Severidad |
+|---|---|---|
+| `MeltServiceDown` | Un servicio del flujo sin scrape durante 1 min | critical |
+| `ReservasErrorRateHigh` | Más de 5 % de 5xx en Reservas durante 5 min | warning |
+| `CheckoutLatencyP95High` | p95 del checkout > 2 s durante 5 min | warning |
+| `OutboxPublishFailing` | ≥ 3 publicaciones fallidas en 5 min, sostenido 2 min | warning |
+| `BeneficiosEventsDeadLettered` | Algún evento llegó a la DLQ en los últimos 15 min | warning |
+| `PaymentProviderErrors` | ≥ 3 errores 5xx o de red de Pagos hacia Mercado Pago en 5 min | warning |
+
+Las reglas tienen pruebas unitarias: `promtool test rules infra/prometheus/tests/flujo-principal-alerts.test.yml`. Durante la caída controlada de RabbitMQ del 24/11/2026, `OutboxPublishFailing` y `BeneficiosEventsDeadLettered` pasaron a *firing* ([POSTMORTEM](POSTMORTEM.md)).

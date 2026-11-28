@@ -78,13 +78,20 @@ type claims struct {
 }
 
 func main() {
+	telConfigurarLogger(os.Stdout)
+	apagarTrazas, errTrazas := telConfigurarTrazas(context.Background())
+	if errTrazas != nil {
+		log.Fatal("no se pudo configurar las trazas OpenTelemetry")
+	}
+	defer apagarTrazas(context.Background())
+	telInstrumentarClientesHTTP()
 	secret := strings.TrimSpace(os.Getenv("AUTH_JWT_SECRET"))
 	if len(secret) < 32 {
 		log.Fatal("AUTH_JWT_SECRET debe tener al menos 32 caracteres")
 	}
 	uri := strings.TrimSpace(os.Getenv("MONGODB_URI"))
 	if uri == "" {
-		uri = "mongodb://localhost:27017"
+		log.Fatal("MONGODB_URI es obligatorio; configurar el clúster compartido de MongoDB Atlas")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -140,7 +147,8 @@ func main() {
 
 func (s *authServer) router() *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(telMiddleware(), gin.Recovery())
+	r.GET("/metrics", telMetricasGin)
 	r.GET("/health", func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
