@@ -1,6 +1,6 @@
 # Matriz de cumplimiento contra el enunciado
 
-**Revisión del 24/11/2026**, comparando literalmente el *Enunciado — Práctico Integrador 2026* con la rama `codex/supabase-postgres-migration` más los cambios de esta revisión. Estados: ✅ cumplido con evidencia, 🟡 en curso, ⏳ depende de la parte A1–A3.
+**Revisión del 28/11/2026**, cotejada con el código de `codex/leti-a1-a3-final` y la evidencia citada en cada fila. Estados: ✅ cumplido con evidencia, 🟡 parcial o pendiente de validación externa, ⏳ sin empezar.
 
 ## Requisitos de arquitectura y desarrollo (sección 2)
 
@@ -23,7 +23,7 @@
 | 2.11 | Carga con resultados documentados y analizados | ✅ | `scripts/carga-capacidad.py`, `benchmark-s3-resilience.py` | [ADR-013](adr/ADR-013-capacidad-costos.md), `docs/evidence/2026-11-24/` |
 | 2.12 | Repositorio público, versión final en la rama principal | ⏳ | Se integra a `main` cuando cierre A1–A3 (decisión del equipo) | — |
 | 2.12 | Estrategia de ramas, revisiones e integración | ✅ | Ramas por tarea, PR con CI | Historial de PR |
-| 2.12 | Puesta en marcha local única y automatizada, sin configuraciones manuales | ⏳ | Parte A3 | [LOCAL-DEV](LOCAL-DEV.md) |
+| 2.12 | Puesta en marcha local única y automatizada, sin configuraciones manuales | ✅ | `scripts/dev-up.ps1`, `compose.local.yaml` y configuración validada en Go CI | [LOCAL-DEV](LOCAL-DEV.md), workflow Go CI |
 | 2.12 | Secretos fuera del repositorio | ✅ | `.env` ignorado, `.env.example`; secretos en Render | `.gitignore` |
 
 ## Documentación (sección 3)
@@ -34,8 +34,8 @@
 | SPEC.md | ✅ | |
 | docs/ARCHITECTURE.md | ✅ | Incluye limitaciones conocidas y deuda técnica |
 | docs/adr/ADR-001 … ADR-015 | ✅ | D1–D13 cubiertas; ver tabla siguiente |
-| docs/contracts/README.md | ⏳ | Contratos presentes; la versión final de la capacidad publicada es parte A2 |
-| docs/POSTMORTEM.md | ✅ | Dos caídas provocadas con impacto, línea temporal, detección, respuesta, causa y acciones |
+| docs/contracts/README.md | ✅ | API pública de acreditación versionada; README actualizado con versión, tests de contrato y límites de verificación del endpoint remoto |
+| docs/POSTMORTEM.md | ✅ | Caídas de Catálogo y RabbitMQ; además, simulación controlada de 503 de GhostKitchen con su impacto y límite de evidencia |
 
 ## Decisiones obligatorias (sección 5)
 
@@ -48,8 +48,8 @@
 | D5 | Comunicación | [005](adr/ADR-005-comunicacion.md) | ✅ |
 | D6 | Búsqueda | [006](adr/ADR-006-busqueda.md) | ✅ |
 | D7 | Caché | [007](adr/ADR-007-cache.md) | ✅ |
-| D8 | Contrato propio | [008](adr/ADR-008-contrato-propio.md) | ⏳ A2 |
-| D9 | Consumo del proveedor | [014](adr/ADR-014-consumo-proveedor.md) | ⏳ A1 |
+| D8 | Contrato propio | [008](adr/ADR-008-contrato-propio.md) | ✅ |
+| D9 | Consumo del proveedor | [014](adr/ADR-014-consumo-proveedor.md) | 🟡 contrato y fallas automatizados contra OpenAPI publicado; disponibilidad real no comprobada |
 | D10 | Resiliencia | [010](adr/ADR-010-resiliencia.md) | ✅ |
 | D11 | Observabilidad, objetivo de servicio y alertas | [011](adr/ADR-011-observabilidad.md) | ✅ |
 | D12 | Balanceo de carga | [012](adr/ADR-012-balanceo-carga.md) | ✅ |
@@ -59,11 +59,11 @@
 
 | Requisito | Estado | Observación |
 |---|---|---|
-| Capacidad propia publicada, contrato formal versionado, operativa en la nube | ⏳ A2 | Endpoints de acreditación de puntos para el grupo consumidor |
-| Consumo de un proveedor incorporado a un flujo importante, con consecuencias de negocio | ⏳ A1 | Hoy GhostKitchen es sólo consulta; el enunciado no acepta una integración «sin consecuencias sobre el negocio» |
-| Llamada desde el microservicio responsable, no desde el frontend ni el Gateway | ⏳ A1 | |
-| Test de contrato sobre la capacidad consumida | ⏳ A1 | |
-| Timeouts, errores y comportamiento visible ante caída del proveedor, demostrado en la jornada de fallas | ⏳ A1 | Agregar al POSTMORTEM cuando esté |
+| Capacidad propia publicada, contrato formal versionado, operativa en la nube | ✅ | API de acreditación con OpenAPI versionado, autenticación por clave, idempotencia y tests de contrato. La disponibilidad de Render debe verificarse al presentar | [contrato](contracts/acreditar-puntos-v1.openapi.yaml), [README de contratos](contracts/README.md) |
+| Consumo de GhostKitchen en un flujo visible para clientes | 🟡 A1 | El cliente consulta cocinas y platos desde Beneficios; ante falla ve indisponibilidad y no se presentan resultados anteriores como vigentes. No crea pedidos, reservas ni puntos | [GHOSTKITCHEN](GHOSTKITCHEN.md), [postmortem](POSTMORTEM.md), prueba de 503 |
+| Llamada desde el microservicio responsable, no desde el frontend ni el Gateway | ✅ | El frontend llama a Beneficios; el cliente HTTP de GhostKitchen vive en Beneficios | `services/beneficios/cmd/api/ghostkitchen.go` |
+| Test de contrato sobre la capacidad consumida | ✅ | Prism ejecuta el mock generado desde el OpenAPI oficial v1.1.0; CI detecta diferencias con el contrato publicado | [OpenAPI versionado](contracts/ghostkitchen-v1.1.0.openapi.yaml), [workflow](../.github/workflows/ghostkitchen-contract.yml) |
+| Timeouts, errores y comportamiento visible ante caída del proveedor, demostrado en la jornada de fallas | ✅ | Timeout de 3 s, reintentos acotados para 429/503 y simulación 503: respuesta visible, puntos intactos; no se probó una caída real en la nube | [prueba](../services/beneficios/cmd/api/ghostkitchen_test.go), [postmortem](POSTMORTEM.md) |
 
 ## Defensa individual (sección 6)
 
@@ -71,9 +71,9 @@
 |---|---|
 | Operación crítica con garantías de consistencia y concurrencia | ADR-004 y `TestL1*`, `TestProgramaCanjesConcurrentesNoSobregiranElSaldo` |
 | Unitarios, integración contra dependencia real | Workflow **Cobertura** y **Pruebas L1–L3** |
-| Test de contrato sobre la capacidad consumida | ⏳ A1 |
+| Test de contrato sobre la capacidad consumida | Workflow **GhostKitchen provider contract**; OpenAPI oficial v1.1.0 |
 | Balanceo operativo con distribución observable | `compose.s1.yaml`, `scripts/verify-s1-failover.py`, tablero S2 |
-| Caída de una dependencia propia y del proveedor | Ensayos A y B del POSTMORTEM; proveedor ⏳ A1 |
+| Caída de una dependencia propia y del proveedor | Ensayos A y B; simulación automatizada 503 de GhostKitchen en el POSTMORTEM. La nube del proveedor no se detuvo |
 | Carga con análisis y límite principal | ADR-013 |
 | Logs, métricas, trazas, tablero y alerta | Jaeger, **MELT · Flujo principal**, `OutboxPublishFailing` |
 
