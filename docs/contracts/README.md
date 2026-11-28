@@ -109,6 +109,12 @@ La ruta POST de carga de tratamientos responde actualmente con algunos errores d
 
 ## Acreditación externa de puntos
 
+Este es el contrato público de MELT que consume el grupo consumidor. Está
+versionado como OpenAPI **1.1.0** y su archivo se mantiene junto a esta guía.
+Los tests de contrato `TestContratoEstricto` y `TestContratoAcreditacionExtendido`
+comparan solicitudes y respuestas reales del handler con las formas documentadas,
+incluidos autenticación por clave e idempotencia. El workflow Go CI los ejecuta.
+
 `POST /api/v1/beneficios/acreditar-puntos` requiere `X-Partner-Key` y un JSON con
 `solicitudId`, `usuarioId` y `puntos` (entero positivo). El consumidor determina la
 cantidad. MELT verifica el usuario activo con Auth y suma al saldo existente.
@@ -128,6 +134,11 @@ Operación, migración y pruebas: [ACREDITACION-PUNTOS.md](../ACREDITACION-PUNTO
 El contrato `registro-externo-v1.openapi.yaml` se conserva como histórico retirado;
 sus endpoints ya no se publican. Registro y login no acreditan puntos.
 El catálogo público y la API externa consumida por MELT conservan sus contratos.
+
+La especificación del proveedor externo GhostKitchen es independiente de este
+contrato de MELT. Su fuente y prueba de compatibilidad están en
+[GHOSTKITCHEN-PROVIDER](GHOSTKITCHEN-PROVIDER.md); no se debe confundir la API
+que MELT publica con la que Beneficios consume.
 
 ## Mock
 
@@ -152,7 +163,7 @@ La versión actual del contrato es `v1`. Los cambios incompatibles deberán publ
 
 ### Cobertura no encontrada como OpenAPI independiente
 
-No hay una especificación completa centralizada para las rutas de Beneficios (saldo, canjes, recompensas, reglas, eventos fallidos y GhostKitchen), para agenda y operaciones de turno de Reservas, ni para toda la administración de Auth. Sus rutas se describen en los manuales por servicio y se verifican contra los registros de router del código. Esto es una limitación documental pendiente para quien necesite generación de cliente o validación automatizada de contrato.
+No hay una especificación OpenAPI completa para las rutas propias de Beneficios (saldo, canjes, recompensas, reglas, eventos fallidos y el proxy de GhostKitchen), para agenda y operaciones de turno de Reservas, ni para toda la administración de Auth. Sus rutas se describen en los manuales por servicio y se verifican contra los registros de router del código. La copia de OpenAPI en [GHOSTKITCHEN-PROVIDER](GHOSTKITCHEN-PROVIDER.md) describe la API del Grupo 3 que Beneficios consume; no describe las rutas que MELT expone a su frontend. Esta limitación sigue pendiente para quien necesite generar un cliente completo de las API internas de MELT.
 
 Los endpoints internos de Auth, Catálogo, Pagos y Beneficios exigen red/clave de servicio y no se deben copiar en ejemplos de navegador ni exponer mediante Gateway. La autenticación, headers de partner e idempotencia difieren por integración; consultar el OpenAPI pertinente antes de consumir.
 

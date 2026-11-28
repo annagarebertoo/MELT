@@ -8,6 +8,7 @@
 |---|---|---|---|---|
 | A | Una de dos réplicas de Catálogo | Ninguna respuesta con error; una solicitud tardó 0,5 s (antes 2 s) | No aplica (lecturas) | `proxy_connect_timeout 500ms` en las rutas de Catálogo |
 | B | RabbitMQ (60 s y 150 s) | Ninguno en línea: completar turnos siguió respondiendo 202. Los puntos llegaron con demora | 0 eventos perdidos, 0 acreditaciones duplicadas | Retroceso exponencial y drenado inmediato en el publicador del outbox; métricas y alertas del flujo |
+| C | GhostKitchen (503 simulado en la prueba automatizada) | Beneficios devuelve 503; la interfaz muestra que no pudo cargar la búsqueda y permite reintentar | El test confirma que el saldo y los movimientos de puntos no cambian; el endpoint es de consulta y no llama a Reservas | Respetar `Retry-After`, limitar a 3 intentos, mostrar la falla y no usar datos anteriores como vigentes |
 
 ## Ensayo A — caída de una réplica de Catálogo
 
@@ -106,11 +107,21 @@ No se cambió el criterio de los scripts para volverlos verdes.
 | Reservas | Pagos / Mercado Pago | El checkout informa que el pago no está disponible; no confirma turnos | Timeout HTTP, idempotencia, sin confirmar sin pago aprobado |
 | Reservas | Catálogo / Auth | La operación falla con error claro; no se escriben datos a medias | Timeouts HTTP, transacción |
 | Beneficios | PostgreSQL | El mensaje no se confirma y se reintenta; tras agotar intentos va a la DLQ | Reintentos acotados, DLQ, `mensajes_fallidos` |
-| Beneficios | Proveedor externo (GhostKitchen) | Ver [GHOSTKITCHEN.md](GHOSTKITCHEN.md) | A cargo de la parte A1 |
+| Beneficios | Proveedor externo (GhostKitchen) | El endpoint devuelve el 503 del proveedor; el cliente ve un aviso de indisponibilidad, se limpian los resultados anteriores y puede volver a intentar. No se altera el saldo ni se crea una reserva | Timeout de 3 s por llamada; hasta 3 intentos para 429/503 según `Retry-After`; [prueba de caída](../services/beneficios/cmd/api/ghostkitchen_test.go) |
+
+## Ensayo C — indisponibilidad de GhostKitchen
+
+**Escenario reproducible.** `TestGhostKitchen503NoModificaSaldoNiMovimientos` usa un servidor HTTP de prueba que responde 503 con `Retry-After: 0` en cada intento. Beneficios consulta `GET /ghostkitchen/sedes`, realiza los tres intentos configurados y devuelve 503 al cliente. La prueba prepara 25 puntos, consulta saldo y movimientos antes y después, y confirma que ambos permanecen iguales.
+
+**Impacto esperado.** La sección GhostKitchen de la interfaz informa el error recibido, elimina las sedes/platos mostrados previamente para no presentarlos como actuales y permite repetir la búsqueda. El flujo no crea reservas, pedidos ni operaciones de puntos. La prueba automatizada comprueba el estado de puntos; no ejecuta una compra ni una reserva, porque GhostKitchen no ofrece esas operaciones.
+
+**Contrato.** Los endpoints y errores se contrastan además con Prism iniciado desde la especificación oficial publicada por el Grupo 3, versión 1.1.0. La fuente, copia versionada y workflow están documentados en [GHOSTKITCHEN-PROVIDER](contracts/GHOSTKITCHEN-PROVIDER.md). Este mock se deriva del contrato; no es una caída del servidor real.
+
+**Límite de la evidencia.** Es una simulación controlada y automatizada, no se detuvo ni se sometió a carga el proveedor en la nube. Tampoco se probó la interfaz en un navegador durante la caída. No se hicieron llamadas de falla a Render ni a datos compartidos.
 
 ## Pendiente
 
-- Repetir el ensayo con el proveedor externo caído cuando el consumo esté integrado al flujo principal (parte A1).
+- Para la jornada de defensa, repetir la simulación y mostrar el aviso visible en la interfaz junto con los logs correlacionados. No provocar una caída real en producción.
 - Las caídas se ensayaron en local. No se provocaron fallas en Render ni en bases compartidas.
 
 ## Historial
